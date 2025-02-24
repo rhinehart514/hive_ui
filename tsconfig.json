@@ -1,0 +1,12 @@
+{
+  "compilerOptions": {
+    "target": "es5",
+    "module": "commonjs",
+    "baseUrl": "src",
+    "paths": {
+      "lib/*": ["pages/*"]
+    },
+    "strict": true
+  },
+  "include": ["src/**/*"]
+} 
