@@ -322,19 +322,21 @@ class _MainFeedState extends ConsumerState<MainFeed> with TickerProviderStateMix
           break;
           
         case RepostContentType.quote:
-          // Navigate to the quote repost page for quote reposts
-          final result = await Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (context) => QuoteRepostPage(event: event),
-            ),
+          // Use GoRouter for navigation instead of Navigator
+          final result = await context.pushNamed(
+            'quote_repost',
+            extra: event,
+            queryParameters: {'onComplete': 'true'},
           );
           
           // Handle result if needed
           if (result == true) {
             // Quote repost was created, show success feedback
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Quote shared')),
-            );
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Quote shared')),
+              );
+            }
           }
           break;
           
@@ -357,15 +359,18 @@ class _MainFeedState extends ConsumerState<MainFeed> with TickerProviderStateMix
       debugPrint('Error reposting event: $e');
       
       // Show error
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Failed to repost event')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Failed to repost event')),
+        );
+      }
     }
   }
   
   // Navigate to event details
   void _navigateToEventDetails(Event event) {
-    context.go('/event-details/${event.id}');
+    // Using the correct nested route under the home branch
+    context.go('/home/event/${event.id}', extra: {'event': event, 'heroTag': 'event_${event.id}'});
   }
 
   @override
