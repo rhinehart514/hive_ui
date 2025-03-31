@@ -1,35 +1,77 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../models/event.dart';
-import '../widgets/event_card.dart';
-import '../theme.dart';
+import '../components/event_card/event_card.dart';
+import '../theme/app_colors.dart';
+import '../theme/app_theme.dart';
+import '../providers/event_providers.dart';
+import '../pages/event_details_page.dart';
+import '../providers/profile_provider.dart';
+import '../components/event_card/hive_event_card.dart';
 
-class EventsPage extends StatefulWidget {
+class EventsPage extends ConsumerStatefulWidget {
   const EventsPage({super.key});
 
   @override
-  State<EventsPage> createState() => _EventsPageState();
+  ConsumerState<EventsPage> createState() => _EventsPageState();
 }
 
-class _EventsPageState extends State<EventsPage> {
-  bool _isLoading = true;
-  final List<Event> _events = [];
+class _EventsPageState extends ConsumerState<EventsPage>
+    with AutomaticKeepAliveClientMixin {
+  String _sortOption = 'Date'; // Default sort option
+  static const List<String> _sortOptions = ['Date', 'Category', 'Location'];
 
   @override
   void initState() {
     super.initState();
-    // Simulate loading for now
-    Future.delayed(const Duration(seconds: 2), () {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-      }
+    // Trigger events loading
+    Future.microtask(() {
+      ref.read(eventsProvider);
     });
+  }
+
+  // Helper to sort events based on the selected option
+  List<Event> _getSortedEvents(List<Event> events) {
+    switch (_sortOption) {
+      case 'Category':
+        return List.from(events)
+          ..sort((a, b) => a.category.compareTo(b.category));
+      case 'Location':
+        return List.from(events)
+          ..sort((a, b) => a.location.compareTo(b.location));
+      case 'Date':
+      default:
+        // Sort by date (most imminent first, then by start time)
+        final now = DateTime.now();
+        return List.from(events)
+          ..sort((a, b) {
+            // Put events happening today at the top
+            final aIsToday = a.startDate.day == now.day && a.startDate.month == now.month && a.startDate.year == now.year;
+            final bIsToday = b.startDate.day == now.day && b.startDate.month == now.month && b.startDate.year == now.year;
+            
+            if (aIsToday && !bIsToday) return -1;
+            if (!aIsToday && bIsToday) return 1;
+            
+            // For same-day events, sort by start time
+            if (aIsToday && bIsToday) {
+              return a.startDate.hour.compareTo(b.startDate.hour);
+            }
+            
+            // For future events, compare by start date
+            return a.startDate.compareTo(b.startDate);
+          });
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
+
+    // Watch the events data
+    final eventsAsync = ref.watch(eventsProvider);
+
     return Scaffold(
       backgroundColor: AppColors.black,
       appBar: AppBar(
@@ -44,80 +86,130 @@ class _EventsPageState extends State<EventsPage> {
           ),
         ),
         actions: [
+          // Sort button
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.sort, color: Colors.white),
+            tooltip: 'Sort events',
+            onSelected: (String value) {
+              setState(() {
+                _sortOption = value;
+              });
+            },
+            itemBuilder: (BuildContext context) {
+              return _sortOptions.map((String option) {
+                return PopupMenuItem<String>(
+                  value: option,
+                  child: Row(
+                    children: [
+                      Icon(
+                        _sortOption == option
+                            ? Icons.radio_button_checked
+                            : Icons.radio_button_unchecked,
+                        color: _sortOption == option ? AppColors.gold : null,
+                        size: 18,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(option),
+                    ],
+                  ),
+                );
+              }).toList();
+            },
+          ),
+          // Refresh button
           IconButton(
-            icon: const Icon(Icons.filter_list, color: Colors.white),
+            icon: const Icon(Icons.refresh, color: Colors.white),
             onPressed: () {
-              // Will be implemented when filters are ready
+              // Show feedback
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Refreshing events...'),
+                  duration: Duration(seconds: 1),
+                  behavior: SnackBarBehavior.floating,
+                ),
+              );
+
+              // Invalidate providers to force refresh
+              ref.invalidate(eventsProvider);
+              ref.read(refreshEventsProvider);
             },
           ),
         ],
       ),
-      body: _isLoading
-          ? _buildLoadingState()
-          : _events.isEmpty
-              ? _buildEmptyState()
-              : _buildEventsList(),
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Sort indicator
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+            child: Row(
+              children: [
+                Text(
+                  'All Events',
+                  style: AppTheme.titleMedium.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const Spacer(),
+                // Show current sort option
+                Row(
+                  children: [
+                    Text(
+                      'Sorted by: ',
+                      style: AppTheme.bodySmall.copyWith(
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                    Text(
+                      _sortOption,
+                      style: AppTheme.bodySmall.copyWith(
+                        color: AppColors.gold,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+
+          // Event list
+          Expanded(
+            child: eventsAsync.when(
+              data: (events) {
+                if (events.isEmpty) {
+                  return _buildEmptyState();
+                }
+                return _buildEventsList(_getSortedEvents(events));
+              },
+              loading: () => _buildLoadingState(),
+              error: (error, stackTrace) {
+                debugPrint('Error loading events: $error\n$stackTrace');
+                return _buildErrorState(
+                    'Failed to load events. Please try again later.');
+              },
+            ),
+          ),
+        ],
+      ),
     );
   }
 
   Widget _buildLoadingState() {
-    return ListView.builder(
-      itemCount: 5,
-      padding: const EdgeInsets.only(top: 16),
-      itemBuilder: (context, index) {
-        return Container(
-          margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          height: 180,
-          decoration: BoxDecoration(
-            color: Colors.grey[850],
-            borderRadius: BorderRadius.circular(16),
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const CircularProgressIndicator(
+            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
           ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(16),
-            child: _buildLoadingAnimation(),
+          const SizedBox(height: 16),
+          Text(
+            'Loading events...',
+            style: AppTheme.bodyMedium,
           ),
-        );
-      },
-    );
-  }
-
-  Widget _buildLoadingAnimation() {
-    return Stack(
-      children: [
-        Container(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.centerLeft,
-              end: Alignment.centerRight,
-              colors: [
-                Colors.grey[850]!,
-                Colors.grey[800]!,
-                Colors.grey[850]!,
-              ],
-            ),
-          ),
-        ),
-        AnimatedPositioned(
-          duration: const Duration(milliseconds: 1500),
-          curve: Curves.easeInOut,
-          left: -100,
-          right: -100,
-          child: Container(
-            height: 180,
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.centerLeft,
-                end: Alignment.centerRight,
-                colors: [
-                  Colors.grey[850]!.withOpacity(0.0),
-                  Colors.grey[850]!.withOpacity(0.5),
-                  Colors.grey[850]!.withOpacity(0.0),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
@@ -133,7 +225,7 @@ class _EventsPageState extends State<EventsPage> {
           ),
           const SizedBox(height: 24),
           Text(
-            'No Events Yet',
+            'No Events Found',
             style: GoogleFonts.outfit(
               color: Colors.white,
               fontSize: 24,
@@ -142,7 +234,7 @@ class _EventsPageState extends State<EventsPage> {
           ),
           const SizedBox(height: 8),
           Text(
-            'Check back later for upcoming events\nor explore UB\'s event calendar',
+            'There are no upcoming events\nfrom the UB events feed',
             textAlign: TextAlign.center,
             style: GoogleFonts.inter(
               color: Colors.white70,
@@ -150,23 +242,19 @@ class _EventsPageState extends State<EventsPage> {
             ),
           ),
           const SizedBox(height: 24),
-          ElevatedButton(
+          ElevatedButton.icon(
             onPressed: () {
-              // Will be implemented when backend is ready
+              ref.invalidate(eventsProvider);
+              ref.read(refreshEventsProvider);
             },
+            icon: const Icon(Icons.refresh),
+            label: const Text('Refresh'),
             style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.gold,
+              backgroundColor: Colors.white,
               foregroundColor: Colors.black,
               padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(24),
-              ),
-            ),
-            child: Text(
-              'Explore Events',
-              style: GoogleFonts.inter(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
               ),
             ),
           ),
@@ -175,16 +263,97 @@ class _EventsPageState extends State<EventsPage> {
     );
   }
 
-  Widget _buildEventsList() {
+  Widget _buildErrorState(String errorMessage) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            Icons.error_outline,
+            size: 64,
+            color: Colors.red[300],
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'Oops!',
+            style: GoogleFonts.outfit(
+              color: Colors.white,
+              fontSize: 24,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 32),
+            child: Text(
+              errorMessage,
+              textAlign: TextAlign.center,
+              style: GoogleFonts.inter(
+                color: Colors.white70,
+                fontSize: 16,
+              ),
+            ),
+          ),
+          const SizedBox(height: 24),
+          ElevatedButton.icon(
+            onPressed: () {
+              ref.invalidate(eventsProvider);
+              ref.read(refreshEventsProvider);
+            },
+            icon: const Icon(Icons.refresh),
+            label: const Text('Try Again'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.white,
+              foregroundColor: Colors.black,
+              elevation: 0,
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(24),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEventsList(List<Event> events) {
     return ListView.builder(
-      itemCount: _events.length,
-      padding: const EdgeInsets.only(top: 16, bottom: 16),
+      itemCount: events.length,
+      padding: const EdgeInsets.only(top: 16, bottom: 32),
       itemBuilder: (context, index) {
-        return EventCard(
-          event: _events[index],
-          isCompact: false,
+        final event = events[index];
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          child: _buildEventCard(event),
         );
       },
     );
   }
-} 
+
+  Widget _buildEventCard(Event event) {
+    return HiveEventCard(
+      event: event,
+      onTap: (event) => _navigateToEventDetail(event),
+      onRsvp: (event) {
+        HapticFeedback.mediumImpact();
+        ref.read(profileProvider.notifier).saveEvent(event);
+      },
+    );
+  }
+
+  void _navigateToEventDetail(Event event) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => EventDetailsPage(
+          event: event,
+          heroTag: 'event_${event.id}',
+        ),
+      ),
+    );
+  }
+
+  @override
+  bool get wantKeepAlive => true;
+}

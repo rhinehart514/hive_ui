@@ -1,0 +1,49 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // WARNING: These rules are for development only!
+    // DO NOT use in production - they provide no security!
+    match /{document=**} {
+      allow read, write: if true;  // Temporary full access
+      
+      // Keep the original rules commented out for easy restoration
+      /* Original secure rules - RESTORE THESE BEFORE PRODUCTION
+      function isSignedIn() {
+        return request.auth != null;
+      }
+      
+      function hasAccountTier(tier) {
+        let userTier = get(/databases/$(database)/documents/users/$(request.auth.uid)).data.accountTier;
+        let tierOrder = {'public': 0, 'verified': 1, 'verifiedPlus': 2};
+        return tierOrder[userTier] >= tierOrder[tier];
+      }
+      
+      function isOwner(userId) {
+        return request.auth.uid == userId;
+      }
+      
+      match /users/{userId} {
+        allow read: if isSignedIn();
+        allow create: if isSignedIn() && isOwner(userId);
+        allow update: if isSignedIn() && isOwner(userId);
+        allow delete: if false;  // Users cannot be deleted via client
+      }
+      
+      match /clubs/{clubId} {
+        allow read: if true;  // Public read access
+        allow write: if isSignedIn() && hasAccountTier('verifiedPlus');
+      }
+      
+      match /events/{eventId} {
+        allow read: if true;  // Public read access
+        allow create: if isSignedIn() && hasAccountTier('verified');
+        allow update: if isSignedIn() && hasAccountTier('verified') && 
+                      resource.data.createdBy == request.auth.uid;
+        allow delete: if isSignedIn() && hasAccountTier('verified') && 
+                      resource.data.createdBy == request.auth.uid;
+      }
+      */
+    }
+  }
+} 

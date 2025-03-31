@@ -72,7 +72,7 @@ class _HiveProgressPainter extends CustomPainter {
         stops: const [0.0, 1.0],
         startAngle: startAngle,
         endAngle: startAngle + (2 * math.pi),
-        transform: GradientRotation(startAngle),
+        transform: const GradientRotation(startAngle),
       ).createShader(Rect.fromCircle(center: center, radius: radius))
       ..style = PaintingStyle.stroke
       ..strokeWidth = 4
@@ -114,6 +114,5 @@ class _HiveProgressPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_HiveProgressPainter oldDelegate) =>
-      progress != oldDelegate.progress ||
-      color != oldDelegate.color;
-} 
+      progress != oldDelegate.progress || color != oldDelegate.color;
+}

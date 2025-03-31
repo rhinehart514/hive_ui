@@ -6,7 +6,7 @@ class HexagonAvatar extends StatelessWidget {
   final ImageProvider? image;
   final VoidCallback? onTap;
   final bool isEditing;
-  
+
   const HexagonAvatar({
     super.key,
     this.size = 80,
@@ -76,7 +76,7 @@ class _HexagonPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final path = _createHexagonPath(size);
-    
+
     // Draw subtle gradient background
     final gradient = LinearGradient(
       begin: Alignment.topLeft,
@@ -86,7 +86,7 @@ class _HexagonPainter extends CustomPainter {
         fillColor.withOpacity(0.1),
       ],
     );
-    
+
     final paint = Paint()
       ..shader = gradient.createShader(Offset.zero & size)
       ..style = PaintingStyle.fill;
@@ -141,4 +141,4 @@ class _HexagonClipper extends CustomClipper<Path> {
 
   @override
   bool shouldReclip(_HexagonClipper oldClipper) => false;
-} 
+}

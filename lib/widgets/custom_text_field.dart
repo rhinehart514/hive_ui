@@ -18,6 +18,7 @@ class CustomTextField extends StatelessWidget {
   final VoidCallback? onToggleVisibility;
 
   const CustomTextField({
+    super.key,
     required this.controller,
     required this.hintText,
     required this.width,
@@ -70,13 +71,15 @@ class CustomTextField extends StatelessWidget {
         borderRadius: BorderRadius.circular(8),
         borderSide: const BorderSide(color: Colors.red),
       ),
-      suffixIcon: onToggleVisibility != null ? IconButton(
-        icon: Icon(
-          obscureText ? Icons.visibility_off : Icons.visibility,
-          color: Colors.white54,
-        ),
-        onPressed: onToggleVisibility,
-      ) : null,
+      suffixIcon: onToggleVisibility != null
+          ? IconButton(
+              icon: Icon(
+                obscureText ? Icons.visibility_off : Icons.visibility,
+                color: Colors.white54,
+              ),
+              onPressed: onToggleVisibility,
+            )
+          : null,
     );
 
     return FormField<String>(
@@ -134,9 +137,10 @@ class CustomTextField extends StatelessWidget {
                   fontFamily: 'Inter',
                 ),
                 decoration: (decoration?.copyWith(
-                  hintText: hintText,
-                  suffixIcon: baseDecoration.suffixIcon,
-                ) ?? baseDecoration),
+                      hintText: hintText,
+                      suffixIcon: baseDecoration.suffixIcon,
+                    ) ??
+                    baseDecoration),
               ),
             ),
             if (state.hasError && state.errorText != null)
@@ -146,4 +150,4 @@ class CustomTextField extends StatelessWidget {
       },
     );
   }
-} 
+}

@@ -1,55 +1,53 @@
 import 'package:flutter/material.dart';
-import 'package:hive_ui/theme.dart' show AppTextStyle;
+import 'package:hive_ui/theme/text_theme.dart';
+import 'package:hive_ui/theme/app_colors.dart';
 
 class StatCard extends StatelessWidget {
   final String label;
   final String value;
-  final IconData icon;
-  final VoidCallback? onTap;
+  final Color color;
+  final double opacity;
 
   const StatCard({
-    super.key,
+    Key? key,
     required this.label,
     required this.value,
-    required this.icon,
-    this.onTap,
-  });
+    this.color = Colors.white,
+    this.opacity = 1.0,
+  }) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.05),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: Colors.white.withOpacity(0.1),
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: AppColors.textPrimary.withOpacity(0.1),
+        ),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            label,
+            style: TextStyles.bodyMedium.copyWith(
+              color: color.withOpacity(opacity),
+              fontSize: 12,
+            ),
           ),
-        ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(icon, color: Colors.white, size: 24),
-            const SizedBox(height: 8),
-            Text(
-              value,
-              style: AppTextStyle.headlineLarge.copyWith(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-              ),
+          const SizedBox(height: 4),
+          Text(
+            value,
+            style: TextStyles.bodyMedium.copyWith(
+              color: color.withOpacity(opacity),
+              fontSize: 10,
+              fontWeight: FontWeight.bold,
             ),
-            const SizedBox(height: 4),
-            Text(
-              label,
-              style: AppTextStyle.bodyMedium.copyWith(
-                color: Colors.white.withOpacity(0.7),
-              ),
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
-} 
+}

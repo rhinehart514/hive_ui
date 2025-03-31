@@ -1,6 +1,6 @@
 {
   "compilerOptions": {
-    "target": "es5",
+    "target": "es2015",
     "module": "commonjs",
     "baseUrl": "src",
     "paths": {
@@ -8,5 +8,5 @@
     },
     "strict": true
   },
-  "include": ["src/**/*"]
+  "include": ["src/**/*", "lib/Navigation.tsx"]
 } 

@@ -18,4 +18,4 @@ class ErrorText extends StatelessWidget {
       ),
     );
   }
-} 
+}

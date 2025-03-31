@@ -16,11 +16,16 @@ class EventCard extends StatelessWidget {
 
   Future<void> _launchEventUrl() async {
     try {
-      if (await launchUrl(
-        Uri.parse(event.link),
-        mode: LaunchMode.externalApplication,
-      )) {
-        return;
+      final url = event.link;
+      final uri = Uri.parse(url);
+
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(
+          uri,
+          mode: LaunchMode.externalApplication,
+        );
+      } else {
+        debugPrint('Could not launch $url');
       }
     } catch (e) {
       debugPrint('Error launching event URL: $e');
@@ -222,4 +227,4 @@ class EventCard extends StatelessWidget {
         return const Color(0xFFFFD700); // Gold color for other categories
     }
   }
-} 
+}

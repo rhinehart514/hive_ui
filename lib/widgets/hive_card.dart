@@ -26,25 +26,25 @@ class HiveCard extends StatelessWidget {
           color: Colors.black,
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
-            color: isHighlighted 
-              ? const Color(0xFFEEBA2A).withOpacity(0.3)
-              : Colors.white.withOpacity(0.1),
+            color: isHighlighted
+                ? const Color(0xFFEEBA2A).withOpacity(0.3)
+                : Colors.white.withOpacity(0.1),
           ),
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
             colors: [
-              isHighlighted 
-                ? const Color(0xFFEEBA2A).withOpacity(0.1)
-                : Colors.white.withOpacity(0.05),
+              isHighlighted
+                  ? const Color(0xFFEEBA2A).withOpacity(0.1)
+                  : Colors.white.withOpacity(0.05),
               Colors.black.withOpacity(0.5),
             ],
           ),
           boxShadow: [
             BoxShadow(
               color: isHighlighted
-                ? const Color(0xFFEEBA2A).withOpacity(0.1)
-                : Colors.black.withOpacity(0.2),
+                  ? const Color(0xFFEEBA2A).withOpacity(0.1)
+                  : Colors.black.withOpacity(0.2),
               blurRadius: 10,
               spreadRadius: 2,
             ),
@@ -54,4 +54,4 @@ class HiveCard extends StatelessWidget {
       ),
     );
   }
-} 
+}

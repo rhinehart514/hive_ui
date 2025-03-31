@@ -1,0 +1,131 @@
+# HIVE UI Coding Standards and Practices
+
+## 1. Architecture and Structure
+
+### 1.1 Project Organization
+- Follow clean architecture principles with clear separation of concerns
+- Organize feature code into self-contained modules under 'features/' directory
+- Use the following directory structure for features:
+  ```
+  features/
+    ├── feature_name/
+    │    ├── data/           # Data sources, repositories, and DTOs
+    │    ├── domain/         # Entities and use cases
+    │    └── presentation/   # UI components, controllers, and screens
+  ```
+
+### 1.2 File Size and Structure
+- Limit files to a maximum of 300 lines of code
+- Extract large widgets into separate component files
+- One primary export per file
+- Name files according to their primary content (e.g., profile_page.dart for ProfilePage)
+
+## 2. Code Style and Syntax
+
+### 2.1 Naming Conventions
+- Use PascalCase for classes, enums, and extensions
+- Use camelCase for variables, functions, and methods
+- Use snake_case for file and directory names
+- Use SCREAMING_SNAKE_CASE for constants and enums
+
+### 2.2 Type Safety
+- Always declare explicit types for variables, parameters, and return values
+- Avoid using 'dynamic' or 'var' unless absolutely necessary
+- Create proper type definitions for complex data structures
+- Use nullable types (e.g., String?) only when nullability is intended
+
+### 2.3 Documentation
+- Add dartdoc comments for all public classes, methods, and properties
+- Include parameter and return documentation for functions
+- Document complex logic with inline comments
+- Use `///` for documentation comments and `//` for implementation comments
+
+## 3. UI Development
+
+### 3.1 Widget Design
+- Break down complex widgets into smaller, reusable components
+- Keep widget hierarchies flat to improve performance
+- Use const constructors wherever possible
+- Use key parameters for stateful widgets that may rebuild
+
+### 3.2 Theme Consistency
+- Only use colors defined in AppColors
+- Follow the app's design guidelines for spacing, typography, and borders
+- Use the glassmorphism extensions for consistent UI treatments
+- Maintain the dark theme with gold accent aesthetic
+
+### 3.3 Animation and Interaction
+- Use consistent duration values for animations (300-400ms is standard)
+- Include haptic feedback for interactive elements
+- Implement smooth transitions between states and screens
+- Use AnimationController and Tween for custom animations
+
+## 4. State Management
+
+### 4.1 Riverpod Usage
+- Use StateProvider for simple state
+- Use StateNotifierProvider for complex state with operations
+- Use FutureProvider for async operations
+- Define providers at the top of the file or in a dedicated providers file
+- Properly type all providers
+
+### 4.2 State Organization
+- Create dedicated state classes for complex features
+- Use immutable state objects with copyWith methods
+- Separate UI state from domain state
+- Handle loading, error, and success states explicitly
+
+## 5. Performance Optimization
+
+### 5.1 Rendering Optimization
+- Avoid expensive operations in build methods
+- Use caching for complex calculations
+- Minimize rebuilds by using const widgets and selective state updates
+- Profile and optimize performance-critical paths
+
+### 5.2 Resource Management
+- Properly dispose controllers and subscriptions
+- Use lazy loading for heavy resources
+- Implement pagination for long lists
+- Optimize image loading and caching
+
+## 6. Testing
+
+### 6.1 Test Coverage
+- Write unit tests for all business logic
+- Create widget tests for UI components
+- Include integration tests for critical user flows
+- Mock external dependencies for testing
+
+### 6.2 Test Structure
+- Follow the Arrange-Act-Assert pattern for unit tests
+- Use Given-When-Then for integration tests
+- Test edge cases and error handling
+
+## 7. Error Handling
+
+### 7.1 Exception Management
+- Use typed exceptions for different error scenarios
+- Implement graceful error recovery
+- Display user-friendly error messages
+- Log errors for debugging purposes
+
+### 7.2 Null Safety
+- Handle nullable values safely
+- Use the ?? operator or null-aware operators when appropriate
+- Check for null before accessing potentially null values
+- Provide default values for nullable parameters
+
+## 8. Refactoring Priorities
+
+### 8.1 Current Technical Debt
+- Break down large files (like profile_page.dart) into smaller component files
+- Standardize navigation approach across the app
+- Improve error handling and reporting
+- Enhance state management with more focused providers
+
+### 8.2 Code Improvement Opportunities
+- Extract common UI patterns into reusable widgets
+- Implement comprehensive logging
+- Add accessibility features
+- Optimize performance for low-end devices 

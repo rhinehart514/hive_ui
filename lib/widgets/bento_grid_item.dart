@@ -33,9 +33,9 @@ class BentoGridItem extends StatelessWidget {
             color: backgroundColor ?? Colors.white.withOpacity(0.05),
             borderRadius: BorderRadius.circular(16),
             border: Border.all(
-              color: isActive 
-                ? Colors.white.withOpacity(0.2)
-                : Colors.white.withOpacity(0.05),
+              color: isActive
+                  ? Colors.white.withOpacity(0.2)
+                  : Colors.white.withOpacity(0.05),
               width: 1,
             ),
           ),
@@ -44,4 +44,4 @@ class BentoGridItem extends StatelessWidget {
       ),
     );
   }
-} 
+}

@@ -2,6 +2,20 @@
 cmake_minimum_required(VERSION 3.14)
 project(hive_ui LANGUAGES CXX)
 
+# Configure platform-specific build options
+if(CMAKE_SYSTEM_NAME STREQUAL "Windows")
+  # Firebase plugin workarounds for Windows
+  add_compile_definitions(WINDOWS_DESKTOP=1)
+  # Add additional Platform definitions
+  add_compile_definitions(_WINDOWS=1)
+  # Disable some C++ warnings that come from the Firebase plugins
+  add_compile_options(/wd4828 /wd4668 /wd4530 /wd4996 /bigobj)
+  # Add C++17 variant compatibility flags
+  add_compile_definitions(_SILENCE_ALL_CXX17_DEPRECATION_WARNINGS=1)
+  add_compile_definitions(_SILENCE_CXX17_CODECVT_HEADER_DEPRECATION_WARNING=1)
+  add_compile_definitions(_HAS_STD_BYTE=0)
+endif()
+
 # The name of the executable created for the application. Change this to change
 # the on-disk name of your application.
 set(BINARY_NAME "hive_ui")
@@ -41,8 +55,17 @@ function(APPLY_STANDARD_SETTINGS TARGET)
   target_compile_features(${TARGET} PUBLIC cxx_std_17)
   target_compile_options(${TARGET} PRIVATE /W4 /WX /wd"4100")
   target_compile_options(${TARGET} PRIVATE /EHsc)
+  target_compile_options(${TARGET} PRIVATE /wd"4996") # Disable deprecated warnings
+  target_compile_options(${TARGET} PRIVATE /bigobj) # Add bigobj flag for large object files
   target_compile_definitions(${TARGET} PRIVATE "_HAS_EXCEPTIONS=0")
   target_compile_definitions(${TARGET} PRIVATE "$<$<CONFIG:Debug>:_DEBUG>")
+  
+  # Add std::variant compatibility flags
+  target_compile_definitions(${TARGET} PRIVATE _HAS_DEPRECATED_STDCONV=0)
+  target_compile_definitions(${TARGET} PRIVATE _SILENCE_CXX17_CODECVT_HEADER_DEPRECATION_WARNING)
+  target_compile_definitions(${TARGET} PRIVATE _SILENCE_ALL_CXX17_DEPRECATION_WARNINGS)
+  target_compile_definitions(${TARGET} PRIVATE _ALLOW_DEPRECATED_STDCONV)
+  target_compile_definitions(${TARGET} PRIVATE _HAS_STD_BYTE=0)
 endfunction()
 
 # Flutter library and tool build rules.

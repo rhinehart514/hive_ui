@@ -71,4 +71,4 @@ class Friend {
       createdAt: createdAt ?? this.createdAt,
     );
   }
-} 
+}

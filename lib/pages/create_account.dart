@@ -1,15 +1,23 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:hive_ui/services/user_preferences_service.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:hive_ui/features/auth/providers/auth_providers.dart';
+import 'package:flutter/foundation.dart'
+    show debugPrint, kIsWeb, defaultTargetPlatform, TargetPlatform;
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:hive_ui/core/navigation/transitions.dart';
 
-class CreateAccountPage extends StatefulWidget {
+class CreateAccountPage extends ConsumerStatefulWidget {
   const CreateAccountPage({super.key});
 
   @override
-  State<CreateAccountPage> createState() => _CreateAccountPageState();
+  ConsumerState<CreateAccountPage> createState() => _CreateAccountPageState();
 }
 
-class _CreateAccountPageState extends State<CreateAccountPage> {
+class _CreateAccountPageState extends ConsumerState<CreateAccountPage> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
@@ -20,6 +28,14 @@ class _CreateAccountPageState extends State<CreateAccountPage> {
   String _passwordStrengthText = '';
   Color _passwordStrengthColor = Colors.grey;
   String? _emailError;
+
+  // Check if running on Windows platform
+  final bool _isWindowsPlatform =
+      defaultTargetPlatform == TargetPlatform.windows;
+
+  // Enable Windows Safe Mode (bypasses direct Firebase Auth calls on Windows)
+  // Change this to false if you want to disable the safe mode
+  final bool _useWindowsSafeMode = true;
 
   @override
   void initState() {
@@ -41,8 +57,9 @@ class _CreateAccountPageState extends State<CreateAccountPage> {
     setState(() {
       if (email.isEmpty) {
         _emailError = null;
-      } else if (!email.endsWith('.edu')) {
-        _emailError = 'Please use your .edu email address';
+      } else if (email.toLowerCase().contains('gmail.com')) {
+        // Gmail users are allowed but will be directed to public tier
+        _emailError = null;
       } else if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(email)) {
         _emailError = 'Please enter a valid email address';
       } else {
@@ -100,7 +117,7 @@ class _CreateAccountPageState extends State<CreateAccountPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'Please use a valid .edu email address',
+            'Please enter a valid email address',
             style: GoogleFonts.inter(
               color: Colors.white,
               fontWeight: FontWeight.w500,
@@ -148,14 +165,114 @@ class _CreateAccountPageState extends State<CreateAccountPage> {
       _isLoading = true;
     });
 
-    // TODO: Implement create account functionality
-    await Future.delayed(const Duration(seconds: 1));
+    // Check if it's a buffalo.edu email
+    final email = _emailController.text.trim();
+    final password = _passwordController.text;
+    final isBuffaloEmail = email.toLowerCase().endsWith('buffalo.edu');
+    final isGmailUser = email.toLowerCase().contains('gmail.com');
 
-    if (mounted) {
-      setState(() {
-        _isLoading = false;
-      });
-      context.go('/feed');
+    try {
+      // Initialize preferences
+      await UserPreferencesService.initialize();
+
+      // For new accounts, ensure onboarding status is reset (set to false)
+      await UserPreferencesService.resetOnboardingStatus();
+
+      // Store the user's email to be used during onboarding
+      debugPrint('Saving user email: $email');
+      await UserPreferencesService.saveUserEmail(email);
+
+      // Show appropriate message
+      if (!isBuffaloEmail) {
+        // Show a note that they'll only have access to public tier
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                isGmailUser
+                    ? 'Gmail users will only have access to public tier features'
+                    : 'Non-Buffalo users will only have access to public tier features',
+                style: GoogleFonts.inter(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              backgroundColor: Colors.orange,
+              duration: const Duration(seconds: 3),
+            ),
+          );
+        }
+      }
+
+      // Success haptic feedback
+      HapticFeedback.mediumImpact();
+
+      // Create account using Firebase
+      debugPrint('Creating Firebase account...');
+      await ref
+          .read(authControllerProvider.notifier)
+          .createUserWithEmailPassword(
+            email,
+            password,
+          );
+
+      debugPrint('Firebase account created successfully');
+
+      // CRITICAL: Ensure authentication state is fully propagated before continuing
+      // This prevents the "No authenticated user found" error during onboarding
+      final firebaseAuth = FirebaseAuth.instance;
+      int retryCount = 0;
+
+      // Verify that we have a valid Firebase user before proceeding to onboarding
+      while (firebaseAuth.currentUser == null && retryCount < 5) {
+        debugPrint(
+            'Waiting for Firebase auth state to propagate (attempt ${retryCount + 1})');
+        await Future.delayed(const Duration(milliseconds: 500));
+        retryCount++;
+      }
+
+      if (firebaseAuth.currentUser != null) {
+        debugPrint(
+            'Firebase user confirmed ready for onboarding: ${firebaseAuth.currentUser!.uid}');
+      } else {
+        debugPrint(
+            'WARNING: Firebase user still null after waiting. This may cause issues in onboarding.');
+      }
+
+      debugPrint(
+          'Account creation process completed. Redirecting to onboarding...');
+
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+
+        // Add transition feedback before navigating to onboarding
+        NavigationTransitions.applyNavigationFeedback(
+          type: NavigationFeedbackType.modalOpen,
+        );
+
+        // New users always go to onboarding
+        context.go('/onboarding');
+      }
+    } catch (e) {
+      debugPrint('Error in account creation process: $e');
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Error creating account: ${e.toString()}',
+              style: GoogleFonts.inter(
+                color: Colors.white,
+              ),
+            ),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 
@@ -164,18 +281,94 @@ class _CreateAccountPageState extends State<CreateAccountPage> {
       _isLoading = true;
     });
 
-    // TODO: Implement Google sign in
-    await Future.delayed(const Duration(seconds: 1));
+    // Success haptic feedback
+    HapticFeedback.mediumImpact();
 
-    if (mounted) {
-      setState(() {
-        _isLoading = false;
-      });
-      context.go('/feed');
+    try {
+      // Initialize preferences if not already
+      await UserPreferencesService.initialize();
+
+      // Sign in with Google using Firebase
+      await ref.read(authControllerProvider.notifier).signInWithGoogle();
+
+      // Wait for Firebase Auth state to propagate
+      final firebaseAuth = FirebaseAuth.instance;
+      int retryCount = 0;
+      while (firebaseAuth.currentUser == null && retryCount < 5) {
+        debugPrint(
+            'Waiting for Google auth state to propagate (attempt ${retryCount + 1})');
+        await Future.delayed(const Duration(milliseconds: 300));
+        retryCount++;
+      }
+
+      if (firebaseAuth.currentUser == null) {
+        debugPrint(
+            'Warning: Firebase user still null after Google sign-in. User may need to sign in again.');
+      } else {
+        debugPrint(
+            'Google sign-in confirmed: ${firebaseAuth.currentUser!.uid}');
+
+        // Store email in preferences for onboarding
+        if (firebaseAuth.currentUser!.email != null) {
+          await UserPreferencesService.saveUserEmail(
+              firebaseAuth.currentUser!.email!);
+        }
+      }
+
+      // Check if this is a new account or existing
+      final user = ref.read(currentUserProvider);
+      final bool isNewUser =
+          user.createdAt.difference(DateTime.now()).inSeconds.abs() < 10;
+
+      if (isNewUser) {
+        // For new accounts, ensure onboarding status is reset
+        await UserPreferencesService.resetOnboardingStatus();
+        debugPrint('New Google account detected. Redirecting to onboarding...');
+      }
+
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+
+        // Add appropriate navigation feedback based on destination
+        NavigationTransitions.applyNavigationFeedback(
+          type: isNewUser
+              ? NavigationFeedbackType.modalOpen
+              : NavigationFeedbackType.pageTransition,
+        );
+
+        // Navigate based on user state
+        if (isNewUser) {
+          // New users go to onboarding
+          context.go('/onboarding');
+        } else {
+          // Existing users go to home
+          context.go('/home');
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Google sign-in failed: ${e.toString()}',
+              style: GoogleFonts.inter(
+                color: Colors.white,
+              ),
+            ),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 
-  InputDecoration _getInputDecoration(String label, IconData icon, {String? errorText}) {
+  InputDecoration _getInputDecoration(String label, IconData icon,
+      {String? errorText}) {
     return InputDecoration(
       labelText: label,
       labelStyle: GoogleFonts.inter(
@@ -214,7 +407,11 @@ class _CreateAccountPageState extends State<CreateAccountPage> {
               // Back Button
               IconButton(
                 icon: const Icon(Icons.arrow_back, color: Colors.white),
-                onPressed: () => context.pop(),
+                onPressed: () {
+                  // Add a subtle transition feedback
+                  HapticFeedback.lightImpact();
+                  context.pop();
+                },
                 padding: EdgeInsets.zero,
               ),
               const SizedBox(height: 24),
@@ -222,10 +419,13 @@ class _CreateAccountPageState extends State<CreateAccountPage> {
               Center(
                 child: Column(
                   children: [
-                    Image.asset(
-                      'assets/images/hivelogo.png',
-                      width: 80,
-                      height: 80,
+                    Hero(
+                      tag: 'auth_logo',
+                      child: Image.asset(
+                        'assets/images/hivelogo.png',
+                        width: 80,
+                        height: 80,
+                      ),
                     ),
                     const SizedBox(height: 24),
                     Text(
@@ -255,7 +455,9 @@ class _CreateAccountPageState extends State<CreateAccountPage> {
                 controller: _emailController,
                 style: GoogleFonts.inter(color: Colors.white),
                 keyboardType: TextInputType.emailAddress,
-                decoration: _getInputDecoration('University Email', Icons.email_outlined, errorText: _emailError),
+                decoration: _getInputDecoration(
+                    'University Email', Icons.email_outlined,
+                    errorText: _emailError),
               ),
               const SizedBox(height: 16),
               // Password Field
@@ -263,13 +465,17 @@ class _CreateAccountPageState extends State<CreateAccountPage> {
                 controller: _passwordController,
                 style: GoogleFonts.inter(color: Colors.white),
                 obscureText: !_isPasswordVisible,
-                decoration: _getInputDecoration('Password', Icons.lock_outline).copyWith(
+                decoration: _getInputDecoration('Password', Icons.lock_outline)
+                    .copyWith(
                   suffixIcon: IconButton(
                     icon: Icon(
-                      _isPasswordVisible ? Icons.visibility : Icons.visibility_off,
+                      _isPasswordVisible
+                          ? Icons.visibility
+                          : Icons.visibility_off,
                       color: Colors.white70,
                     ),
-                    onPressed: () => setState(() => _isPasswordVisible = !_isPasswordVisible),
+                    onPressed: () => setState(
+                        () => _isPasswordVisible = !_isPasswordVisible),
                   ),
                 ),
               ),
@@ -284,7 +490,8 @@ class _CreateAccountPageState extends State<CreateAccountPage> {
                       child: LinearProgressIndicator(
                         value: _passwordStrength,
                         backgroundColor: Colors.grey.shade800,
-                        valueColor: AlwaysStoppedAnimation<Color>(_passwordStrengthColor),
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                            _passwordStrengthColor),
                         minHeight: 4,
                       ),
                     ),
@@ -306,48 +513,57 @@ class _CreateAccountPageState extends State<CreateAccountPage> {
                 controller: _confirmPasswordController,
                 style: GoogleFonts.inter(color: Colors.white),
                 obscureText: !_isConfirmPasswordVisible,
-                decoration: _getInputDecoration('Confirm Password', Icons.lock_outline).copyWith(
+                decoration:
+                    _getInputDecoration('Confirm Password', Icons.lock_outline)
+                        .copyWith(
                   suffixIcon: IconButton(
                     icon: Icon(
-                      _isConfirmPasswordVisible ? Icons.visibility : Icons.visibility_off,
+                      _isConfirmPasswordVisible
+                          ? Icons.visibility
+                          : Icons.visibility_off,
                       color: Colors.white70,
                     ),
-                    onPressed: () => setState(() => _isConfirmPasswordVisible = !_isConfirmPasswordVisible),
+                    onPressed: () => setState(() =>
+                        _isConfirmPasswordVisible = !_isConfirmPasswordVisible),
                   ),
                 ),
               ),
               const SizedBox(height: 32),
               // Create Account Button
-              SizedBox(
-                width: double.infinity,
-                height: 56,
-                child: ElevatedButton(
-                  onPressed: _isLoading ? null : _handleCreateAccount,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.white,
-                    foregroundColor: Colors.black,
-                    disabledBackgroundColor: Colors.white38,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(28),
+              Hero(
+                tag: 'primary_auth_button',
+                child: SizedBox(
+                  width: double.infinity,
+                  height: 56,
+                  child: ElevatedButton(
+                    onPressed: _isLoading ? null : _handleCreateAccount,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.white,
+                      foregroundColor: Colors.black,
+                      disabledBackgroundColor: Colors.white38,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(28),
+                      ),
+                      elevation: 0,
                     ),
-                    elevation: 0,
+                    child: _isLoading
+                        ? const SizedBox(
+                            height: 24,
+                            width: 24,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor:
+                                  AlwaysStoppedAnimation<Color>(Colors.black),
+                            ),
+                          )
+                        : Text(
+                            'Create Account',
+                            style: GoogleFonts.inter(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
                   ),
-                  child: _isLoading
-                      ? const SizedBox(
-                          height: 24,
-                          width: 24,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            valueColor: AlwaysStoppedAnimation<Color>(Colors.black),
-                          ),
-                        )
-                      : Text(
-                          'Create Account',
-                          style: GoogleFonts.inter(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
                 ),
               ),
               const SizedBox(height: 24),
@@ -381,43 +597,58 @@ class _CreateAccountPageState extends State<CreateAccountPage> {
               ),
               const SizedBox(height: 24),
               // Google Sign In Button
-              SizedBox(
-                width: double.infinity,
-                height: 56,
-                child: OutlinedButton.icon(
-                  onPressed: _isLoading ? null : _handleGoogleSignIn,
-                  style: OutlinedButton.styleFrom(
-                    side: const BorderSide(color: Colors.white24),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(28),
+              Hero(
+                tag: 'google_auth_button',
+                child: SizedBox(
+                  width: double.infinity,
+                  height: 56,
+                  child: OutlinedButton.icon(
+                    onPressed: _isLoading ? null : _handleGoogleSignIn,
+                    style: OutlinedButton.styleFrom(
+                      side: const BorderSide(color: Colors.white24),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(28),
+                      ),
                     ),
-                  ),
-                  icon: Image.asset(
-                    'assets/images/google.png',
-                    width: 24,
-                    height: 24,
-                  ),
-                  label: Text(
-                    'Continue with Google',
-                    style: GoogleFonts.inter(
-                      color: Colors.white,
-                      fontSize: 16,
-                      fontWeight: FontWeight.w500,
+                    icon: Image.asset(
+                      'assets/images/google.png',
+                      width: 24,
+                      height: 24,
+                    ),
+                    label: Text(
+                      'Continue with Google',
+                      style: GoogleFonts.inter(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w500,
+                      ),
                     ),
                   ),
                 ),
               ),
               const SizedBox(height: 24),
               // Sign In Link
-              Center(
-                child: TextButton(
-                  onPressed: () => context.push('/sign-in'),
-                  child: Text(
-                    'Already have an account? Sign In',
-                    style: GoogleFonts.inter(
-                      color: const Color(0xFFFFD700),
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500,
+              Hero(
+                tag: 'auth_toggle_link',
+                child: Material(
+                  color: Colors.transparent,
+                  child: Center(
+                    child: TextButton(
+                      onPressed: () {
+                        // Add transition feedback before navigation
+                        NavigationTransitions.applyNavigationFeedback();
+
+                        // Use push for smoother transition between auth screens
+                        context.push('/sign-in');
+                      },
+                      child: Text(
+                        'Already have an account? Sign In',
+                        style: GoogleFonts.inter(
+                          color: const Color(0xFFFFD700),
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
                     ),
                   ),
                 ),
@@ -428,4 +659,4 @@ class _CreateAccountPageState extends State<CreateAccountPage> {
       ),
     );
   }
-} 
+}

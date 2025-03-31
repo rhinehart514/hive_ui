@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:hive_ui/theme/app_colors.dart';
 
 class ProfileNavBar extends StatelessWidget {
   final int selectedIndex;
@@ -25,7 +24,7 @@ class ProfileNavBar extends StatelessWidget {
         children: [
           _buildNavItem(0, 'Profile', Icons.person_outline),
           _buildNavItem(1, 'Events', Icons.event_outlined),
-          _buildNavItem(2, 'Clubs', Icons.groups_outlined),
+          _buildNavItem(2, 'Spaces', Icons.groups_outlined),
           _buildNavItem(3, 'Friends', Icons.people_outline),
         ],
       ),
@@ -39,7 +38,8 @@ class ProfileNavBar extends StatelessWidget {
         onTap: () => onTap(index),
         child: Container(
           decoration: BoxDecoration(
-            color: isSelected ? Colors.white.withOpacity(0.1) : Colors.transparent,
+            color:
+                isSelected ? Colors.white.withOpacity(0.1) : Colors.transparent,
             borderRadius: BorderRadius.circular(24),
           ),
           child: Column(
@@ -65,4 +65,4 @@ class ProfileNavBar extends StatelessWidget {
       ),
     );
   }
-} 
+}

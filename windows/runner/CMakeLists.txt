@@ -30,6 +30,22 @@ target_compile_definitions(${BINARY_NAME} PRIVATE "FLUTTER_VERSION_BUILD=${FLUTT
 # Disable Windows macros that collide with C++ standard library functions.
 target_compile_definitions(${BINARY_NAME} PRIVATE "NOMINMAX")
 
+# Add Firebase compatibility flags
+target_compile_options(${BINARY_NAME} PRIVATE 
+  /W4
+  /bigobj
+  /wd4996
+  /wd4267
+  /wd4244
+  /wd4305
+)
+
+target_compile_definitions(${BINARY_NAME} PRIVATE
+  _SILENCE_ALL_CXX17_DEPRECATION_WARNINGS=1
+  _SILENCE_CXX17_CODECVT_HEADER_DEPRECATION_WARNING=1
+  _HAS_STD_BYTE=0
+)
+
 # Add dependency libraries and include directories. Add any application-specific
 # dependencies here.
 target_link_libraries(${BINARY_NAME} PRIVATE flutter flutter_wrapper_app)

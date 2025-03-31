@@ -5,17 +5,25 @@
 #include "flutter_window.h"
 #include "utils.h"
 
+// Add Windows specific includes for process execution
+#include <iostream>
+#include <string>
+#include <process.h>
+
 int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
                       _In_ wchar_t *command_line, _In_ int show_command) {
+  // Run script to patch Firebase plugins
+  std::cout << "Running Firebase plugin patch script..." << std::endl;
+  system("powershell.exe -ExecutionPolicy Bypass -File .\\patch_firebase_plugins.ps1");
+  
   // Attach to console when present (e.g., 'flutter run') or create a
   // new console when running with a debugger.
   if (!::AttachConsole(ATTACH_PARENT_PROCESS) && ::IsDebuggerPresent()) {
     CreateAndAttachConsole();
   }
 
-  // Initialize COM, so that it is available for use in the library and/or
-  // plugins.
-  ::CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+  // Initialize COM, so that it is available for use in the flutter_view_controller and message loop.
+  (void)::CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
 
   flutter::DartProject project(L"data");
 

@@ -1,15 +1,24 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:hive_ui/services/user_preferences_service.dart';
+import 'package:hive_ui/core/navigation/transitions.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:hive_ui/features/auth/providers/auth_providers.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart'
+    show debugPrint, kIsWeb, defaultTargetPlatform, TargetPlatform;
+import 'package:hive_ui/theme/app_colors.dart';
 
-class SignInPage extends StatefulWidget {
+class SignInPage extends ConsumerStatefulWidget {
   const SignInPage({super.key});
 
   @override
-  State<SignInPage> createState() => _SignInPageState();
+  ConsumerState<SignInPage> createState() => _SignInPageState();
 }
 
-class _SignInPageState extends State<SignInPage> {
+class _SignInPageState extends ConsumerState<SignInPage> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _resetEmailController = TextEditingController();
@@ -18,6 +27,14 @@ class _SignInPageState extends State<SignInPage> {
   bool _isResetting = false;
   String? _emailError;
   String? _resetEmailError;
+
+  // Check if running on Windows platform
+  final bool _isWindowsPlatform =
+      defaultTargetPlatform == TargetPlatform.windows;
+
+  // Enable Windows Safe Mode (bypasses direct Firebase Auth calls on Windows)
+  // Change this to false if you want to disable the safe mode
+  final bool _useWindowsSafeMode = true;
 
   @override
   void initState() {
@@ -39,8 +56,6 @@ class _SignInPageState extends State<SignInPage> {
     setState(() {
       if (email.isEmpty) {
         _emailError = null;
-      } else if (!email.endsWith('.edu')) {
-        _emailError = 'Please use your .edu email address';
       } else if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(email)) {
         _emailError = 'Please enter a valid email address';
       } else {
@@ -54,8 +69,6 @@ class _SignInPageState extends State<SignInPage> {
     setState(() {
       if (email.isEmpty) {
         _resetEmailError = null;
-      } else if (!email.endsWith('.edu')) {
-        _resetEmailError = 'Please use your .edu email address';
       } else if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(email)) {
         _resetEmailError = 'Please enter a valid email address';
       } else {
@@ -71,9 +84,9 @@ class _SignInPageState extends State<SignInPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'Please use a valid .edu email address',
+            'Please enter a valid email address',
             style: GoogleFonts.inter(
-              color: Colors.white,
+              color: AppColors.white,
               fontWeight: FontWeight.w500,
             ),
           ),
@@ -87,33 +100,70 @@ class _SignInPageState extends State<SignInPage> {
       _isResetting = true;
     });
 
-    // TODO: Implement actual password reset
-    await Future.delayed(const Duration(seconds: 2));
+    try {
+      // Use the auth controller to send the reset email
+      await ref.read(authControllerProvider.notifier).sendPasswordResetEmail(
+            _resetEmailController.text.trim(),
+          );
 
-    if (mounted) {
-      setState(() {
-        _isResetting = false;
-      });
-      Navigator.pop(context); // Close bottom sheet
+      if (mounted) {
+        setState(() {
+          _isResetting = false;
+        });
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Password reset link sent to ${_resetEmailController.text}',
-            style: GoogleFonts.inter(
-              color: Colors.white,
-              fontWeight: FontWeight.w500,
+        // Add haptic feedback for success
+        HapticFeedback.mediumImpact();
+
+        Navigator.pop(context); // Close bottom sheet
+
+        // Show different messages based on email type
+        final email = _resetEmailController.text.trim();
+        final isBuffaloEmail = email.toLowerCase().endsWith('buffalo.edu');
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              isBuffaloEmail
+                  ? 'Password reset link sent to $email'
+                  : 'Password reset link sent to $email (Public tier access only)',
+              style: GoogleFonts.inter(
+                color: AppColors.white,
+                fontWeight: FontWeight.w500,
+              ),
             ),
+            backgroundColor: const Color(0xFF1E1E1E),
+            duration: const Duration(seconds: 4),
           ),
-          backgroundColor: const Color(0xFF1E1E1E),
-          duration: const Duration(seconds: 4),
-        ),
-      );
+        );
+      }
+    } catch (e) {
+      debugPrint('Error sending password reset email: $e');
+      if (mounted) {
+        setState(() {
+          _isResetting = false;
+        });
+
+        // Add haptic feedback for error
+        HapticFeedback.vibrate();
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Error sending reset email: ${e is FirebaseAuthException ? e.message : "Please try again"}',
+              style: GoogleFonts.inter(
+                color: AppColors.white,
+              ),
+            ),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 
   void _showResetPasswordSheet() {
     _resetEmailController.text = _emailController.text;
+    HapticFeedback.lightImpact();
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
@@ -140,9 +190,9 @@ class _SignInPageState extends State<SignInPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'Please use a valid .edu email address',
+            'Please enter a valid email address',
             style: GoogleFonts.inter(
-              color: Colors.white,
+              color: AppColors.white,
               fontWeight: FontWeight.w500,
             ),
           ),
@@ -156,14 +206,108 @@ class _SignInPageState extends State<SignInPage> {
       _isLoading = true;
     });
 
-    // TODO: Implement sign in functionality
-    await Future.delayed(const Duration(seconds: 1));
+    // Success haptic feedback
+    HapticFeedback.mediumImpact();
 
-    if (mounted) {
-      setState(() {
-        _isLoading = false;
-      });
-      context.go('/feed');
+    try {
+      // Initialize preferences if not already
+      await UserPreferencesService.initialize();
+
+      // Store the user's email for reference
+      final email = _emailController.text.trim();
+      await UserPreferencesService.saveUserEmail(email);
+
+      // Sign in with Firebase
+      debugPrint('Signing in with Firebase...');
+      await ref.read(authControllerProvider.notifier).signInWithEmailPassword(
+            email,
+            _passwordController.text,
+          );
+
+      debugPrint('Firebase sign-in successful');
+
+      // CRITICAL: Ensure authentication state is fully propagated before continuing
+      final firebaseAuth = FirebaseAuth.instance;
+      int retryCount = 0;
+
+      // Verify that we have a valid Firebase user before proceeding
+      while (firebaseAuth.currentUser == null && retryCount < 5) {
+        debugPrint(
+            'Waiting for Firebase auth state to propagate (attempt ${retryCount + 1})');
+        await Future.delayed(const Duration(milliseconds: 500));
+        retryCount++;
+      }
+
+      if (firebaseAuth.currentUser != null) {
+        debugPrint('Firebase user confirmed: ${firebaseAuth.currentUser!.uid}');
+      } else {
+        debugPrint(
+            'WARNING: Firebase user still null after waiting. This may cause issues.');
+      }
+
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+
+        // Check if user has completed onboarding
+        final hasCompletedOnboarding =
+            UserPreferencesService.hasCompletedOnboarding();
+        debugPrint(
+            'Sign-in successful, checking onboarding status: $hasCompletedOnboarding');
+
+        // Add navigation feedback
+        NavigationTransitions.applyNavigationFeedback(
+          type: hasCompletedOnboarding
+              ? NavigationFeedbackType.pageTransition
+              : NavigationFeedbackType.modalOpen,
+        );
+
+        // Navigate to home or onboarding based on user status
+        context.go(hasCompletedOnboarding ? '/home' : '/onboarding');
+      }
+    } catch (e) {
+      debugPrint('Error in sign-in process: $e');
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+
+        String errorMessage = 'Invalid email or password';
+        if (e is FirebaseAuthException) {
+          switch (e.code) {
+            case 'user-not-found':
+              errorMessage = 'No account found with this email';
+              break;
+            case 'wrong-password':
+              errorMessage = 'Incorrect password';
+              break;
+            case 'invalid-credential':
+              errorMessage = 'Invalid login credentials';
+              break;
+            case 'user-disabled':
+              errorMessage = 'This account has been disabled';
+              break;
+            case 'too-many-requests':
+              errorMessage = 'Too many attempts. Please try again later';
+              break;
+            default:
+              errorMessage = e.message ?? 'Authentication failed';
+          }
+        }
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              errorMessage,
+              style: GoogleFonts.inter(
+                color: AppColors.white,
+              ),
+            ),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 
@@ -172,25 +316,112 @@ class _SignInPageState extends State<SignInPage> {
       _isLoading = true;
     });
 
-    // TODO: Implement Google sign in
-    await Future.delayed(const Duration(seconds: 1));
+    // Success haptic feedback
+    HapticFeedback.mediumImpact();
 
-    if (mounted) {
-      setState(() {
-        _isLoading = false;
-      });
-      context.go('/feed');
+    try {
+      // Initialize preferences if not already
+      await UserPreferencesService.initialize();
+
+      // Sign in with Google using Firebase
+      await ref.read(authControllerProvider.notifier).signInWithGoogle();
+
+      // Wait for Firebase Auth state to propagate
+      final firebaseAuth = FirebaseAuth.instance;
+      int retryCount = 0;
+      while (firebaseAuth.currentUser == null && retryCount < 5) {
+        debugPrint(
+            'Waiting for Google auth state to propagate (attempt ${retryCount + 1})');
+        await Future.delayed(const Duration(milliseconds: 300));
+        retryCount++;
+      }
+
+      if (firebaseAuth.currentUser == null) {
+        debugPrint(
+            'Warning: Firebase user still null after Google sign-in. User may need to sign in again.');
+      } else {
+        debugPrint(
+            'Google sign-in confirmed: ${firebaseAuth.currentUser!.uid}');
+
+        // Store email in preferences for reference
+        if (firebaseAuth.currentUser!.email != null) {
+          await UserPreferencesService.saveUserEmail(
+              firebaseAuth.currentUser!.email!);
+        }
+      }
+
+      // Check if this is a new account or existing
+      final user = ref.read(currentUserProvider);
+      final bool isNewUser = user.createdAt.difference(DateTime.now()).inSeconds.abs() < 10;
+
+      if (isNewUser) {
+        // For new accounts, ensure onboarding status is reset
+        await UserPreferencesService.resetOnboardingStatus();
+        debugPrint('New Google account detected. Redirecting to onboarding...');
+      } else {
+        // For returning users, automatically mark onboarding as completed
+        if (firebaseAuth.currentUser != null) {
+          debugPrint(
+              'Returning user detected, marking onboarding as completed');
+          await UserPreferencesService.setOnboardingCompleted(true);
+        }
+      }
+
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+
+        // Add appropriate navigation feedback based on destination
+        NavigationTransitions.applyNavigationFeedback(
+          type: isNewUser
+              ? NavigationFeedbackType.modalOpen
+              : NavigationFeedbackType.pageTransition,
+        );
+
+        // For new users, check if they need onboarding
+        final needsOnboarding =
+            !UserPreferencesService.hasCompletedOnboarding();
+
+        // Navigate based on user state
+        context.go(needsOnboarding ? '/onboarding' : '/home');
+      }
+    } catch (e) {
+      debugPrint('Error in Google sign-in process: $e');
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+
+        String errorMessage = 'Google sign-in failed';
+        if (e is FirebaseAuthException) {
+          errorMessage = e.message ?? 'Authentication failed';
+        }
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              errorMessage,
+              style: GoogleFonts.inter(
+                color: AppColors.white,
+              ),
+            ),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 
-  InputDecoration _getInputDecoration(String label, IconData icon, {String? errorText}) {
+  InputDecoration _getInputDecoration(String label, IconData icon,
+      {String? errorText}) {
     return InputDecoration(
       labelText: label,
       labelStyle: GoogleFonts.inter(
-        color: Colors.white70,
+        color: AppColors.white.withOpacity(0.7),
         fontWeight: FontWeight.w500,
       ),
-      prefixIcon: Icon(icon, color: Colors.white70),
+      prefixIcon: Icon(icon, color: AppColors.white.withOpacity(0.7)),
       filled: true,
       fillColor: const Color(0xFF1E1E1E),
       border: OutlineInputBorder(
@@ -199,7 +430,7 @@ class _SignInPageState extends State<SignInPage> {
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: Color(0xFFFFD700), width: 1),
+        borderSide: const BorderSide(color: AppColors.gold, width: 1),
       ),
       errorText: errorText,
       errorStyle: GoogleFonts.inter(
@@ -221,8 +452,12 @@ class _SignInPageState extends State<SignInPage> {
             children: [
               // Back Button
               IconButton(
-                icon: const Icon(Icons.arrow_back, color: Colors.white),
-                onPressed: () => context.pop(),
+                icon: const Icon(Icons.arrow_back, color: AppColors.white),
+                onPressed: () {
+                  // Add a subtle transition feedback
+                  HapticFeedback.lightImpact();
+                  context.go('/');
+                },
                 padding: EdgeInsets.zero,
               ),
               const SizedBox(height: 24),
@@ -230,16 +465,19 @@ class _SignInPageState extends State<SignInPage> {
               Center(
                 child: Column(
                   children: [
-                    Image.asset(
-                      'assets/images/hivelogo.png',
-                      width: 80,
-                      height: 80,
+                    Hero(
+                      tag: 'auth_logo',
+                      child: Image.asset(
+                        'assets/images/hivelogo.png',
+                        width: 80,
+                        height: 80,
+                      ),
                     ),
                     const SizedBox(height: 24),
                     Text(
                       'Welcome Back',
                       style: GoogleFonts.outfit(
-                        color: Colors.white,
+                        color: AppColors.white,
                         fontSize: 32,
                         fontWeight: FontWeight.bold,
                         letterSpacing: 1.5,
@@ -249,7 +487,7 @@ class _SignInPageState extends State<SignInPage> {
                     Text(
                       'Sign in to continue',
                       style: GoogleFonts.inter(
-                        color: Colors.white70,
+                        color: AppColors.white,
                         fontSize: 16,
                         fontWeight: FontWeight.w500,
                       ),
@@ -261,23 +499,29 @@ class _SignInPageState extends State<SignInPage> {
               // Email Field
               TextField(
                 controller: _emailController,
-                style: GoogleFonts.inter(color: Colors.white),
+                style: GoogleFonts.inter(color: AppColors.white),
                 keyboardType: TextInputType.emailAddress,
-                decoration: _getInputDecoration('University Email', Icons.email_outlined, errorText: _emailError),
+                decoration: _getInputDecoration(
+                    'University Email', Icons.email_outlined,
+                    errorText: _emailError),
               ),
               const SizedBox(height: 16),
               // Password Field
               TextField(
                 controller: _passwordController,
-                style: GoogleFonts.inter(color: Colors.white),
+                style: GoogleFonts.inter(color: AppColors.white),
                 obscureText: !_isPasswordVisible,
-                decoration: _getInputDecoration('Password', Icons.lock_outline).copyWith(
+                decoration: _getInputDecoration('Password', Icons.lock_outline)
+                    .copyWith(
                   suffixIcon: IconButton(
                     icon: Icon(
-                      _isPasswordVisible ? Icons.visibility : Icons.visibility_off,
-                      color: Colors.white70,
+                      _isPasswordVisible
+                          ? Icons.visibility
+                          : Icons.visibility_off,
+                      color: AppColors.white.withOpacity(0.7),
                     ),
-                    onPressed: () => setState(() => _isPasswordVisible = !_isPasswordVisible),
+                    onPressed: () => setState(
+                        () => _isPasswordVisible = !_isPasswordVisible),
                   ),
                 ),
               ),
@@ -291,11 +535,12 @@ class _SignInPageState extends State<SignInPage> {
                     padding: const EdgeInsets.symmetric(horizontal: 8),
                     minimumSize: Size.zero,
                     tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    foregroundColor: AppColors.gold,
                   ),
                   child: Text(
                     'Forgot Password?',
                     style: GoogleFonts.inter(
-                      color: const Color(0xFFFFD700),
+                      color: AppColors.gold,
                       fontSize: 14,
                       fontWeight: FontWeight.w500,
                     ),
@@ -304,36 +549,41 @@ class _SignInPageState extends State<SignInPage> {
               ),
               const SizedBox(height: 32),
               // Sign In Button
-              SizedBox(
-                width: double.infinity,
-                height: 56,
-                child: ElevatedButton(
-                  onPressed: _isLoading ? null : _handleSignIn,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.white,
-                    foregroundColor: Colors.black,
-                    disabledBackgroundColor: Colors.white38,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(28),
+              Hero(
+                tag: 'primary_auth_button',
+                child: SizedBox(
+                  width: double.infinity,
+                  height: 56,
+                  child: ElevatedButton(
+                    onPressed: _isLoading ? null : _handleSignIn,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.white,
+                      foregroundColor: Colors.black,
+                      disabledBackgroundColor: Colors.white38,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(28),
+                      ),
+                      elevation: 0,
                     ),
-                    elevation: 0,
+                    child: _isLoading
+                        ? const SizedBox(
+                            height: 24,
+                            width: 24,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor:
+                                  AlwaysStoppedAnimation<Color>(Colors.black),
+                            ),
+                          )
+                        : Text(
+                            'Sign In',
+                            style: GoogleFonts.inter(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.black,
+                            ),
+                          ),
                   ),
-                  child: _isLoading
-                      ? const SizedBox(
-                          height: 24,
-                          width: 24,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            valueColor: AlwaysStoppedAnimation<Color>(Colors.black),
-                          ),
-                        )
-                      : Text(
-                          'Sign In',
-                          style: GoogleFonts.inter(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
                 ),
               ),
               const SizedBox(height: 24),
@@ -343,7 +593,7 @@ class _SignInPageState extends State<SignInPage> {
                   Expanded(
                     child: Container(
                       height: 1,
-                      color: Colors.white24,
+                      color: AppColors.divider,
                     ),
                   ),
                   Padding(
@@ -351,7 +601,7 @@ class _SignInPageState extends State<SignInPage> {
                     child: Text(
                       'OR',
                       style: GoogleFonts.inter(
-                        color: Colors.white54,
+                        color: AppColors.textTertiary,
                         fontSize: 14,
                         fontWeight: FontWeight.w500,
                       ),
@@ -360,50 +610,70 @@ class _SignInPageState extends State<SignInPage> {
                   Expanded(
                     child: Container(
                       height: 1,
-                      color: Colors.white24,
+                      color: AppColors.divider,
                     ),
                   ),
                 ],
               ),
               const SizedBox(height: 24),
               // Google Sign In Button
-              SizedBox(
-                width: double.infinity,
-                height: 56,
-                child: OutlinedButton.icon(
-                  onPressed: _isLoading ? null : _handleGoogleSignIn,
-                  style: OutlinedButton.styleFrom(
-                    side: const BorderSide(color: Colors.white24),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(28),
+              Hero(
+                tag: 'google_auth_button',
+                child: SizedBox(
+                  width: double.infinity,
+                  height: 56,
+                  child: OutlinedButton.icon(
+                    onPressed: _isLoading ? null : _handleGoogleSignIn,
+                    style: OutlinedButton.styleFrom(
+                      side:
+                          BorderSide(color: AppColors.white.withOpacity(0.24)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(28),
+                      ),
+                      foregroundColor: AppColors.white,
                     ),
-                  ),
-                  icon: Image.asset(
-                    'assets/images/google.png',
-                    width: 24,
-                    height: 24,
-                  ),
-                  label: Text(
-                    'Continue with Google',
-                    style: GoogleFonts.inter(
-                      color: Colors.white,
-                      fontSize: 16,
-                      fontWeight: FontWeight.w500,
+                    icon: Image.asset(
+                      'assets/images/google.png',
+                      width: 24,
+                      height: 24,
+                    ),
+                    label: Text(
+                      'Continue with Google',
+                      style: GoogleFonts.inter(
+                        color: AppColors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w500,
+                      ),
                     ),
                   ),
                 ),
               ),
               const SizedBox(height: 24),
               // Create Account Link
-              Center(
-                child: TextButton(
-                  onPressed: () => context.push('/create-account'),
-                  child: Text(
-                    'Don\'t have an account? Create one',
-                    style: GoogleFonts.inter(
-                      color: const Color(0xFFFFD700),
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500,
+              Hero(
+                tag: 'auth_toggle_link',
+                child: Material(
+                  color: Colors.transparent,
+                  child: Center(
+                    child: TextButton(
+                      onPressed: () {
+                        // Add transition feedback before navigation
+                        NavigationTransitions.applyNavigationFeedback();
+
+                        // Use push for smoother transition when navigating between auth screens
+                        context.push('/create-account');
+                      },
+                      style: TextButton.styleFrom(
+                        foregroundColor: AppColors.gold,
+                      ),
+                      child: Text(
+                        'Don\'t have an account? Create one',
+                        style: GoogleFonts.inter(
+                          color: AppColors.gold,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
                     ),
                   ),
                 ),
@@ -422,7 +692,8 @@ class _AnimatedBottomSheet extends StatefulWidget {
   final String? resetEmailError;
   final ValueChanged<String> onEmailChanged;
   final VoidCallback onResetPassword;
-  final InputDecoration Function(String, IconData, {String? errorText}) getInputDecoration;
+  final InputDecoration Function(String, IconData, {String? errorText})
+      getInputDecoration;
 
   const _AnimatedBottomSheet({
     required this.emailController,
@@ -437,7 +708,8 @@ class _AnimatedBottomSheet extends StatefulWidget {
   State<_AnimatedBottomSheet> createState() => _AnimatedBottomSheetState();
 }
 
-class _AnimatedBottomSheetState extends State<_AnimatedBottomSheet> with SingleTickerProviderStateMixin {
+class _AnimatedBottomSheetState extends State<_AnimatedBottomSheet>
+    with SingleTickerProviderStateMixin {
   late AnimationController _animationController;
   late Animation<double> _handleAnimation;
   late Animation<double> _titleAnimation;
@@ -526,7 +798,7 @@ class _AnimatedBottomSheetState extends State<_AnimatedBottomSheet> with SingleT
             opacity: _handleAnimation,
             child: SlideTransition(
               position: Tween<Offset>(
-                begin: const Offset(0, -0.2),
+                begin: const Offset(0, 0.2),
                 end: Offset.zero,
               ).animate(_handleAnimation),
               child: Center(
@@ -534,7 +806,7 @@ class _AnimatedBottomSheetState extends State<_AnimatedBottomSheet> with SingleT
                   width: 40,
                   height: 4,
                   decoration: BoxDecoration(
-                    color: Colors.white24,
+                    color: AppColors.divider,
                     borderRadius: BorderRadius.circular(2),
                   ),
                 ),
@@ -553,7 +825,7 @@ class _AnimatedBottomSheetState extends State<_AnimatedBottomSheet> with SingleT
               child: Text(
                 'Reset Password',
                 style: GoogleFonts.outfit(
-                  color: Colors.white,
+                  color: AppColors.white,
                   fontSize: 24,
                   fontWeight: FontWeight.bold,
                   letterSpacing: 0.5,
@@ -573,7 +845,7 @@ class _AnimatedBottomSheetState extends State<_AnimatedBottomSheet> with SingleT
               child: Text(
                 'Enter your university email address and we\'ll send you a link to reset your password.',
                 style: GoogleFonts.inter(
-                  color: Colors.white70,
+                  color: AppColors.textSecondary,
                   fontSize: 14,
                   fontWeight: FontWeight.w500,
                 ),
@@ -591,7 +863,7 @@ class _AnimatedBottomSheetState extends State<_AnimatedBottomSheet> with SingleT
               ).animate(_inputAnimation),
               child: TextField(
                 controller: widget.emailController,
-                style: GoogleFonts.inter(color: Colors.white),
+                style: GoogleFonts.inter(color: AppColors.white),
                 keyboardType: TextInputType.emailAddress,
                 decoration: widget.getInputDecoration(
                   'University Email',
@@ -631,7 +903,8 @@ class _AnimatedBottomSheetState extends State<_AnimatedBottomSheet> with SingleT
                           width: 24,
                           child: CircularProgressIndicator(
                             strokeWidth: 2,
-                            valueColor: AlwaysStoppedAnimation<Color>(Colors.black),
+                            valueColor:
+                                AlwaysStoppedAnimation<Color>(Colors.black),
                           ),
                         )
                       : Text(
@@ -639,6 +912,7 @@ class _AnimatedBottomSheetState extends State<_AnimatedBottomSheet> with SingleT
                           style: GoogleFonts.inter(
                             fontSize: 16,
                             fontWeight: FontWeight.w600,
+                            color: Colors.black,
                           ),
                         ),
                 ),
@@ -649,4 +923,4 @@ class _AnimatedBottomSheetState extends State<_AnimatedBottomSheet> with SingleT
       ),
     );
   }
-} 
+}

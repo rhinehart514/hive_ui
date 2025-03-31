@@ -40,8 +40,7 @@ class CustomNavigationBar extends StatelessWidget {
         children: [
           _buildNavItem(0, 'Feed', Icons.home_rounded),
           _buildNavItem(1, 'Spaces', Icons.grid_view_rounded),
-          _buildNavItem(2, 'Messages', Icons.chat_bubble_outline_rounded),
-          _buildNavItem(3, 'Profile', Icons.person_outline_rounded),
+          _buildNavItem(2, 'Profile', Icons.person_outline_rounded),
         ],
       ),
     );
@@ -49,7 +48,7 @@ class CustomNavigationBar extends StatelessWidget {
 
   Widget _buildNavItem(int index, String label, IconData icon) {
     final isSelected = selectedIndex == index;
-    final color = isSelected ? AppColors.gold : AppColors.textSecondary;
+    final color = isSelected ? Colors.white : AppColors.textSecondary;
 
     return GestureDetector(
       onTap: () => onItemSelected(index),
@@ -57,7 +56,7 @@ class CustomNavigationBar extends StatelessWidget {
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
         curve: Curves.easeInOut,
-        padding: EdgeInsets.symmetric(
+        padding: const EdgeInsets.symmetric(
           horizontal: AppTheme.spacing16,
           vertical: AppTheme.spacing8,
         ),
@@ -78,7 +77,7 @@ class CustomNavigationBar extends StatelessWidget {
                 color: color,
               ),
             ),
-            SizedBox(height: AppTheme.spacing4),
+            const SizedBox(height: AppTheme.spacing4),
             AnimatedDefaultTextStyle(
               duration: const Duration(milliseconds: 200),
               style: GoogleFonts.inter(
@@ -94,4 +93,4 @@ class CustomNavigationBar extends StatelessWidget {
       ),
     );
   }
-} 
+}

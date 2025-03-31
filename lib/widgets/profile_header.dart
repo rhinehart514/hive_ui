@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:hive_ui/theme.dart';
+import 'package:hive_ui/theme/text_theme.dart';
+import 'package:hive_ui/theme/app_colors.dart';
 import 'hexagon_avatar.dart';
 import 'profile_setup_flow.dart';
 
@@ -33,10 +34,8 @@ class ProfileHeader extends StatelessWidget {
     this.onResidenceSelected,
   });
 
-  bool get isProfileComplete => 
-    classLevel != null && 
-    fieldOfStudy != null && 
-    residentialStatus != null;
+  bool get isProfileComplete =>
+      classLevel != null && fieldOfStudy != null && residentialStatus != null;
 
   @override
   Widget build(BuildContext context) {
@@ -83,16 +82,13 @@ class ProfileHeader extends StatelessWidget {
                 children: [
                   Text(
                     '$firstName $lastName',
-                    style: AppTextStyle.headlineLarge.copyWith(
-                      fontSize: 28,
-                      fontWeight: FontWeight.w700,
-                    ),
+                    style: TextStyles.headlineLarge,
                   ),
                   if (!isProfileComplete) ...[
                     const SizedBox(height: 4),
                     Text(
                       'Complete your profile to unlock features',
-                      style: AppTextStyle.bodyMedium.copyWith(
+                      style: TextStyles.bodyMedium.copyWith(
                         color: AppColors.gold.withOpacity(0.7),
                         fontSize: 14,
                       ),
@@ -172,7 +168,7 @@ class ProfileHeader extends StatelessWidget {
           const SizedBox(height: 8),
           Text(
             label,
-            style: AppTextStyle.bodyMedium.copyWith(
+            style: TextStyles.bodyMedium.copyWith(
               color: color.withOpacity(opacity),
               fontSize: 12,
               fontWeight: FontWeight.w500,
@@ -183,7 +179,7 @@ class ProfileHeader extends StatelessWidget {
             const SizedBox(height: 4),
             Text(
               value,
-              style: AppTextStyle.bodyMedium.copyWith(
+              style: TextStyles.bodyMedium.copyWith(
                 color: color.withOpacity(opacity),
                 fontSize: 10,
               ),
@@ -196,4 +192,4 @@ class ProfileHeader extends StatelessWidget {
       ),
     );
   }
-} 
+}

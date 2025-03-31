@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:hive_ui/theme.dart';
+import 'package:hive_ui/theme/text_theme.dart';
+import 'package:hive_ui/theme/app_colors.dart';
 import 'hive_card.dart';
 
 class ProfileBio extends StatefulWidget {
@@ -55,7 +56,7 @@ class _ProfileBioState extends State<ProfileBio> {
               children: [
                 Text(
                   'About Me',
-                  style: AppTextStyle.headlineLarge.copyWith(
+                  style: TextStyles.headlineLarge.copyWith(
                     fontSize: 18,
                     fontWeight: FontWeight.w600,
                   ),
@@ -124,8 +125,8 @@ class _ProfileBioState extends State<ProfileBio> {
                 ElevatedButton(
                   onPressed: _saveBio,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.gold.withOpacity(0.2),
-                    foregroundColor: AppColors.gold,
+                    backgroundColor: Colors.white,
+                    foregroundColor: Colors.black,
                     padding: const EdgeInsets.symmetric(
                       horizontal: 24,
                       vertical: 12,
@@ -153,7 +154,7 @@ class _ProfileBioState extends State<ProfileBio> {
             children: [
               Text(
                 'About Me',
-                style: AppTextStyle.headlineLarge.copyWith(
+                style: TextStyles.headlineLarge.copyWith(
                   fontSize: 18,
                   fontWeight: FontWeight.w600,
                 ),
@@ -191,4 +192,4 @@ class _ProfileBioState extends State<ProfileBio> {
       ),
     );
   }
-} 
+}

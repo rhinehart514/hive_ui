@@ -49,5 +49,25 @@
 	<string>This app needs camera access to take profile photos</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>This app needs photos access to let you select profile photos</string>
+	<key>LSApplicationQueriesSchemes</key>
+	<array>
+		<string>https</string>
+		<string>http</string>
+		<string>tel</string>
+		<string>mailto</string>
+	</array>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>buffalo.campuslabs.com</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>hiveapp</string>
+			</array>
+		</dict>
+	</array>
 </dict>
 </plist>

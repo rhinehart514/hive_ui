@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:hive_ui/theme.dart' show AppTextStyle;
+import 'package:hive_ui/theme/text_theme.dart';
+import 'package:hive_ui/theme/app_colors.dart';
 
 class FriendCard extends StatelessWidget {
   final String name;
@@ -55,16 +56,15 @@ class FriendCard extends StatelessWidget {
                 children: [
                   Text(
                     name,
-                    style: AppTextStyle.bodyLarge.copyWith(
-                      fontWeight: FontWeight.w600,
+                    style: TextStyles.titleMedium.copyWith(
+                      color: AppColors.textPrimary,
                     ),
                   ),
                   const SizedBox(height: 2),
                   Text(
                     status,
-                    style: AppTextStyle.bodyMedium.copyWith(
-                      color: Colors.white.withOpacity(0.7),
-                      fontSize: 12,
+                    style: TextStyles.bodySmall.copyWith(
+                      color: AppColors.textSecondary,
                     ),
                   ),
                 ],
@@ -78,7 +78,7 @@ class FriendCard extends StatelessWidget {
               ),
               child: Text(
                 'Message',
-                style: AppTextStyle.bodyMedium.copyWith(
+                style: TextStyles.bodyMedium.copyWith(
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
                 ),
@@ -89,4 +89,4 @@ class FriendCard extends StatelessWidget {
       ),
     );
   }
-} 
+}
