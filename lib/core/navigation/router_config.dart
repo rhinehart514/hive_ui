@@ -90,7 +90,7 @@ class ErrorDisplayPage extends StatelessWidget {
                 ),
                 const SizedBox(height: 24),
                 ElevatedButton(
-                  onPressed: () => Navigator.of(context).pop(),
+                  onPressed: () => GoRouter.of(context).pop(),
                   child: const Text('Go Back'),
                 ),
               ],
