@@ -51,7 +51,7 @@ class ScreenUtils {
   static double calculateBottomPadding(BuildContext context) {
     // Adds padding for bottom nav bar and system navigation
     final bottomInset = MediaQuery.of(context).padding.bottom;
-    final bottomNavBarHeight = 56.0; // Standard bottom nav bar height
+    const bottomNavBarHeight = 56.0; // Standard bottom nav bar height
     
     return bottomInset + bottomNavBarHeight;
   }

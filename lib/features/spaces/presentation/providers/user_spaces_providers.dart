@@ -9,6 +9,7 @@ import 'package:hive_ui/features/spaces/utils/model_converters.dart';
 import 'package:hive_ui/providers/user_providers.dart';
 import 'package:hive_ui/services/space_service.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:hive_ui/features/profile/presentation/providers/profile_providers.dart';
 
 /// Provider for the UserSpacesRepository implementation
 final userSpacesRepositoryProvider = Provider<UserSpacesRepository>((ref) {
@@ -131,7 +132,7 @@ final joinSpaceProvider = Provider.family<Future<void> Function(), String>((ref,
     // Update UserData model for backward compatibility
     final userData = ref.read(userProvider);
     if (userData != null) {
-      ref.read(userProvider.notifier).state = userData.joinClub(spaceId);
+      ref.read(userProvider.notifier).joinClub(spaceId);
     }
   };
 });
@@ -155,10 +156,23 @@ final leaveSpaceProvider = Provider.family<Future<void> Function(), String>((ref
     ref.invalidate(userSpacesProvider);
     ref.invalidate(hasJoinedSpaceProvider(spaceId));
     
+    // Also refresh the profile provider to update followedSpaces
+    try {
+      // Invalidate the profile provider
+      ref.invalidate(profileProvider);
+      
+      // Actively refresh the profile to get fresh data
+      await ref.read(profileProvider.notifier).refreshProfile();
+      
+      debugPrint('Successfully refreshed profile provider after leaving space');
+    } catch (e) {
+      debugPrint('Error refreshing profile provider: $e');
+    }
+    
     // Update UserData model for backward compatibility
     final userData = ref.read(userProvider);
     if (userData != null) {
-      ref.read(userProvider.notifier).state = userData.leaveClub(spaceId);
+      ref.read(userProvider.notifier).leaveClub(spaceId);
     }
   };
 });
@@ -218,20 +232,25 @@ final syncUserSpacesProvider = Provider<Future<void> Function()>((ref) {
       // Update local UserData if needed
       if (spacesToAdd.isNotEmpty) {
         debugPrint('Adding ${spacesToAdd.length} spaces to local UserData: $spacesToAdd');
-        var updatedUserData = userData;
         for (final spaceId in spacesToAdd) {
-          updatedUserData = updatedUserData.joinClub(spaceId);
+          ref.read(userProvider.notifier).joinClub(spaceId);
         }
-        ref.read(userProvider.notifier).state = updatedUserData;
       }
       
       // Update Firestore if needed
       if (spacesToAddToFirestore.isNotEmpty) {
         debugPrint('Adding ${spacesToAddToFirestore.length} spaces to Firestore: $spacesToAddToFirestore');
+        
+        // Calculate the total number of followedSpaces to update clubCount
+        final totalSpaceCount = firestoreSpaceIds.length + spacesToAddToFirestore.length;
+        
         await FirebaseFirestore.instance.collection('users').doc(userId).update({
           'followedSpaces': FieldValue.arrayUnion(spacesToAddToFirestore),
+          'clubCount': totalSpaceCount, // Update clubCount to match total space count
           'updatedAt': FieldValue.serverTimestamp(),
         });
+        
+        debugPrint('Updated followedSpaces and clubCount to $totalSpaceCount');
       }
       
       // Refresh the spaces provider to update UI

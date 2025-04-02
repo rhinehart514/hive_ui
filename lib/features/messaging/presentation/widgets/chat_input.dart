@@ -1,19 +1,28 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_ui/features/messaging/injection.dart' as injection;
 import 'package:hive_ui/theme/app_colors.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:path/path.dart' as path;
+import 'package:permission_handler/permission_handler.dart';
+import 'package:flutter/services.dart';
+import 'package:hive_ui/features/messaging/utils/typing_indicator_manager.dart';
 
 /// A chat input widget with support for text messages and media attachments
 class ChatInput extends ConsumerStatefulWidget {
   final String chatId;
   final Function()? onMessageSent;
   final FocusNode? focusNode;
+  final String? threadParentId;
 
   const ChatInput({
     Key? key,
     required this.chatId,
     this.onMessageSent,
     this.focusNode,
+    this.threadParentId,
   }) : super(key: key);
 
   @override
@@ -23,6 +32,9 @@ class ChatInput extends ConsumerStatefulWidget {
 class _ChatInputState extends ConsumerState<ChatInput> {
   final TextEditingController _textController = TextEditingController();
   bool _isComposing = false;
+  File? _imageFile;
+  final ImagePicker _picker = ImagePicker();
+  bool _isUploading = false;
 
   @override
   void initState() {
@@ -44,6 +56,14 @@ class _ChatInputState extends ConsumerState<ChatInput> {
         _isComposing = isComposing;
       });
     }
+    
+    // If text is being entered, notify the typing indicator manager
+    if (_textController.text.isNotEmpty) {
+      ref.read(typingIndicatorManagerProvider(widget.chatId)).userIsTyping();
+    } else {
+      // If text is cleared, notify that user stopped typing
+      ref.read(typingIndicatorManagerProvider(widget.chatId)).userStoppedTyping();
+    }
   }
 
   void _handleSubmitted() {
@@ -53,7 +73,26 @@ class _ChatInputState extends ConsumerState<ChatInput> {
     // Set sending state to true
     ref.read(injection.isSendingMessageProvider(widget.chatId).notifier).state = true;
 
-    // Send the message
+    // Notify that user is no longer typing
+    ref.read(typingIndicatorManagerProvider(widget.chatId)).userStoppedTyping();
+
+    // Send the message, optionally as a thread reply
+    if (widget.threadParentId != null) {
+      // Send as thread reply
+      ref.read(injection.messagingControllerProvider).sendTextMessageReply(
+        widget.chatId,
+        message,
+        widget.threadParentId!,
+      ).then((_) {
+        // Set sending state to false when complete
+        ref.read(injection.isSendingMessageProvider(widget.chatId).notifier).state = false;
+      }).catchError((error) {
+        // Set sending state to false on error
+        ref.read(injection.isSendingMessageProvider(widget.chatId).notifier).state = false;
+        // Could show an error snackbar here
+      });
+    } else {
+      // Send as regular message
     ref.read(injection.messagingControllerProvider).sendTextMessage(
       widget.chatId,
       message,
@@ -65,12 +104,169 @@ class _ChatInputState extends ConsumerState<ChatInput> {
       ref.read(injection.isSendingMessageProvider(widget.chatId).notifier).state = false;
       // Could show an error snackbar here
     });
+    }
 
     // Clear the input
     _textController.clear();
 
     // Notify parent about sent message
     widget.onMessageSent?.call();
+  }
+
+  Future<void> _pickImage(ImageSource source) async {
+    try {
+      final permissionStatus = source == ImageSource.camera 
+          ? await Permission.camera.request() 
+          : await Permission.photos.request();
+      
+      if (permissionStatus.isGranted) {
+        final pickedFile = await _picker.pickImage(
+          source: source,
+          imageQuality: 70, // Compress image for faster upload
+        );
+        
+        if (pickedFile != null) {
+          setState(() {
+            _imageFile = File(pickedFile.path);
+            _isUploading = true;
+          });
+          
+          await _sendImageMessage();
+        }
+      } else {
+        // Show permission denied message
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Permission denied. Please enable in settings.'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    } on PlatformException catch (e) {
+      print('Failed to pick image: $e');
+    }
+  }
+
+  Future<void> _pickFile() async {
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.any,
+        allowMultiple: false,
+      );
+      
+      if (result != null && result.files.single.path != null) {
+        final file = File(result.files.single.path!);
+        // Get file size
+        final fileSize = await file.length();
+        // Maximum file size: 20MB
+        if (fileSize > 20 * 1024 * 1024) {
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('File size exceeds 20MB limit.'),
+                backgroundColor: Colors.red,
+              ),
+            );
+          }
+          return;
+        }
+        
+        // Send the file
+        setState(() {
+          _isUploading = true;
+        });
+        
+        await _sendFileMessage(file);
+      }
+    } on PlatformException catch (e) {
+      print('Failed to pick file: $e');
+    }
+  }
+
+  Future<void> _sendImageMessage() async {
+    if (_imageFile == null) return;
+    
+    try {
+      // Set uploading state
+      ref.read(injection.isSendingMessageProvider(widget.chatId).notifier).state = true;
+      
+      // Send the image message
+      await ref.read(injection.messagingControllerProvider).sendImageMessage(
+        widget.chatId,
+        _imageFile!,
+        caption: _textController.text.trim(),
+      );
+      
+      // Clear the input and image
+      _textController.clear();
+      setState(() {
+        _imageFile = null;
+        _isUploading = false;
+      });
+      
+      // Set uploading state to false when complete
+      ref.read(injection.isSendingMessageProvider(widget.chatId).notifier).state = false;
+      
+      // Notify parent about sent message
+      widget.onMessageSent?.call();
+    } catch (e) {
+      // Set uploading state to false on error
+      ref.read(injection.isSendingMessageProvider(widget.chatId).notifier).state = false;
+      setState(() {
+        _isUploading = false;
+      });
+      
+      // Show error
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to send image: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _sendFileMessage(File file) async {
+    try {
+      // Set uploading state
+      ref.read(injection.isSendingMessageProvider(widget.chatId).notifier).state = true;
+      
+      // Send the file message
+      await ref.read(injection.messagingControllerProvider).sendFileMessage(
+        widget.chatId,
+        file,
+        path.basename(file.path),
+      );
+      
+      // Set uploading state to false when complete
+      ref.read(injection.isSendingMessageProvider(widget.chatId).notifier).state = false;
+      setState(() {
+        _isUploading = false;
+      });
+      
+      // Notify parent about sent message
+      widget.onMessageSent?.call();
+    } catch (e) {
+      // Set uploading state to false on error
+      ref.read(injection.isSendingMessageProvider(widget.chatId).notifier).state = false;
+      setState(() {
+        _isUploading = false;
+      });
+      
+      // Show error
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to send file: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
   void _showAttachmentOptions() {
@@ -102,7 +298,7 @@ class _ChatInputState extends ConsumerState<ChatInput> {
                   label: 'Gallery',
                   onTap: () {
                     Navigator.pop(context);
-                    // TODO: Implement gallery picker
+                    _pickImage(ImageSource.gallery);
                   },
                 ),
                 _buildAttachmentOption(
@@ -110,7 +306,7 @@ class _ChatInputState extends ConsumerState<ChatInput> {
                   label: 'Camera',
                   onTap: () {
                     Navigator.pop(context);
-                    // TODO: Implement camera picker
+                    _pickImage(ImageSource.camera);
                   },
                 ),
                 _buildAttachmentOption(
@@ -118,7 +314,7 @@ class _ChatInputState extends ConsumerState<ChatInput> {
                   label: 'File',
                   onTap: () {
                     Navigator.pop(context);
-                    // TODO: Implement file picker
+                    _pickFile();
                   },
                 ),
               ],
@@ -182,12 +378,72 @@ class _ChatInputState extends ConsumerState<ChatInput> {
       ),
       padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 8.0),
       child: SafeArea(
-        child: Row(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Image preview if there's an image selected
+            if (_imageFile != null)
+              Stack(
+                children: [
+                  Container(
+                    height: 150,
+                    width: double.infinity,
+                    margin: const EdgeInsets.only(bottom: 8),
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade800,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(12),
+                      child: Image.file(
+                        _imageFile!,
+                        fit: BoxFit.cover,
+                      ),
+                    ),
+                  ),
+                  Positioned(
+                    top: 8,
+                    right: 8,
+                    child: GestureDetector(
+                      onTap: () {
+                        setState(() {
+                          _imageFile = null;
+                        });
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withOpacity(0.5),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.close,
+                          color: Colors.white,
+                          size: 16,
+                        ),
+                      ),
+                    ),
+                  ),
+                  if (_isUploading)
+                    Positioned.fill(
+                      child: Container(
+                        color: Colors.black.withOpacity(0.5),
+                        child: const Center(
+                          child: CircularProgressIndicator(
+                            valueColor: AlwaysStoppedAnimation<Color>(AppColors.gold),
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            
+            Row(
           children: [
             // Attachment button
             IconButton(
               icon: const Icon(Icons.add, color: Colors.white70),
-              onPressed: _showAttachmentOptions,
+                  onPressed: _isUploading ? null : _showAttachmentOptions,
             ),
 
             // Text input
@@ -218,10 +474,10 @@ class _ChatInputState extends ConsumerState<ChatInput> {
 
             // Send button
             AnimatedOpacity(
-              opacity: _isComposing ? 1.0 : 0.0,
+                  opacity: _isComposing || _imageFile != null ? 1.0 : 0.0,
               duration: const Duration(milliseconds: 200),
               child: IconButton(
-                icon: isSending
+                    icon: isSending || _isUploading
                     ? const SizedBox(
                         width: 24,
                         height: 24,
@@ -232,8 +488,14 @@ class _ChatInputState extends ConsumerState<ChatInput> {
                         ),
                       )
                     : const Icon(Icons.send, color: AppColors.gold),
-                onPressed: isSending || !_isComposing ? null : _handleSubmitted,
+                    onPressed: (isSending || _isUploading || (!_isComposing && _imageFile == null))
+                        ? null
+                        : _imageFile != null
+                            ? _sendImageMessage
+                            : _handleSubmitted,
               ),
+                ),
+              ],
             ),
           ],
         ),

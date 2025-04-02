@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 /// Defines the source of an event
 enum EventSource {
@@ -10,6 +11,31 @@ enum EventSource {
 
   /// Events created by clubs or organizations
   club,
+}
+
+/// Represents an event organizer
+class EventOrganizer {
+  final String id;
+  final String name;
+  final bool isVerified;
+  final String? imageUrl;
+
+  EventOrganizer({
+    required this.id,
+    required this.name,
+    this.isVerified = false,
+    this.imageUrl,
+  });
+
+  /// Convert to JSON
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'name': name,
+      'isVerified': isVerified,
+      'imageUrl': imageUrl,
+    };
+  }
 }
 
 @immutable
@@ -35,6 +61,9 @@ class Event {
   final DateTime? lastModified; // Last modification time
   final String visibility; // public, friends, private
   final List<String> attendees; // List of attendee user IDs
+  final String? spaceId; // Add spaceId field
+  final List<String> reposts;
+  final EventOrganizer? organizer;
 
   Event({
     required this.id,
@@ -56,6 +85,9 @@ class Event {
     this.lastModified,
     this.visibility = 'public', // Default to public
     this.attendees = const [], // Default to empty list
+    this.spaceId, // Add spaceId parameter
+    this.reposts = const [],
+    this.organizer,
   }) : imageUrl = (imageUrl ?? '').trim(); // Ensure imageUrl is never null and is trimmed
 
   // This will be used when we receive data from the backend
@@ -100,37 +132,57 @@ class Event {
       imageUrl = '';
     }
 
+    // Helper function to parse dates that could be Timestamp or String
+    DateTime parseDateField(dynamic value) {
+      if (value == null) return DateTime.now();
+      if (value is Timestamp) return value.toDate();
+      if (value is DateTime) return value;
+      if (value is String) {
+        try {
+          return DateTime.parse(value);
+        } catch (e) {
+          debugPrint('Error parsing date string: $value');
+          return DateTime.now();
+        }
+      }
+      debugPrint('Unhandled date format: ${value.runtimeType}');
+      return DateTime.now();
+    }
+
     return Event(
       id: json['id'] as String,
-      title: json['title'] as String,
-      description: json['description'] as String,
-      location: json['location'] as String,
-      startDate: json['startDate'] != null
-          ? DateTime.parse(json['startDate'] as String)
-          : (json['startTime'] != null
-              ? DateTime.parse(json['startTime'] as String)
-              : DateTime.now()),
-      endDate: json['endDate'] != null
-          ? DateTime.parse(json['endDate'] as String)
-          : (json['endTime'] != null
-              ? DateTime.parse(json['endTime'] as String)
-              : DateTime.now().add(const Duration(hours: 2))),
+      title: json['title'] as String? ?? '',
+      description: json['description'] as String? ?? '',
+      location: json['location'] as String? ?? '',
+      startDate: parseDateField(json['startDate'] ?? json['startTime']),
+      endDate: parseDateField(json['endDate'] ?? json['endTime']),
       organizerEmail: json['organizerEmail'] as String? ?? '',
       organizerName: json['organizerName'] as String? ?? 'Unknown Organizer',
       category: json['category'] as String? ?? 'Event',
       status: json['status'] as String? ?? 'confirmed',
       link: json['link'] as String? ?? '',
       originalTitle: json['originalTitle'] as String?,
-      imageUrl: imageUrl, // Will be trimmed in constructor
+      imageUrl: imageUrl,
       tags: tags,
-      // New fields
       source: source,
       createdBy: json['createdBy'] as String?,
-      lastModified: json['lastModified'] != null
-          ? DateTime.parse(json['lastModified'] as String)
+      lastModified: json['lastModified'] != null 
+          ? parseDateField(json['lastModified'])
           : null,
       visibility: json['visibility'] as String? ?? 'public',
       attendees: attendees,
+      spaceId: json['spaceId'] as String?,
+      reposts: json['reposts'] != null && json['reposts'] is List
+          ? (json['reposts'] as List).map((e) => e.toString()).toList()
+          : [],
+      organizer: json['organizer'] != null
+          ? EventOrganizer(
+              id: json['organizer']['id'] as String,
+              name: json['organizer']['name'] as String,
+              isVerified: json['organizer']['isVerified'] as bool? ?? false,
+              imageUrl: json['organizer']['imageUrl'] as String?,
+            )
+          : null,
     );
   }
 
@@ -170,6 +222,9 @@ class Event {
       lastModified: DateTime.now(),
       visibility: visibility,
       attendees: [userId], // Creator is automatically attending
+      spaceId: null, // No spaceId for user event
+      reposts: [],
+      organizer: null,
     );
   }
 
@@ -210,6 +265,14 @@ class Event {
       lastModified: DateTime.now(),
       visibility: visibility,
       attendees: [creatorId], // Creator is automatically attending
+      spaceId: null, // No spaceId for club event
+      reposts: [],
+      organizer: EventOrganizer(
+        id: creatorId,
+        name: clubName,
+        isVerified: true,
+        imageUrl: null,
+      ),
     );
   }
 
@@ -228,7 +291,7 @@ class Event {
   DateTime _convertToLocalTime(DateTime dateTime) {
     // The events are stored in EDT time, so we need to convert to local time
     // First, ensure the DateTime is treated as EDT
-    final edtOffset = const Duration(hours: -4); // EDT is UTC-4
+    const edtOffset = Duration(hours: -4); // EDT is UTC-4
     final utcTime = dateTime.toUtc().add(-edtOffset); // Convert EDT to UTC
     return utcTime.toLocal(); // Convert UTC to local time
   }
@@ -353,6 +416,9 @@ class Event {
       'lastModified': lastModified?.toIso8601String(),
       'visibility': visibility,
       'attendees': attendees,
+      'spaceId': spaceId, // Add spaceId to toJson
+      'reposts': reposts,
+      'organizer': organizer?.toJson(),
     };
   }
 
@@ -377,6 +443,9 @@ class Event {
     DateTime? lastModified,
     String? visibility,
     List<String>? attendees,
+    String? spaceId,
+    List<String>? reposts,
+    EventOrganizer? organizer,
   }) {
     return Event(
       id: id ?? this.id,
@@ -398,6 +467,9 @@ class Event {
       lastModified: lastModified ?? this.lastModified,
       visibility: visibility ?? this.visibility,
       attendees: attendees ?? this.attendees,
+      spaceId: spaceId ?? this.spaceId,
+      reposts: reposts ?? this.reposts,
+      organizer: organizer ?? this.organizer,
     );
   }
 
@@ -423,31 +495,42 @@ class Event {
       lastModified: DateTime.now(), // Update modification time
       visibility: visibility,
       attendees: attendees,
+      spaceId: spaceId,
+      reposts: reposts,
+      organizer: organizer,
     );
   }
 
   /// Get a safe image URL for display, filtering known problematic patterns
   String get safeImageUrl {
-    // Return default placeholder if URL is empty or null
-    if (imageUrl.isEmpty) {
-      return ''; // Return empty string to trigger the fallback HIVE logo
+    // Return empty string if URL is empty, null, or just whitespace
+    if (imageUrl.isEmpty || imageUrl.trim().isEmpty) {
+      return '';
     }
 
     // Detect and block problematic patterns
-    if (imageUrl.contains("C:/Users/rhine/hive_ui") ||
-        imageUrl.contains("C:\\Users\\rhine\\hive_ui") ||
+    if (imageUrl.contains("C:/Users") ||
+        imageUrl.contains("C:\\Users") ||
         imageUrl.toLowerCase().startsWith("file:///") ||
         imageUrl.startsWith("//") || // Protocol-relative URLs
-        !imageUrl.startsWith("http://") && !imageUrl.startsWith("https://")) {
-      return ''; // Return empty string to trigger the fallback HIVE logo
+        (!imageUrl.toLowerCase().startsWith("http://") && 
+         !imageUrl.toLowerCase().startsWith("https://"))) {
+      return '';
     }
 
     // Ensure URL is properly encoded
     try {
-      final uri = Uri.parse(imageUrl);
+      final uri = Uri.parse(imageUrl.trim());
+      if (uri.scheme.isEmpty || (!uri.scheme.startsWith('http') && !uri.scheme.startsWith('https'))) {
+        return '';
+      }
       return uri.toString();
     } catch (e) {
-      return ''; // Return empty string to trigger the fallback HIVE logo
+      debugPrint('Invalid image URL: $imageUrl');
+      return '';
     }
   }
+
+  /// Check if the event has a valid image URL
+  bool get hasValidImage => safeImageUrl.isNotEmpty;
 }

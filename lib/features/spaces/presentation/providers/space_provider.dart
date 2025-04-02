@@ -1,10 +1,8 @@
 import 'dart:io';
-import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_ui/features/spaces/domain/entities/space.dart';
 import 'package:hive_ui/features/spaces/domain/repositories/space_repository.dart';
 import 'package:hive_ui/features/spaces/domain/usecases/create_space_usecase.dart';
-import 'space_providers.dart';
 
 /// Provider for the current space creation state
 final spaceCreationStateProvider = StateNotifierProvider<SpaceCreationNotifier, SpaceCreationState>((ref) {

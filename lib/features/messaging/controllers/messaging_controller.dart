@@ -172,10 +172,22 @@ class MessagingController {
     await _messageUseCase.sendTextMessage(chatId, userId, content);
   }
 
+  /// Sends a text message as a reply in a thread
+  Future<void> sendTextMessageReply(String chatId, String content, String threadParentId) async {
+    final userId = _getCurrentUserId();
+    await _messageUseCase.sendTextMessageReply(chatId, userId, content, threadParentId);
+  }
+
   /// Sends an image message
   Future<void> sendImageMessage(String chatId, File imageFile, {String? caption}) async {
     final userId = _getCurrentUserId();
     await _messageUseCase.sendImageMessage(chatId, userId, imageFile, caption: caption);
+  }
+
+  /// Sends a file message
+  Future<void> sendFileMessage(String chatId, File file, String fileName) async {
+    final userId = _getCurrentUserId();
+    await _messageUseCase.sendFileMessage(chatId, userId, file, fileName);
   }
 
   /// Sets the current chat for the user
@@ -194,6 +206,18 @@ class MessagingController {
   Future<void> updateTypingStatus(String chatId, bool isTyping) async {
     final userId = _getCurrentUserId();
     await _messageUseCase.updateTypingStatus(chatId, userId, isTyping);
+  }
+
+  /// Adds a reaction to a message
+  Future<void> addReaction(String chatId, String messageId, String emoji) async {
+    final userId = _getCurrentUserId();
+    await _messageUseCase.addMessageReaction(chatId, messageId, userId, emoji);
+  }
+  
+  /// Removes a reaction from a message
+  Future<void> removeReaction(String chatId, String messageId, String emoji) async {
+    final userId = _getCurrentUserId();
+    await _messageUseCase.removeMessageReaction(chatId, messageId, userId, emoji);
   }
 
   /// Updates user's online status
@@ -236,6 +260,23 @@ class MessagingController {
     // Implementation depends on your use case layer
     // This is a placeholder
     throw UnimplementedError('Group chat creation not implemented yet');
+  }
+
+  /// Sends an announcement to a space chat
+  Future<Message?> sendSpaceAnnouncement(String spaceId, String content) async {
+    final userId = _getCurrentUserId();
+    return await _messageUseCase.sendSpaceAnnouncement(spaceId, userId, content);
+  }
+  
+  /// Gets all spaces with active chats for the current user
+  Future<List<String>> getSpacesWithChats() async {
+    final userId = _getCurrentUserId();
+    return await _messageUseCase.getSpacesWithChatsForUser(userId);
+  }
+  
+  /// Synchronizes space members with chat participants
+  Future<void> syncSpaceChat(String spaceId) async {
+    await _messageUseCase.syncSpaceMembersWithChat(spaceId);
   }
 }
 

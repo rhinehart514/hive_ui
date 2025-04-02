@@ -79,6 +79,8 @@ class SpaceEventManager {
         return 'campus_living';
       case SpaceType.fraternityAndSorority:
         return 'fraternity_and_sorority';
+      case SpaceType.hiveExclusive:
+        return 'hive_exclusive';
       case SpaceType.other:
         return 'other';
     }
@@ -135,6 +137,7 @@ class SpaceEventManager {
       'university_organizations',
       'campus_living',
       'fraternity_and_sorority',
+      'hive_exclusive',
       'other',
     ];
   }
@@ -918,6 +921,8 @@ class SpaceEventManager {
         return SpaceType.campusLiving;
       case 'fraternity_and_sorority':
         return SpaceType.fraternityAndSorority;
+      case 'hive_exclusive':
+        return SpaceType.hiveExclusive;
       case 'other':
       default:
         return SpaceType.other;
@@ -1188,26 +1193,36 @@ class SpaceEventManager {
           _cacheTimestamps.containsKey(cacheKey) &&
           DateTime.now().difference(_cacheTimestamps[cacheKey]!) <
               _cacheDuration) {
-        debugPrint('Using cached events for $cacheKey (${_eventsCache[cacheKey]!.length} events)');
-        return _eventsCache[cacheKey]!;
+        // Even for cached results, filter out past events
+        final now = DateTime.now();
+        final filteredCachedEvents = _eventsCache[cacheKey]!
+            .where((event) => event.endDate.isAfter(now))
+            .toList();
+        
+        debugPrint('Using cached events for $cacheKey (${filteredCachedEvents.length} events after filtering out past events)');
+        return filteredCachedEvents;
       }
       
       // Set default startDate to now if not provided
-      final effectiveStartDate = startDate ?? DateTime.now();
+      final now = DateTime.now();
       
-      // Build the query - use ISO string format for consistency
-      final isoStartDate = effectiveStartDate.toIso8601String();
-      
-      // Build the query
+      // Build the query for event retrieval
+      // We're only requiring events that haven't completely ended yet
       Query eventsQuery = _firestore
           .collection('events')
-          .where('startDate', isGreaterThanOrEqualTo: isoStartDate)
+          .where('endDate', isGreaterThanOrEqualTo: Timestamp.fromDate(now))
+          .orderBy('endDate')
           .orderBy('startDate');
+      
+      // Apply additional start date filter if specified
+      if (startDate != null) {
+        // If a specific start date was requested, apply it as an additional filter
+        eventsQuery = eventsQuery.where('startDate', isGreaterThanOrEqualTo: Timestamp.fromDate(startDate));
+      }
       
       // Apply end date filter if specified
       if (endDate != null) {
-        final isoEndDate = endDate.toIso8601String();
-        eventsQuery = eventsQuery.where('endDate', isLessThanOrEqualTo: isoEndDate);
+        eventsQuery = eventsQuery.where('endDate', isLessThanOrEqualTo: Timestamp.fromDate(endDate));
       }
       
       // Apply category filter if specified
@@ -1243,7 +1258,14 @@ class SpaceEventManager {
           
           // Parse into Event object
           final event = Event.fromJson(data);
-          events.add(event);
+          
+          // Double-check that the event hasn't ended
+          if (event.endDate.isAfter(now)) {
+            events.add(event);
+            debugPrint('Adding upcoming event: ${event.title}, ends: ${event.endDate}');
+          } else {
+            debugPrint('Filtering out past event: ${event.title}, ended: ${event.endDate}');
+          }
         } catch (e) {
           debugPrint('Error parsing event ${doc.id}: $e');
         }
@@ -1255,11 +1277,11 @@ class SpaceEventManager {
       // Limit to requested number
       final limitedEvents = events.length > limit ? events.sublist(0, limit) : events;
       
-      // Cache the results
+      // Cache the results (only upcoming events)
       _eventsCache[cacheKey] = limitedEvents;
       _cacheTimestamps[cacheKey] = DateTime.now();
       
-      debugPrint('Retrieved ${limitedEvents.length} events directly from events collection');
+      debugPrint('Retrieved ${limitedEvents.length} upcoming events directly from events collection');
       return limitedEvents;
     } catch (e) {
       debugPrint('Error fetching events directly: $e');

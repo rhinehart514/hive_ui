@@ -5,6 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:hive_ui/features/spaces/domain/entities/space_entity.dart';
 import 'package:hive_ui/features/spaces/presentation/controllers/spaces_controller.dart';
 import 'package:hive_ui/theme/app_colors.dart';
+import 'package:go_router/go_router.dart';
 
 /// A reusable card to display a space
 class SpaceCard extends ConsumerWidget {
@@ -102,6 +103,22 @@ class SpaceCard extends ConsumerWidget {
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
+                      ),
+                      // Add new button to view improved space detail
+                      IconButton(
+                        icon: const Icon(
+                          Icons.open_in_new,
+                          size: 20,
+                          color: AppColors.textSecondary,
+                        ),
+                        onPressed: () {
+                          HapticFeedback.lightImpact();
+                          // Navigate to our improved space detail view
+                          GoRouter.of(context).push(
+                            '/spaces/detail?id=${Uri.encodeComponent(space.id)}&type=space',
+                          );
+                        },
+                        tooltip: 'View improved space detail',
                       ),
                     ],
                   ),

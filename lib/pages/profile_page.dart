@@ -6,6 +6,7 @@ import 'package:auto_route/auto_route.dart';
 import 'package:timezone/data/latest.dart' as tz;
 import 'package:go_router/go_router.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:hive_ui/core/navigation/routes.dart';
 import 'package:hive_ui/widgets/profile/profile_header.dart';
 import 'package:hive_ui/widgets/profile/profile_tab_content.dart' as content;
@@ -30,14 +31,11 @@ import 'package:hive_ui/features/profile/presentation/providers/social_providers
 
 // Keep services
 import 'package:hive_ui/services/profile_sharing_service.dart';
-import 'package:hive_ui/services/admin_service.dart';
 
 // Theme and Styling
 import 'package:hive_ui/theme/app_colors.dart';
 import 'package:hive_ui/theme/huge_icons.dart';
-import 'package:hive_ui/widgets/profile/profile_app_bar_delegate.dart';
 import 'package:hive_ui/features/profile/presentation/widgets/profile_accessibility_helper.dart';
-import 'package:image_picker/image_picker.dart';
 
 /// Provider to track whether the profile page is viewing the current user or another user
 final isCurrentUserProfileProvider = StateProvider<bool>((ref) => true);
@@ -73,8 +71,8 @@ class _ProfilePageState extends ConsumerState<ProfilePage>
     // (3 tabs - Spaces, Events, Friends)
     _tabController = TabController(length: 3, vsync: this);
 
-    // Set initial tab index to 0 (Spaces) to avoid any potential null issues
-    _tabController.index = 0;
+    // Set initial tab index to 2 (Friends) for debugging the friends tab
+    _tabController.index = 2;
 
     // DON'T modify providers in initState - moved to didChangeDependencies
     
@@ -117,14 +115,19 @@ class _ProfilePageState extends ConsumerState<ProfilePage>
       }
     });
     
-    // If this is a suggested friend profile, try to generate mock data
-    if (widget.userId != null) {
-      Future.microtask(() {
-        if (mounted) {
-          ref.read(profileProvider.notifier).createMockProfile(widget.userId!);
+    // Always use real data for both current user and other profiles
+    Future.microtask(() {
+      if (mounted) {
+        debugPrint('Profile page: Loading profile data for ${widget.userId ?? 'current user'}');
+        if (widget.userId != null) {
+          // Load another user's profile using loadProfile with userId parameter
+          ref.read(profileProvider.notifier).loadProfile(widget.userId!);
+        } else {
+          // For current user profile, refresh to ensure data is up-to-date
+          ref.read(profileProvider.notifier).refreshProfile();
         }
-      });
-    }
+      }
+    });
   }
 
   @override
@@ -936,17 +939,44 @@ class _ProfilePageState extends ConsumerState<ProfilePage>
                                   onPressed: () async {
                                     HapticFeedback.mediumImpact();
 
-                                    // Create updated profile with new interests
-                                    final updatedProfile = userProfile.copyWith(
-                                      interests: selectedInterests,
-                                      updatedAt: DateTime.now(),
-                                    );
-
                                     try {
-                                      // Update the profile
-                                      await _handleProfileUpdate(updatedProfile);
+                                      // Show loading indicator
+                                      showDialog(
+                                        context: context, 
+                                        barrierDismissible: false,
+                                        builder: (context) => const Center(
+                                          child: CircularProgressIndicator(
+                                            color: AppColors.gold,
+                                          ),
+                                        ),
+                                      );
                                       
-                                      // Close the dialog after successful update
+                                      // Create a clean, valid interests list
+                                      final List<String> cleanInterests = selectedInterests
+                                          .where((interest) => interest.isNotEmpty)
+                                          .toList();
+                                      
+                                      // Get the current user ID from the profile
+                                      final userId = userProfile.id;
+                                      if (userId.isEmpty) {
+                                        throw Exception('User ID is missing or invalid');
+                                      }
+                                      
+                                      // Use the dedicated method for updating interests
+                                      await ref.read(profileProvider.notifier).updateUserInterests(
+                                        userId,
+                                        cleanInterests,
+                                      );
+                                      
+                                      // Force a refresh to ensure we see the changes
+                                      await ref.read(profileProvider.notifier).refreshProfile();
+                                      
+                                      // Close the loading dialog
+                                      if (context.mounted) {
+                                        Navigator.of(context).pop();
+                                      }
+                                      
+                                      // Close the tags dialog after successful update
                                       if (context.mounted) {
                                         Navigator.of(context).pop();
                                         
@@ -966,9 +996,18 @@ class _ProfilePageState extends ConsumerState<ProfilePage>
                                         );
                                       }
                                     } catch (e) {
+                                      // Close loading dialog if it's open
                                       if (context.mounted) {
-                                        ScaffoldMessenger.of(context)
-                                            .showSnackBar(
+                                        Navigator.of(context).pop();
+                                      }
+                                      
+                                      debugPrint('❌ Error saving tags: $e');
+                                      if (context.mounted) {
+                                        // Close the tags dialog
+                                        Navigator.of(context).pop();
+                                        
+                                        // Show error message
+                                        ScaffoldMessenger.of(context).showSnackBar(
                                           SnackBar(
                                             content: Text(
                                               'Failed to update interests: $e',

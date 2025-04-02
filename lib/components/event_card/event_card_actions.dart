@@ -6,7 +6,9 @@ import '../../models/event.dart';
 import '../../theme/app_colors.dart';
 import '../../models/repost_content_type.dart';
 import '../../theme/huge_icons.dart';
+import '../../providers/profile_provider.dart';
 import 'repost_options_card.dart';
+import '../../utils/auth_utils.dart';
 
 /// A modular widget for event card action buttons that can be used
 /// independently or within the EventCard component.
@@ -121,13 +123,28 @@ class EventCardActions extends ConsumerWidget {
           HapticFeedback.lightImpact();
           
           if (onRepost != null) {
-            // Show repost options card instead of directly calling onRepost
-            context.showRepostOptions(
-              event: event,
-              onRepostSelected: onRepost!,
-              followsClub: followsClub,
-              todayBoosts: todayBoosts,
-            );
+            // Watch profile state instead of just reading it once
+            final profileState = ref.watch(profileProvider);
+            debugPrint('Profile check - State: isLoading=${profileState.isLoading}, hasError=${profileState.hasError}, profile=${profileState.profile != null}');
+            
+            // Check only for profile existence before showing repost options
+            if (AuthUtils.requireProfile(context, ref)) {
+              // Show repost options card directly
+              showModalBottomSheet(
+                context: context,
+                isScrollControlled: true,
+                backgroundColor: Colors.transparent,
+                constraints: BoxConstraints(
+                  maxHeight: MediaQuery.of(context).size.height * 0.85,
+                ),
+                builder: (context) => RepostOptionsCard(
+                  event: event,
+                  onRepostSelected: onRepost!,
+                  followsClub: followsClub,
+                  todayBoosts: todayBoosts,
+                ),
+              );
+            }
           }
         },
         style: OutlinedButton.styleFrom(

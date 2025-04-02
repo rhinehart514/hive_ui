@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:hive_ui/pages/main_feed.dart';
 import 'package:hive_ui/pages/profile_page.dart';
 import 'package:hive_ui/features/spaces/presentation/pages/spaces_page.dart';
+import 'package:hive_ui/features/messaging/presentation/screens/chat_list_screen.dart';
 import 'package:hive_ui/utils/navigation_transitions.dart';
 import 'package:hive_ui/components/navigation_bar.dart';
 import 'package:hive_ui/theme/huge_icons.dart';
@@ -27,6 +28,7 @@ class _AppContainerState extends State<AppContainer>
   final List<Widget> _pages = [
     const MainFeed(),
     const SpacesPage(),
+    const ChatListScreen(),
     const ProfilePage(),
   ];
 
@@ -195,6 +197,11 @@ class _AppContainerState extends State<AppContainer>
             icon: HugeIcons.constellation,
             selectedIcon: HugeIcons.constellation,
             label: 'Spaces',
+          ),
+          HiveNavigationDestination(
+            icon: HugeIcons.message,
+            selectedIcon: HugeIcons.message,
+            label: 'Messages',
           ),
           HiveNavigationDestination(
             icon: HugeIcons.user,

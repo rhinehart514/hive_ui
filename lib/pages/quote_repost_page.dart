@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:go_router/go_router.dart';
 import '../models/event.dart';
 import '../models/repost_content_type.dart';
 import '../theme/app_colors.dart';
@@ -11,7 +12,8 @@ import '../providers/reposted_events_provider.dart';
 import '../services/interactions/interaction_service.dart';
 import '../models/interactions/interaction.dart';
 import '../components/optimized_image.dart';
-import '../theme/huge_icons.dart';
+import '../utils/auth_utils.dart';
+import 'package:hive_ui/features/auth/providers/auth_providers.dart';
 
 /// Page for creating a quote repost
 class QuoteRepostPage extends ConsumerStatefulWidget {
@@ -72,10 +74,25 @@ class _QuoteRepostPageState extends ConsumerState<QuoteRepostPage> {
     }
     
     try {
-      // Get current user profile
+      // Check auth state first
+      final authState = ref.read(authStateProvider);
+      final isAuthenticated = authState.maybeWhen(
+        data: (user) => user.isNotEmpty,
+        orElse: () => false,
+      );
+      
+      // Get current user profile first since it's already available in the UI
       final userProfile = ref.read(profileProvider).profile;
       
-      if (userProfile == null) {
+      // If we already have a user profile, consider the user authenticated
+      if (userProfile != null) {
+        // Use the existing profile directly
+        _handleSubmitWithProfile(userProfile, quoteText);
+        return;
+      }
+      
+      // Otherwise fall back to regular auth check
+      if (!isAuthenticated) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Sign in to repost events')),
         );
@@ -85,41 +102,33 @@ class _QuoteRepostPageState extends ConsumerState<QuoteRepostPage> {
         return;
       }
       
-      // Log the interaction
-      _logRepostInteraction(widget.event, userProfile.id);
-      
-      // Add the event to reposted events
-      final repostedEvents = ref.read(repostedEventsProvider.notifier);
-      
-      // Debug print to confirm comment text
-      print('Creating quote repost with text: $quoteText');
-      
-      repostedEvents.addRepost(
-        event: widget.event,
-        repostedBy: userProfile,
-        comment: quoteText,
-        type: RepostContentType.quote,
-      );
-      
-      // Provide haptic feedback for confirmation
-      HapticFeedback.mediumImpact();
-      
-      // Debug info about the repost we just created
-      final allReposts = ref.read(repostedEventsProvider);
-      final userReposts = allReposts.where((r) => r.repostedBy.id == userProfile.id).toList();
-      print('User has ${userReposts.length} reposts. Latest comment: ${userReposts.isNotEmpty ? userReposts.last.comment : "none"}');
-      
-      // Show success message
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Quote shared')),
-      );
-      
-      // Navigate back with success
-      if (mounted) {
-        Navigator.of(context).pop();
-        if (widget.onComplete != null) {
-          widget.onComplete!(true);
+      // Try to load/refresh the profile
+      try {
+        await ref.read(profileProvider.notifier).loadProfile();
+        
+        // Check again after reload
+        final refreshedProfile = ref.read(profileProvider).profile;
+        if (refreshedProfile == null) {
+          // Still null after refresh attempt
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Unable to load your profile. Please try again.')),
+          );
+          setState(() {
+            _isSubmitting = false;
+          });
+          return;
         }
+        
+        // Use the refreshed profile
+        _handleSubmitWithProfile(refreshedProfile, quoteText);
+      } catch (e) {
+        print('Error refreshing profile: $e');
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Unable to load your profile. Please try again.')),
+        );
+        setState(() {
+          _isSubmitting = false;
+        });
       }
     } catch (e) {
       print('Error creating quote repost: $e');
@@ -155,6 +164,52 @@ class _QuoteRepostPageState extends ConsumerState<QuoteRepostPage> {
     }
   }
 
+  /// Helper to complete submission with an existing profile
+  void _handleSubmitWithProfile(UserProfile profile, String quoteText) {
+    try {
+      // Log the interaction
+      _logRepostInteraction(widget.event, profile.id);
+      
+      // Add the event to reposted events
+      final repostedEvents = ref.read(repostedEventsProvider.notifier);
+      
+      repostedEvents.addRepost(
+        event: widget.event,
+        repostedBy: profile,
+        comment: quoteText,
+        type: RepostContentType.quote,
+      );
+      
+      // Provide haptic feedback for confirmation
+      HapticFeedback.mediumImpact();
+      
+      // Show success message
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Quote shared')),
+      );
+      
+      // Navigate back with success using GoRouter
+      if (mounted && context.mounted) {
+        if (widget.onComplete != null) {
+          widget.onComplete!(true);
+        }
+        context.pop();
+      }
+    } catch (e) {
+      print('Error creating quote repost: $e');
+      
+      // Show error message
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Failed to share quote')),
+        );
+        setState(() {
+          _isSubmitting = false;
+        });
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final UserProfile? currentUser = ref.watch(profileProvider).profile;
@@ -167,7 +222,7 @@ class _QuoteRepostPageState extends ConsumerState<QuoteRepostPage> {
         leading: IconButton(
           icon: const Icon(Icons.close),
           color: AppColors.textPrimary,
-          onPressed: () => Navigator.of(context).pop(),
+          onPressed: () => context.pop(),
         ),
         title: Text(
           'Quote Event',
@@ -216,100 +271,108 @@ class _QuoteRepostPageState extends ConsumerState<QuoteRepostPage> {
               child: SingleChildScrollView(
                 physics: const BouncingScrollPhysics(),
                 child: Padding(
-                  padding: const EdgeInsets.all(16.0),
+                  padding: const EdgeInsets.symmetric(horizontal: 16.0),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       // User avatar and info
                       if (currentUser != null)
-                        Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            // User avatar
-                            if (currentUser.profileImageUrl != null && 
-                                currentUser.profileImageUrl!.isNotEmpty)
-                              ClipRRect(
-                                borderRadius: BorderRadius.circular(20),
-                                child: OptimizedImage(
-                                  imageUrl: currentUser.profileImageUrl!,
+                        Padding(
+                          padding: const EdgeInsets.only(top: 12.0, bottom: 16.0),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              // User avatar
+                              if (currentUser.profileImageUrl != null && 
+                                  currentUser.profileImageUrl!.isNotEmpty)
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(20),
+                                  child: OptimizedImage(
+                                    imageUrl: currentUser.profileImageUrl!,
+                                    width: 40,
+                                    height: 40,
+                                    fit: BoxFit.cover,
+                                  ),
+                                )
+                              else
+                                Container(
                                   width: 40,
                                   height: 40,
-                                  fit: BoxFit.cover,
+                                  decoration: BoxDecoration(
+                                    color: AppColors.grey800,
+                                    borderRadius: BorderRadius.circular(20),
+                                  ),
+                                  child: const Icon(
+                                    Icons.person,
+                                    color: AppColors.textSecondary,
+                                  ),
                                 ),
-                              )
-                            else
-                              Container(
-                                width: 40,
-                                height: 40,
-                                decoration: BoxDecoration(
-                                  color: AppColors.grey800,
-                                  borderRadius: BorderRadius.circular(20),
-                                ),
-                                child: const Icon(
-                                  Icons.person,
-                                  color: AppColors.textSecondary,
-                                ),
-                              ),
+                                
+                              const SizedBox(width: 12),
                               
-                            const SizedBox(width: 12),
-                            
-                            // User display name
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    currentUser.displayName,
-                                    style: GoogleFonts.inter(
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 16,
-                                      color: AppColors.white,
+                              // User display name
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      currentUser.displayName,
+                                      style: GoogleFonts.inter(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 16,
+                                        color: AppColors.white,
+                                      ),
                                     ),
-                                  ),
-                                  Text(
-                                    '@${currentUser.username}',
-                                    style: GoogleFonts.inter(
-                                      color: AppColors.textSecondary,
-                                      fontSize: 14,
+                                    Text(
+                                      '@${currentUser.username}',
+                                      style: GoogleFonts.inter(
+                                        color: AppColors.textSecondary,
+                                        fontSize: 14,
+                                      ),
                                     ),
-                                  ),
-                                ],
+                                  ],
+                                ),
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
                       
                       // Quote input field
-                      Padding(
-                        padding: const EdgeInsets.only(top: 16.0),
-                        child: TextField(
-                          controller: _quoteController,
-                          focusNode: _focusNode,
-                          maxLength: 280,
-                          maxLines: null,
-                          decoration: InputDecoration(
-                            hintText: "What's your take on this event?",
-                            hintStyle: GoogleFonts.inter(
-                              color: AppColors.textSecondary.withOpacity(0.7),
-                              fontSize: 18,
-                            ),
-                            border: InputBorder.none,
-                            counterText: '',
-                            contentPadding: EdgeInsets.zero,
-                          ),
-                          style: GoogleFonts.inter(
-                            color: AppColors.white,
+                      TextField(
+                        controller: _quoteController,
+                        focusNode: _focusNode,
+                        maxLength: 280,
+                        maxLines: null,
+                        keyboardType: TextInputType.multiline,
+                        textCapitalization: TextCapitalization.sentences,
+                        decoration: InputDecoration(
+                          hintText: "What's your take on this event?",
+                          hintStyle: GoogleFonts.inter(
+                            color: AppColors.textSecondary.withOpacity(0.5),
                             fontSize: 18,
                             height: 1.4,
                           ),
+                          border: InputBorder.none,
+                          focusedBorder: InputBorder.none,
+                          enabledBorder: InputBorder.none,
+                          errorBorder: InputBorder.none,
+                          disabledBorder: InputBorder.none,
+                          counterText: '',
+                          contentPadding: EdgeInsets.zero,
+                          fillColor: Colors.transparent,
+                          filled: true,
+                        ),
+                        style: GoogleFonts.inter(
+                          color: AppColors.textPrimary,
+                          fontSize: 18,
+                          height: 1.4,
                         ),
                       ),
                       
+                      const SizedBox(height: 16),
+                      
                       // Quoted event card
-                      Padding(
-                        padding: const EdgeInsets.only(top: 24.0),
-                        child: _QuotedEventPreview(event: widget.event),
-                      ),
+                      _QuotedEventPreview(event: widget.event),
                     ],
                   ),
                 ),
@@ -319,21 +382,15 @@ class _QuoteRepostPageState extends ConsumerState<QuoteRepostPage> {
             // Bottom bar with character count
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
-              decoration: BoxDecoration(
+              decoration: const BoxDecoration(
                 color: Colors.black,
                 border: Border(
                   top: BorderSide(color: AppColors.grey800, width: 0.5),
                 ),
               ),
               child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                mainAxisAlignment: MainAxisAlignment.end,
                 children: [
-                  // Icon with gold accent
-                  const Icon(
-                    Icons.format_quote_rounded,
-                    color: AppColors.gold,
-                  ),
-                  
                   // Character count
                   ValueListenableBuilder<TextEditingValue>(
                     valueListenable: _quoteController,
@@ -344,26 +401,12 @@ class _QuoteRepostPageState extends ConsumerState<QuoteRepostPage> {
                           ? (remaining < 10 ? Colors.red : AppColors.gold)
                           : AppColors.textSecondary;
                       
-                      return Container(
-                        width: 40,
-                        height: 40,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          border: Border.all(
-                            color: counterColor,
-                            width: remaining < 50 ? 2 : 1,
-                          ),
-                        ),
-                        child: Center(
-                          child: Text(
-                            '$remaining',
-                            style: GoogleFonts.inter(
-                              color: counterColor,
-                              fontWeight: remaining < 50 
-                                  ? FontWeight.bold 
-                                  : FontWeight.normal,
-                            ),
-                          ),
+                      return Text(
+                        '$remaining',
+                        style: GoogleFonts.inter(
+                          color: counterColor,
+                          fontSize: 14,
+                          fontWeight: remaining < 50 ? FontWeight.bold : FontWeight.normal,
                         ),
                       );
                     },
@@ -391,7 +434,7 @@ class _QuotedEventPreview extends StatelessWidget {
     return Container(
       width: double.infinity,
       decoration: BoxDecoration(
-        color: Color(0xFF0A0A0A),
+        color: const Color(0xFF0A0A0A),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
           color: AppColors.grey800,
@@ -404,9 +447,8 @@ class _QuotedEventPreview extends StatelessWidget {
         children: [
           // Event image
           if (event.imageUrl.isNotEmpty)
-            SizedBox(
-              width: double.infinity,
-              height: 120,
+            AspectRatio(
+              aspectRatio: 16 / 9,
               child: OptimizedImage(
                 imageUrl: event.imageUrl,
                 fit: BoxFit.cover,
@@ -435,7 +477,7 @@ class _QuotedEventPreview extends StatelessWidget {
                 
                 // Event time and location
                 Text(
-                  '${event.formattedTimeRange}',
+                  event.formattedTimeRange,
                   style: GoogleFonts.inter(
                     fontSize: 14,
                     color: AppColors.textSecondary,

@@ -30,7 +30,7 @@ final userActivityProvider =
       return Activity(
         id: doc.id,
         type: _parseActivityType(data['type']),
-        timestamp: (data['timestamp'] as Timestamp).toDate(),
+        timestamp: _parseTimestamp(data['timestamp']),
         title: data['title'],
         subtitle: data['subtitle'],
         iconData: IconData(
@@ -66,6 +66,17 @@ ActivityType _parseActivityType(String? typeString) {
       return ActivityType.postCreated;
     default:
       return ActivityType.postCreated;
+  }
+}
+
+// Helper function to parse timestamp from various formats
+DateTime _parseTimestamp(dynamic timestamp) {
+  if (timestamp is Timestamp) {
+    return timestamp.toDate();
+  } else if (timestamp is int) {
+    return DateTime.fromMillisecondsSinceEpoch(timestamp);
+  } else {
+    return DateTime.now(); // Fallback to current time
   }
 }
 

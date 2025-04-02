@@ -37,7 +37,6 @@ class EventImage extends StatelessWidget {
       width: width,
       height: height,
       borderRadius: borderRadius,
-      useFallback: true,
     );
   }
 }

@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:hive_ui/firebase_options.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:hive_ui/models/space_type.dart';
 
 /// A command-line tool to reorganize spaces by their type
 ///
@@ -31,7 +30,7 @@ void main() async {
   
   // Use a custom confirmation approach to avoid issues with stdin
   // Wait 1 second to ensure the message is displayed
-  await Future.delayed(Duration(seconds: 1));
+  await Future.delayed(const Duration(seconds: 1));
   
   // Read a single character from stdin
   int? key;

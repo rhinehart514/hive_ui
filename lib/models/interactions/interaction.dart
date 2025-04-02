@@ -53,13 +53,24 @@ class Interaction {
   factory Interaction.fromFirestore(DocumentSnapshot doc) {
     final data = doc.data() as Map<String, dynamic>;
 
+    // Handle timestamp which could be either Timestamp or int
+    DateTime timestamp;
+    final timestampData = data['timestamp'];
+    if (timestampData is Timestamp) {
+      timestamp = timestampData.toDate();
+    } else if (timestampData is int) {
+      timestamp = DateTime.fromMillisecondsSinceEpoch(timestampData);
+    } else {
+      timestamp = DateTime.now(); // Fallback to current time if invalid format
+    }
+
     return Interaction(
       id: doc.id,
       userId: data['userId'] as String,
       entityId: data['entityId'] as String,
       entityType: _parseEntityType(data['entityType'] as String),
       action: _parseInteractionAction(data['action'] as String),
-      timestamp: (data['timestamp'] as Timestamp).toDate(),
+      timestamp: timestamp,
       sessionId: data['sessionId'] as String?,
       metadata: data['metadata'] as Map<String, dynamic>?,
       deviceInfo: data['deviceInfo'] != null

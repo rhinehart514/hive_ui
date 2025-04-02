@@ -34,6 +34,10 @@ class HugeIcons {
   static const IconData settingsAdvanced =
       hugeicons_pkg.HugeIcons.strokeRoundedSetting07;
   static const IconData tag = hugeicons_pkg.HugeIcons.strokeRoundedTag01;
+  
+  // Interest and star icons for profile tags
+  static const IconData star = Icons.star_rounded; // Using Material Icon as fallback
+  static const IconData interest = hugeicons_pkg.HugeIcons.strokeRoundedTag01; // Using tag as fallback
 
   // Messaging icons
   static const IconData strokeRoundedMessageLock01 =

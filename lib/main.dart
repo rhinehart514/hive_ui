@@ -4,8 +4,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:hive_ui/theme/app_theme.dart';
+import 'package:hive_ui/theme/app_colors.dart';
 import 'package:hive_ui/services/club_service.dart';
 import 'package:hive_ui/services/rss_service.dart';
 import 'package:hive_ui/services/space_service.dart';
@@ -18,10 +18,17 @@ import 'package:hive_ui/services/service_initializer.dart';
 import 'package:hive_ui/services/optimized_club_adapter.dart';
 import 'package:flutter_phoenix/flutter_phoenix.dart';
 import 'package:hive_ui/debug/debug_launcher.dart';
+import 'package:firebase_crashlytics/firebase_crashlytics.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:flutter_native_splash/flutter_native_splash.dart';
+import 'package:hive_ui/services/optimized_data_service.dart';
+import 'package:firebase_remote_config/firebase_remote_config.dart';
+import 'package:package_info_plus/package_info_plus.dart';
+import 'package:hive_ui/features/events/events_module.dart';
+import 'dart:async';
 
 // Firebase
 import 'package:firebase_core/firebase_core.dart';
-import 'package:firebase_database/firebase_database.dart';
 import 'package:hive_ui/core/services/firebase/firebase_services.dart';
 import 'package:hive_ui/firebase_options.dart';
 import 'package:hive_ui/utils/realtime_db_windows_fix.dart';
@@ -35,10 +42,8 @@ import 'package:hive_ui/features/profile/presentation/providers/profile_provider
 
 // Config & Providers
 // import 'package:workmanager/workmanager.dart';
-import 'package:hive_ui/providers/settings_provider.dart' hide AppTheme, sharedPreferencesProvider;
 import 'package:hive_ui/features/settings/presentation/providers/settings_providers.dart' 
     as feature_settings;
-import 'providers/app_startup_provider.dart';
 
 // Add the import for messaging initializer
 import 'package:hive_ui/features/messaging/utils/messaging_initializer.dart';
@@ -50,148 +55,286 @@ void callbackDispatcher() {
   return;
 }
 
-// Initialize Firebase and related services
-Future<bool> initializeFirebaseServices(FutureProviderRef<bool> ref) async {
+// Main entry point with error handling
+void main() async {
+  // Ensure Flutter binding is initialized
+  WidgetsBinding widgetsBinding = WidgetsFlutterBinding.ensureInitialized();
+  
+  // Keep splash screen until initialization completes
+  FlutterNativeSplash.preserve(widgetsBinding: widgetsBinding);
+  
+  // Configure Crashlytics even before Firebase is initialized
+  if (!kDebugMode) {
+    // Pass all uncaught errors from the framework to Crashlytics in release mode
+    FlutterError.onError = (FlutterErrorDetails details) {
+      FlutterError.presentError(details);
+      FirebaseCrashlytics.instance.recordFlutterFatalError(details);
+    };
+    
+    // Handle errors from async code
+    PlatformDispatcher.instance.onError = (error, stack) {
+      FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
+      return true;
+    };
+  }
+  
+  // Set preferred device orientations
+  await SystemChrome.setPreferredOrientations([
+    DeviceOrientation.portraitUp,
+    DeviceOrientation.portraitDown,
+  ]);
+  
+  // Enable error logging for the app
+  AppErrorObserver.setup();
+  
+  // Launch the app with proper riverpod provider scope
+  runApp(
+    ProviderScope(
+      observers: [ProviderLogger()],
+      child: Phoenix(child: const HiveApp()),
+    ),
+  );
+}
+
+// Initialize Firebase and related services - optimized with parallelization
+Future<bool> initializeFirebaseServices(Ref ref) async {
+  final performanceService = ref.read(performanceServiceProvider);
+  performanceService.startTrace('firebase_initialization');
+  
   try {
     final coreService = ref.read(firebaseCoreServiceProvider);
-    final firebaseInitialized =
-        await coreService.initializeWithRetry(maxRetries: 5);
+    
+    // Initialize Firebase Core first as it's required for other services
+    final firebaseInitialized = await coreService.initializeWithRetry(maxRetries: 3);
 
     if (firebaseInitialized) {
-      // Initialize Firebase Realtime Database explicitly for Windows
+      // Initialize Windows-specific DB if needed
       if (defaultTargetPlatform == TargetPlatform.windows) {
-        RealtimeDatabaseWindowsFix.initialize();
+        RealtimeDbWindowsFix.initialize();
       }
       
-      // Initialize other Firebase services concurrently
-      await Future.wait<void>([
+      // Initialize critical Firebase services immediately and in parallel
+      final criticalServicesFutures = [
         ref.read(firebaseAnalyticsServiceProvider).initialize(),
-        ref.read(firebaseMessagingServiceProvider).initialize(),
-      ]);
+        _initializeRemoteConfig(), // Initialize Remote Config as a critical service
+      ];
+      
+      // Start critical services immediately
+      await Future.wait<void>(criticalServicesFutures);
+      
+      // Initialize messaging feature
+      await initializeFirebaseMessaging();
+      // Initialize messaging dependencies
+      initializeMessaging();
+      // Watch messaging initializer provider
+      ref.watch(messagingInitializerProvider);
+      
+      // Initialize non-critical services after app is visible
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        // Safely check Remote Config values using a try-catch block
+        try {
+          final remoteConfig = FirebaseRemoteConfig.instance;
+          final enableLazyInit = remoteConfig.getBool('enable_lazy_initialization');
+          if (enableLazyInit) {
+            _initializeNonCriticalServices(ref);
+          } else {
+            // Fall back to eager initialization for all services
+            _initializeAllServices(ref);
+          }
+        } catch (e) {
+          // Handle the error gracefully
+          debugPrint('Error accessing Remote Config: $e');
+          // Fall back to eager initialization for all services
+          _initializeAllServices(ref);
+        }
+      });
+      
+      performanceService.stopTrace('firebase_initialization');
       return true;
     }
 
+    performanceService.stopTrace('firebase_initialization');
+    ref.read(errorHandlingServiceProvider).handleError('Firebase initialization failed', type: ErrorType.general);
     return false;
   } catch (e) {
-    ref
-        .read(errorHandlingServiceProvider)
-        .handleError(e, type: ErrorType.general);
+    performanceService.stopTrace('firebase_initialization');
+    ref.read(errorHandlingServiceProvider).handleError(e, type: ErrorType.general);
     return false;
   }
 }
 
-// Provider to handle app initialization tasks
+// Initialize Firebase Remote Config
+Future<void> _initializeRemoteConfig() async {
+  try {
+    final remoteConfig = FirebaseRemoteConfig.instance;
+    await remoteConfig.setConfigSettings(RemoteConfigSettings(
+      fetchTimeout: const Duration(minutes: 1),
+      minimumFetchInterval: const Duration(hours: 1),
+    ));
+    
+    // Define default parameters
+    await remoteConfig.setDefaults({
+      'enable_optimized_caching': true,
+      'cache_ttl_minutes': 60,
+      'enable_debug_features': false,
+      'enable_offline_mode': true,
+      'enable_lazy_initialization': true, // Enable lazy loading by default
+    });
+    
+    // Fetch new values
+    await remoteConfig.fetchAndActivate();
+    debugPrint('Remote config initialized and fetched');
+  } catch (e) {
+    debugPrint('Error initializing remote config: $e');
+    // Non-fatal, continue execution
+  }
+}
+
+// Helper to initialize non-critical services after the app is visible
+void _initializeNonCriticalServices(Ref ref) {
+  // Initialize messaging and other non-critical services in the background
+  unawaited(ref.read(firebaseMessagingServiceProvider).initialize());
+  // Remote Config is already initialized as a critical service
+  
+  // Delay Crashlytics user identification to avoid blocking app startup
+  unawaited(_initializeCrashlytics(ref));
+}
+
+// Helper to initialize all services immediately (fallback approach)
+void _initializeAllServices(Ref ref) {
+  unawaited(Future.wait<void>([
+    ref.read(firebaseMessagingServiceProvider).initialize(),
+    // Remote Config is already initialized as a critical service
+    _initializeCrashlytics(ref),
+  ]));
+}
+
+// Helper to initialize Crashlytics with user info
+Future<void> _initializeCrashlytics(Ref ref) async {
+  try {
+    final coreService = ref.read(firebaseCoreServiceProvider);
+    if (coreService.isUserPreferencesAvailable) {
+      final profileRepo = ref.read(profileRepositoryProvider);
+      final profile = await profileRepo.getProfile();
+      if (profile != null) {
+        FirebaseCrashlytics.instance.setUserIdentifier(profile.id);
+      }
+    }
+  } catch (e) {
+    // Safe to ignore, we just won't have user info in crash reports
+    debugPrint('Could not set user identifier for Crashlytics: $e');
+  }
+}
+
+// Provider to handle app initialization tasks - optimized with priority-based initialization
 final appInitializationProvider = FutureProvider<bool>((ref) async {
   try {
     debugPrint('Starting app initialization...');
 
-    // Initialize analytics service - start timing
+    // Measure startup performance
     final performanceService = ref.read(performanceServiceProvider);
     performanceService.startTrace('app_initialization');
 
-    // Start the critical path services first
+    // Critical path: User preferences must be loaded first
+    debugPrint('Initializing UserPreferencesService...');
     await UserPreferencesService.initialize();
-
-    // Initialize profile providers
-    try {
-      debugPrint('Initializing profile providers...');
-      // Pre-fetch current user profile to cache
-      final profileRepo = ref.read(profileRepositoryProvider);
-      await profileRepo.getProfile();
-      debugPrint('Profile providers initialized successfully');
-    } catch (profileError) {
-      debugPrint('Error initializing profile providers: $profileError');
-      ref
-          .read(errorHandlingServiceProvider)
-          .handleError(profileError, type: ErrorType.general);
-    }
+    debugPrint('UserPreferencesService initialized successfully');
 
     // Initialize Firebase services
     final firebaseInitialized = await initializeFirebaseServices(ref);
-    if (!firebaseInitialized) {
-      ref.read(errorHandlingServiceProvider).reportUserError(
-          'Firebase services unavailable',
-          type: ErrorType.network);
-    }
+    
+    // Check network connectivity - critical for deciding initialization path
+    final connectivityResult = await Connectivity().checkConnectivity();
+    final bool isOffline = connectivityResult == ConnectivityResult.none;
+    
+    // Get app version information
+    final packageInfo = await PackageInfo.fromPlatform();
+    debugPrint('Starting ${packageInfo.appName} v${packageInfo.version}+${packageInfo.buildNumber}');
 
-    // Initialize optimized services
-    await ServiceInitializer.initializeServices();
+    // Initialize profile as a parallel task - don't block on this
+    unawaited(_initializeProfileInBackground(ref, isOffline));
+    
+    // Initialize optimized services in parallel
+    final serviceInitFuture = ServiceInitializer.initializeServices();
+    final dataServiceFuture = OptimizedDataService.initialize();
+    final clubAdapterFuture = OptimizedClubAdapter.initialize();
+    
+    // Wait for these essential services to complete
+    await Future.wait([serviceInitFuture, dataServiceFuture, clubAdapterFuture]);
     debugPrint('Optimized service layer initialized');
 
-    // Initialize clubs from Firestore first
-    try {
-      debugPrint('Loading clubs using optimized service...');
-      final clubs = await OptimizedClubAdapter.getAllClubs();
-      debugPrint('Loaded ${clubs.length} clubs with optimized service');
-    } catch (clubError) {
-      // Log error but don't block app startup
-      ref
-          .read(errorHandlingServiceProvider)
-          .handleError(clubError, type: ErrorType.general);
-
-      // Fall back to the original service if needed
-      try {
-        debugPrint('Falling back to original club service...');
-        await ClubService.initialize();
-        final clubs = await ClubService.loadClubsFromFirestore();
-        debugPrint('Loaded ${clubs.length} clubs from fallback service');
-      } catch (fallbackError) {
-        // Log the fallback error but continue app initialization
-        ref
-            .read(errorHandlingServiceProvider)
-            .handleError(fallbackError, type: ErrorType.general);
-      }
+    // Pre-warm caches asynchronously after essential initialization
+    if (!isOffline) {
+      unawaited(_prewarmCachesInBackground(performanceService));
     }
 
-    // Initialize other Firebase-dependent services concurrently
+    // Initialize RSS service for feed
+    // RssService.initialize();
+    
+    // Initialize events module with the correct provider container
     try {
-      // Run these operations concurrently to speed up initialization
-      await Future.wait([
-        SpaceService.initSettings(),
-        Future<bool>(() {
-          try {
-            initializeMessaging();
-            return true;
-          } catch (e) {
-            ref.read(errorHandlingServiceProvider).reportUserError(
-                'Failed to initialize messaging',
-                type: ErrorType.general);
-            return false;
-          }
-        }),
-        Future<bool>(() async {
-          try {
-            await AnalyticsService().initialize();
-            return true;
-          } catch (e) {
-            // Non-critical - fail silently in production
-            return false;
-          }
-        }),
-      ]);
-
-      debugPrint('Concurrent service initialization completed');
+      debugPrint('Initializing events module...');
+      initializeEventsModule(ref.container);
+      debugPrint('Events module initialized successfully');
     } catch (e) {
-      // Non-fatal error, continue with degraded functionality
-      ref
-          .read(errorHandlingServiceProvider)
-          .handleError(e, type: ErrorType.general);
+      debugPrint('Error initializing events module: $e');
+      ref.read(errorHandlingServiceProvider).handleError(e, type: ErrorType.general);
     }
 
     performanceService.stopTrace('app_initialization');
-    debugPrint('App initialization completed successfully');
+    
+    // Hide splash screen after initialization is complete
+    FlutterNativeSplash.remove();
+    
     return true;
-  } catch (e, stackTrace) {
+  } catch (e) {
     debugPrint('Error during app initialization: $e');
-    ref
-        .read(errorHandlingServiceProvider)
-        .handleError(e, stackTrace: stackTrace, type: ErrorType.general);
-    ref.read(performanceServiceProvider).stopTrace('app_initialization');
-
-    // For production, we want to allow the app to start even with initialization errors
-    return true;
+    
+    // Hide splash screen even if there's an error
+    FlutterNativeSplash.remove();
+    
+    // Let the app continue with limited functionality
+    return false;
   }
 });
+
+// Helper to initialize profile in background
+Future<void> _initializeProfileInBackground(Ref ref, bool isOffline) async {
+  try {
+    debugPrint('Initializing profile providers in background...');
+    final profileRepo = ref.read(profileRepositoryProvider);
+    await profileRepo.getProfile();
+    debugPrint('Profile providers initialized successfully');
+  } catch (e) {
+    debugPrint('Error initializing profile providers: $e');
+    ref.read(errorHandlingServiceProvider).handleError(e, type: ErrorType.general);
+  }
+}
+
+// Helper to prewarm caches in background
+Future<void> _prewarmCachesInBackground(PerformanceService performanceService) async {
+  try {
+    performanceService.startTrace('cache_warmup');
+    await _prewarmCaches();
+    performanceService.stopTrace('cache_warmup');
+  } catch (e) {
+    debugPrint('Error prewarming caches: $e');
+    // Non-critical, app can continue
+  }
+}
+
+// Pre-warm application caches asynchronously for better user experience
+Future<void> _prewarmCaches() async {
+  try {
+    // Try to pre-fetch spaces using a different method
+    final spaces = await SpaceService.getSpaces();
+    debugPrint('Pre-warmed ${spaces.length} spaces');
+
+    // Additional pre-warming logic here
+  } catch (e) {
+    debugPrint('Error pre-warming caches: $e');
+  }
+}
 
 // Provider for app-wide scroll behavior settings
 enum ScrollBounceMode { bounce, noBounce }
@@ -201,165 +344,44 @@ final scrollModeProvider = StateProvider<ScrollBounceMode>((ref) {
   return ScrollBounceMode.noBounce;
 });
 
-/// Custom scroll behavior for the app
-class AppScrollBehavior extends ScrollBehavior {
-  final ScrollPhysics _physics;
-
-  AppScrollBehavior(this._physics);
-
+// Utility class to observe provider logs in debug builds
+class ProviderLogger extends ProviderObserver {
   @override
-  ScrollPhysics getScrollPhysics(BuildContext context) {
-    return _physics;
+  void didUpdateProvider(
+    ProviderBase provider,
+    Object? previousValue,
+    Object? newValue,
+    ProviderContainer container,
+  ) {
+    if (kDebugMode && provider.name != null) {
+      debugPrint(
+        '[${provider.name}] value: $newValue',
+      );
+    }
   }
 }
 
-void main() async {
-  // Ensure proper initialization
-  WidgetsFlutterBinding.ensureInitialized();
-  
-  // Initialize Firebase first
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
-  
-  // Initialize Firebase Realtime Database for Windows
-  if (defaultTargetPlatform == TargetPlatform.windows) {
-    RealtimeDatabaseWindowsFix.initialize();
+// Global app error observer
+class AppErrorObserver {
+  static bool _isSetup = false;
+
+  static void setup() {
+    if (_isSetup) return;
+    
+    FlutterError.onError = (FlutterErrorDetails details) {
+      FlutterError.presentError(details);
+      
+      // Only send to crashlytics in non-debug mode
+      if (!kDebugMode) {
+        FirebaseCrashlytics.instance.recordFlutterFatalError(details);
+      } else {
+        debugPrint('ERROR: ${details.exception}');
+        debugPrint('STACK: ${details.stack}');
+      }
+    };
+    
+    _isSetup = true;
   }
-  
-  // Initialize SharedPreferences
-  final sharedPreferences = await SharedPreferences.getInstance();
-  
-  // Lock orientation to portrait mode for consistent UI
-  await SystemChrome.setPreferredOrientations([
-    DeviceOrientation.portraitUp,
-    DeviceOrientation.portraitDown,
-  ]);
-  
-  // Set system UI overlay styles
-  SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
-    statusBarColor: Colors.transparent,
-    statusBarIconBrightness: Brightness.light,
-    systemNavigationBarColor: Colors.black,
-    systemNavigationBarDividerColor: Colors.transparent,
-    systemNavigationBarIconBrightness: Brightness.light,
-  ));
-
-  // Create a container for initializing providers
-  final container = ProviderContainer(
-    overrides: [
-      feature_settings.sharedPreferencesProvider.overrideWithValue(sharedPreferences),
-    ],
-  );
-
-  // Initialize feature-specific settings
-  await feature_settings.initializeSharedPreferences(container);
-
-  // Run the app inside Phoenix for restart capability, wrapped with ProviderScope for state management
-  runApp(
-    Phoenix(
-      child: ProviderScope(
-        overrides: [
-          feature_settings.sharedPreferencesProvider.overrideWithValue(sharedPreferences),
-        ],
-        child: Consumer(
-          builder: (context, ref, child) {
-            // Initialize app and check Firebase initialization status
-            final initializationStatus = ref.watch(appInitializationProvider);
-            
-            return initializationStatus.when(
-              data: (_) {
-                // Only initialize messaging if Firebase is properly initialized
-                ref.watch(messagingInitializerProvider);
-                
-                return MaterialApp.router(
-                  title: 'HIVE',
-                  debugShowCheckedModeBanner: false,
-                  theme: AppTheme.darkTheme,
-                  routerConfig: appRouter,
-                  builder: (context, child) {
-                    return child!;
-                  },
-                );
-              },
-              loading: () => MaterialApp(
-                debugShowCheckedModeBanner: false,
-                theme: AppTheme.darkTheme,
-                home: Scaffold(
-                  backgroundColor: Colors.black,
-                  body: Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Image.asset(
-                          'assets/images/hivelogo.png',
-                          width: 120,
-                          height: 120,
-                        ),
-                        const SizedBox(height: 24),
-                        const CircularProgressIndicator(
-                          valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFFFD700)),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-              error: (error, stackTrace) => MaterialApp(
-                debugShowCheckedModeBanner: false,
-                theme: AppTheme.darkTheme,
-                home: Scaffold(
-                  backgroundColor: Colors.black,
-                  body: Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(24.0),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const Icon(
-                            Icons.error_outline,
-                            color: Colors.red,
-                            size: 48,
-                          ),
-                          const SizedBox(height: 16),
-                          const Text(
-                            'Unable to start application',
-                            style: TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white,
-                            ),
-                            textAlign: TextAlign.center,
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            error.toString(),
-                            style: const TextStyle(
-                              color: Colors.white70,
-                              fontSize: 14,
-                            ),
-                            textAlign: TextAlign.center,
-                          ),
-                          const SizedBox(height: 24),
-                          ElevatedButton(
-                            onPressed: () {
-                              // Restart the app
-                              Phoenix.rebirth(context);
-                            },
-                            child: const Text('Retry'),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            );
-          },
-        ),
-      ),
-    ),
-  );
 }
 
 /// HIVE application class
@@ -391,7 +413,7 @@ class HiveApp extends ConsumerWidget {
     final isInitialized = ref.watch(appInitializationProvider);
 
     // Enable debug mode in development only
-    const bool enableDebugTools = !kReleaseMode;
+    const bool enableDebugTools = true; // Always enable debug tools
 
     return isInitialized.when(
       data: (_) {
@@ -407,7 +429,7 @@ class HiveApp extends ConsumerWidget {
           theme: AppTheme.darkTheme,
           themeMode: ThemeMode.dark,
           routerConfig: appRouter,
-          scrollBehavior: AppScrollBehavior(scrollPhysics),
+          scrollBehavior: AppScrollBehavior(),
           builder: (context, child) {
             _setupDeviceSettings(context);
             
@@ -418,10 +440,14 @@ class HiveApp extends ConsumerWidget {
               child: child!,
             );
 
-            // Wrap with debug launcher in development mode
-            return enableDebugTools
-                ? DebugLauncher(child: wrappedChild)
-                : wrappedChild;
+            // Simplified stack with only the main content
+            return Stack(
+              children: [
+                enableDebugTools
+                    ? DebugLauncher(child: wrappedChild)
+                    : wrappedChild,
+              ],
+            );
           },
         );
       },
@@ -465,12 +491,12 @@ class HiveApp extends ConsumerWidget {
         // Show loading screen
         return MaterialApp(
           theme: AppTheme.darkTheme,
-          home: Scaffold(
+          home: const Scaffold(
             backgroundColor: Colors.black,
             body: Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
-                children: const [
+                children: [
                   CircularProgressIndicator(),
                   SizedBox(height: 16),
                   Text(
@@ -534,7 +560,11 @@ void goToOrganization(BuildContext context, String organizationId) {
 }
 
 void goToClubSpace(BuildContext context, String clubId) {
-  GoRouter.of(context).push('${AppRoutes.getClubSpacePath()}?id=$clubId');
+  // Use the new space detail path with the default type for clubs
+  GoRouter.of(context).push(AppRoutes.getSpaceDetailPath('student_organizations', clubId));
+  
+  // Alternatively, if we need to maintain old URLs during transition:
+  // GoRouter.of(context).push(AppRoutes.getLegacyClubSpacePath(clubId));
 }
 
 void goToHiveLab(BuildContext context) {
@@ -581,5 +611,21 @@ Future<void> initializeAndStoreAllClubs() async {
   } catch (e, stackTrace) {
     debugPrint('\n❌ ERROR INITIALIZING CLUBS: $e');
     debugPrint('Stack trace: $stackTrace');
+  }
+}
+
+// More compatible implementation of AppScrollBehavior
+class AppScrollBehavior extends ScrollBehavior {
+  const AppScrollBehavior();
+
+  @override
+  Widget buildViewportChrome(
+      BuildContext context, Widget child, AxisDirection axisDirection) {
+    return child;
+  }
+
+  @override
+  ScrollPhysics getScrollPhysics(BuildContext context) {
+    return const BouncingScrollPhysics();
   }
 }

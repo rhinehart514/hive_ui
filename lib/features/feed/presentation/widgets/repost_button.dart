@@ -36,7 +36,7 @@ class _FeedRepostButtonState extends State<FeedRepostButton> with SingleTickerPr
   bool _isExpanded = false;
   bool _isPressed = false;
   final TextEditingController _commentController = TextEditingController();
-  RepostContentType _selectedContentType = RepostContentType.standard;
+  final RepostContentType _selectedContentType = RepostContentType.standard;
 
   @override
   void initState() {
@@ -169,7 +169,7 @@ class _FeedRepostButtonState extends State<FeedRepostButton> with SingleTickerPr
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
+              const Text(
                 'Add a comment to your repost',
                 style: TextStyle(
                   color: Colors.white,
@@ -179,8 +179,8 @@ class _FeedRepostButtonState extends State<FeedRepostButton> with SingleTickerPr
               ),
               IconButton(
                 onPressed: _handleTap,
-                icon: Icon(Icons.close, color: Colors.white, size: 20),
-                constraints: BoxConstraints(maxHeight: 32, maxWidth: 32),
+                icon: const Icon(Icons.close, color: Colors.white, size: 20),
+                constraints: const BoxConstraints(maxHeight: 32, maxWidth: 32),
                 padding: EdgeInsets.zero,
               ),
             ],
@@ -193,7 +193,7 @@ class _FeedRepostButtonState extends State<FeedRepostButton> with SingleTickerPr
               maxLines: 2,
               decoration: InputDecoration(
                 hintText: 'Add your thoughts...',
-                hintStyle: TextStyle(color: Colors.white70),
+                hintStyle: const TextStyle(color: Colors.white70),
                 filled: true,
                 fillColor: Colors.black.withOpacity(0.3),
                 border: OutlineInputBorder(
@@ -217,7 +217,7 @@ class _FeedRepostButtonState extends State<FeedRepostButton> with SingleTickerPr
                   borderRadius: BorderRadius.circular(12),
                 ),
               ),
-              child: Text(
+              child: const Text(
                 'Repost',
                 style: TextStyle(
                   fontWeight: FontWeight.bold,

@@ -1,9 +1,38 @@
-import 'package:hive_ui/models/event.dart';
+import '../../../../models/event.dart';
+import '../../../../models/reposted_event.dart';
 import 'package:hive_ui/models/feed_state.dart';
 import 'package:hive_ui/models/recommended_space.dart';
 
-/// Repository interface for feed data operations
+/// Repository interface for feed-related operations
 abstract class FeedRepository {
+  /// Get events for the feed
+  Future<List<Event>> getEvents({
+    bool forceRefresh = false,
+    int limit = 20,
+    Event? lastEvent,
+  });
+  
+  /// Get recommended events for the feed
+  Future<List<Event>> getRecommendedEvents({
+    int limit = 10,
+  });
+  
+  /// Get RSVP status for an event
+  Future<bool> getEventRsvpStatus(String eventId);
+  
+  /// RSVP to an event
+  Future<bool> rsvpToEvent(String eventId, bool attending);
+  
+  /// Repost an event
+  Future<RepostedEvent?> repostEvent({
+    required String eventId,
+    String? comment,
+    String? userId,
+  });
+  
+  /// Clear the repository cache
+  Future<void> clearCache();
+
   /// Fetch events for the feed with optional filtering and pagination
   Future<Map<String, dynamic>> fetchFeedEvents({
     bool forceRefresh = false,

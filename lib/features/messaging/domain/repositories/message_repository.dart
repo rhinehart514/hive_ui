@@ -118,6 +118,14 @@ abstract class MessageRepository {
   Future<void> removeReaction(
       String chatId, String messageId, String userId, String emoji);
 
+  /// Adds a reaction to a message (newer method)
+  Future<void> addMessageReaction(
+      String chatId, String messageId, String userId, String emoji);
+      
+  /// Removes a reaction from a message (newer method)
+  Future<void> removeMessageReaction(
+      String chatId, String messageId, String userId, String emoji);
+
   /// Pins a message in a chat
   Future<void> pinMessage(String chatId, String messageId);
 
@@ -129,6 +137,21 @@ abstract class MessageRepository {
   /// Gets messages in a thread
   Future<List<Message>> getThreadMessages(String parentMessageId,
       {int limit = 30, String? lastMessageId});
+
+  /// Gets a thread reply message
+  Future<Message> getThreadReply(
+    String parentMessageId,
+    String senderId,
+    String content,
+  );
+
+  /// Sends a text message as a reply in a thread
+  Future<Message> sendTextMessageReply(
+    String chatId,
+    String senderId,
+    String content,
+    String threadParentId,
+  );
 
   /// Gets the count of replies in a thread
   Future<int> getThreadReplyCount(String parentMessageId);
@@ -158,4 +181,46 @@ abstract class MessageRepository {
 
   /// Searches for chats (group, club, event) across the platform
   Future<List<Chat>> searchChats(String query, {int limit = 20});
+
+  /// Gets a paginated list of messages for a chat
+  Future<List<Message>> getMessagesPaginated(String chatId, DateTime? lastMessageTimestamp, int limit);
+
+  /// Updates a message's delivery status
+  Future<void> updateMessageDeliveryStatus(String messageId, String chatId, bool isDelivered, {bool isRead = false});
+
+  /// Uploads an attachment file and returns the download URL
+  Future<String> uploadAttachment(File file, String chatId, String senderId);
+
+  /// Sends a message with an attachment to a chat
+  Future<Message> sendMessageWithAttachment(
+    String chatId,
+    String senderId,
+    String attachmentUrl,
+    String fileName,
+    MessageType messageType, {
+    String? replyToMessageId,
+    String? threadParentId,
+  });
+  
+  /// Gets a specific message by ID
+  Future<Message?> getMessageById(String chatId, String messageId);
+  
+  /// Gets thread messages as a stream for real-time updates
+  Stream<List<Message>> getThreadMessagesStream(String chatId, String threadParentId);
+  
+  /// Gets unread message count as a stream for a chat
+  Stream<int> getUnreadMessageCountStream(String chatId, String userId);
+  
+  /// Gets messages before a specific timestamp (for pagination)
+  Future<List<Message>> getChatMessagesBefore(
+    String chatId, 
+    DateTime timestamp,
+    {int limit = 20}
+  );
+  
+  /// Creates a message search index
+  Future<void> createMessageSearchIndex(String chatId);
+  
+  /// Updates the message search index with new messages
+  Future<void> updateMessageSearchIndex(String chatId, List<Message> messages);
 }

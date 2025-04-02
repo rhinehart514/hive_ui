@@ -1,12 +1,20 @@
 import 'package:hive_ui/features/spaces/domain/entities/space_entity.dart';
+import 'package:hive_ui/models/event.dart';
 
 /// Interface defining the contract for the Spaces repository
 abstract class SpacesRepository {
   /// Get all spaces
-  Future<List<SpaceEntity>> getAllSpaces({bool forceRefresh = false});
+  Future<List<SpaceEntity>> getAllSpaces({
+    bool forceRefresh = false,
+    bool includePrivate = false,
+    bool includeJoined = true,
+  });
 
   /// Get space by ID
-  Future<SpaceEntity?> getSpaceById(String id);
+  /// 
+  /// [id] The ID of the space to retrieve
+  /// [spaceType] Optional space type to help locate the space in the correct collection
+  Future<SpaceEntity?> getSpaceById(String id, {String? spaceType});
 
   /// Get spaces by category or type
   Future<List<SpaceEntity>> getSpacesByCategory(String category);
@@ -53,4 +61,10 @@ abstract class SpacesRepository {
   /// 
   /// Returns true if the name is taken, false otherwise
   Future<bool> isSpaceNameTaken(String name);
+
+  /// Get events associated with a space
+  /// 
+  /// [spaceId] The ID of the space to get events for
+  /// Returns a list of events associated with the space
+  Future<List<Event>> getSpaceEvents(String spaceId);
 }

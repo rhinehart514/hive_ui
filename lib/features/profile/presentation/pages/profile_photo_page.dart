@@ -22,7 +22,7 @@ class _ProfilePhotoPageState extends ConsumerState<ProfilePhotoPage> {
     // Hide the system UI (including navigation bar) when this page opens
     SystemChrome.setEnabledSystemUIMode(
       SystemUiMode.immersiveSticky,
-      overlays: [SystemUiOverlay.top],
+      overlays: [], // No overlays to ensure navigation bar is hidden
     );
     
     // Show the photo picker after a short delay for smoother transition

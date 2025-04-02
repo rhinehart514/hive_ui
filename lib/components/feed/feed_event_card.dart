@@ -10,6 +10,7 @@ import '../../theme/app_colors.dart';
 import '../../components/optimized_image.dart';
 import '../../core/navigation/routes.dart';
 import '../../providers/reposted_events_provider.dart';
+import '../../providers/profile_provider.dart';
 import '../../components/event_card/event_card.dart';
 
 /// An optimized version of the event card for the main feed
@@ -36,6 +37,9 @@ class FeedEventCard extends ConsumerWidget {
   /// Called when the user taps the card
   final Function(Event)? onTap;
   
+  /// Called when the user RSVPs to the event
+  final Function(Event)? onRsvp;
+  
   /// Called when the user reposts the event
   final Function(Event, String?, RepostContentType)? onRepost;
 
@@ -48,6 +52,7 @@ class FeedEventCard extends ConsumerWidget {
     this.quoteText,
     this.repostType = RepostContentType.standard,
     this.onTap,
+    this.onRsvp,
     this.onRepost,
   }) : super(key: key);
 
@@ -58,25 +63,210 @@ class FeedEventCard extends ConsumerWidget {
                           quoteText != null && 
                           quoteText!.isNotEmpty;
     
+    // IMPORTANT: Watch the reposted events to ensure UI updates when repost status changes
+    final repostedEvents = ref.watch(repostedEventsProvider);
+    final currentUser = ref.watch(profileProvider).profile;
+    
+    final hasReposted = currentUser != null && 
+      repostedEvents.any((repost) => 
+        repost.event.id == event.id && 
+        repost.repostedBy.id == currentUser.id
+      );
+    
     if (isQuoteRepost) {
-      return _buildQuoteRepost(context);
+      return _buildQuoteRepost(context, ref);
+    } else if (isRepost) {
+      return _buildStandardRepost(context, ref);
     } else {
-      // Use the standard HiveEventCard for regular events and standard reposts
+      // Return the HiveEventCard directly for regular events
       return HiveEventCard(
         event: event,
-        isRepost: isRepost,
-        repostedBy: repostedBy,
-        repostTimestamp: repostTime,
-        quoteText: quoteText,
-        repostType: repostType,
         onTap: onTap,
+        onRsvp: onRsvp,
         onRepost: onRepost,
+        isRepost: hasReposted,
       );
     }
   }
   
+  // Build a standard repost card
+  Widget _buildStandardRepost(BuildContext context, WidgetRef ref) {
+    // IMPORTANT: Use watch instead of read to ensure UI updates when repost status changes
+    final repostedEvents = ref.watch(repostedEventsProvider);
+    final currentUserId = _getCurrentUserId(ref);
+    
+    // Check if the current user has also reposted this event (different from shown repost)
+    final hasUserAlsoReposted = repostedBy != null && 
+                              currentUserId != null && 
+                              repostedEvents.any((repost) => 
+                                repost.event.id == event.id && 
+                                repost.repostedBy.id == currentUserId && 
+                                currentUserId != repostedBy!.id
+                              );
+    
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.black.withOpacity(0.85),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppColors.gold.withOpacity(0.2), width: 1),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.2),
+            blurRadius: 20,
+            offset: const Offset(0, 8),
+          )
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Show "You also reposted" if the current user reposted this event
+          if (hasUserAlsoReposted)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.repeat_rounded,
+                    size: 14,
+                    color: AppColors.gold.withOpacity(0.8),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    'You also reposted',
+                    style: GoogleFonts.inter(
+                      color: AppColors.white.withOpacity(0.7),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            
+          // Repost header
+          if (repostedBy != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  // Reposter avatar
+                  if (repostedBy!.profileImageUrl != null && 
+                      repostedBy!.profileImageUrl!.isNotEmpty)
+                    Container(
+                      width: 32,
+                      height: 32,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: AppColors.gold.withOpacity(0.5),
+                          width: 1.5,
+                        ),
+                      ),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(16),
+                        child: OptimizedImage(
+                          imageUrl: repostedBy!.profileImageUrl!,
+                          width: 32,
+                          height: 32,
+                          fit: BoxFit.cover,
+                        ),
+                      ),
+                    )
+                  else
+                    Container(
+                      width: 32,
+                      height: 32,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: AppColors.cardBackground,
+                        border: Border.all(
+                          color: AppColors.gold.withOpacity(0.5),
+                          width: 1.5,
+                        ),
+                      ),
+                      child: const Icon(
+                        Icons.person,
+                        size: 18,
+                        color: AppColors.gold,
+                      ),
+                    ),
+                  const SizedBox(width: 10),
+                  
+                  // Reposter info
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Flexible(
+                              child: Text(
+                                repostedBy!.displayName,
+                                style: GoogleFonts.inter(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.white,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            Icon(
+                              Icons.repeat_rounded,
+                              size: 14,
+                              color: AppColors.gold.withOpacity(0.8),
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              'reposted',
+                              style: GoogleFonts.inter(
+                                fontSize: 13,
+                                color: AppColors.white.withOpacity(0.7),
+                              ),
+                            ),
+                          ],
+                        ),
+                        if (repostTime != null)
+                          Text(
+                            _formatRepostTime(repostTime!),
+                            style: GoogleFonts.inter(
+                              fontSize: 12,
+                              color: AppColors.white.withOpacity(0.5),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          
+          // Event card  
+          Padding(
+            padding: EdgeInsets.only(
+              left: 8,
+              right: 8,
+              top: 8,
+              bottom: isRepost ? 16 : 8,
+            ),
+            child: HiveEventCard(
+              event: event,
+              onTap: onTap,
+              onRsvp: onRsvp,
+              onRepost: onRepost,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+  
   // Build a quote repost card with X/Twitter style
-  Widget _buildQuoteRepost(BuildContext context) {
+  Widget _buildQuoteRepost(BuildContext context, WidgetRef ref) {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       decoration: BoxDecoration(
@@ -384,9 +574,43 @@ class FeedEventCard extends ConsumerWidget {
     );
   }
   
-  // Format time as relative time (e.g. "2h ago")
+  // Format timestamp as relative time
   String _formatTimeAgo(DateTime dateTime) {
-    final difference = DateTime.now().difference(dateTime);
+    final now = DateTime.now();
+    final difference = now.difference(dateTime);
+    
+    if (difference.inSeconds < 60) {
+      return '${difference.inSeconds}s';
+    } else if (difference.inMinutes < 60) {
+      return '${difference.inMinutes}m';
+    } else if (difference.inHours < 24) {
+      return '${difference.inHours}h';
+    } else if (difference.inDays < 7) {
+      return '${difference.inDays}d';
+    } else if (difference.inDays < 30) {
+      return '${(difference.inDays / 7).floor()}w';
+    } else if (difference.inDays < 365) {
+      return '${(difference.inDays / 30).floor()}mo';
+    } else {
+      return '${(difference.inDays / 365).floor()}y';
+    }
+  }
+  
+  // Helper method to get current user ID
+  String? _getCurrentUserId(WidgetRef ref) {
+    try {
+      final currentUser = ref.watch(profileProvider).profile;
+      return currentUser?.id;
+    } catch (e) {
+      debugPrint('Error getting current user ID: $e');
+      return null;
+    }
+  }
+
+  // Helper method to format repost time
+  String _formatRepostTime(DateTime time) {
+    final now = DateTime.now();
+    final difference = now.difference(time);
     
     if (difference.inDays > 365) {
       return '${(difference.inDays / 365).floor()}y ago';
@@ -399,7 +623,7 @@ class FeedEventCard extends ConsumerWidget {
     } else if (difference.inMinutes > 0) {
       return '${difference.inMinutes}m ago';
     } else {
-      return 'just now';
+      return 'Just now';
     }
   }
 }
@@ -417,49 +641,66 @@ extension RepostOptionsExtension on BuildContext {
       constraints: BoxConstraints(
         maxHeight: MediaQuery.of(this).size.height * 0.85,
       ),
-      builder: (context) => Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: () => Navigator.of(context).pop(),
-          child: Container(
-            padding: const EdgeInsets.all(16),
-            color: Colors.transparent,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // Repost option
-                _buildRepostOption(
-                  context: context,
-                  icon: Icons.repeat_rounded,
-                  label: 'Repost',
-                  description: 'Share this event with your followers',
-                  onTap: () {
-                    HapticFeedback.mediumImpact();
-                    Navigator.of(context).pop();
-                    onRepostSelected(event, null, RepostContentType.standard);
-                  },
-                ),
-                
-                const SizedBox(height: 8),
-                
-                // Quote option
-                _buildRepostOption(
-                  context: context,
-                  icon: Icons.format_quote_rounded,
-                  label: 'Quote',
-                  description: 'Add your thoughts when sharing',
-                  onTap: () {
-                    HapticFeedback.mediumImpact();
-                    Navigator.of(context).pop();
-                    
-                    // Navigate to quote page
-                    context.push(
-                      AppRoutes.quoteRepost,
-                      extra: event,
-                    );
-                  },
-                ),
-              ],
+      builder: (context) => Consumer(
+        builder: (context, ref, child) => Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: () => Navigator.of(context).pop(),
+            child: Container(
+              padding: const EdgeInsets.all(16),
+              color: Colors.transparent,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Repost option
+                  _buildRepostOption(
+                    context: context,
+                    icon: Icons.repeat_rounded,
+                    label: 'Repost',
+                    description: 'Share this event with your followers',
+                    onTap: () {
+                      HapticFeedback.mediumImpact();
+                      Navigator.of(context).pop();
+                      onRepostSelected(event, null, RepostContentType.standard);
+                    },
+                  ),
+                  
+                  const SizedBox(height: 8),
+                  
+                  // Quote option
+                  _buildRepostOption(
+                    context: context,
+                    icon: Icons.format_quote_rounded,
+                    label: 'Quote',
+                    description: 'Add your thoughts when sharing',
+                    onTap: () {
+                      HapticFeedback.mediumImpact();
+                      Navigator.of(context).pop();
+                      
+                      try {
+                        // Navigate to quote page
+                        context.pushNamed(
+                          'quote_repost',
+                          extra: event,
+                        ).then((result) {
+                          // The parent component will handle the success message
+                          // No need to show a duplicate message here
+                        });
+                      } catch (e) {
+                        debugPrint('Error navigating to quote_repost: $e');
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('Could not open quote page'),
+                              backgroundColor: Colors.red,
+                            ),
+                          );
+                        }
+                      }
+                    },
+                  ),
+                ],
+              ),
             ),
           ),
         ),

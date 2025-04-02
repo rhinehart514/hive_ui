@@ -8,6 +8,8 @@ import 'package:hive_ui/theme/huge_icons.dart';
 import 'package:hive_ui/widgets/profile/empty_state.dart';
 import 'package:hive_ui/features/friends/presentation/widgets/suggested_friends_list.dart';
 import 'package:go_router/go_router.dart';
+import 'package:hive_ui/models/friend.dart';
+import 'package:hive_ui/providers/friend_providers.dart';
 
 /// The spaces tab content for the profile page
 class SpacesTab extends StatelessWidget {
@@ -127,7 +129,7 @@ class FriendsTab extends ConsumerWidget {
           // Friend count header
           Row(
             children: [
-              Icon(
+              const Icon(
                 HugeIcons.user,
                 color: AppColors.gold,
                 size: 24,
@@ -153,44 +155,64 @@ class FriendsTab extends ConsumerWidget {
             child: ListView(
               physics: const BouncingScrollPhysics(),
               children: [
-                // Placeholder for actual friends list
-                Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Container(
-                        width: 64,
-                        height: 64,
-                        decoration: BoxDecoration(
-                          color: Colors.grey[850]!.withOpacity(0.3),
-                          shape: BoxShape.circle,
+                // Replace placeholder with actual friends list
+                ref.watch(userFriendsProvider).when(
+                  data: (friends) {
+                    if (friends.isEmpty) {
+                      return Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Container(
+                              width: 64,
+                              height: 64,
+                              decoration: BoxDecoration(
+                                color: Colors.grey[850]!.withOpacity(0.3),
+                                shape: BoxShape.circle,
+                              ),
+                              child: const HugeIcon(
+                                icon: HugeIcons.user,
+                                color: AppColors.gold,
+                                size: 32,
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                            Text(
+                              'No friends yet',
+                              style: GoogleFonts.outfit(
+                                color: Colors.white,
+                                fontSize: 20,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
                         ),
-                        child: const HugeIcon(
-                          icon: HugeIcons.user,
-                          color: AppColors.gold,
-                          size: 32,
-                        ),
+                      );
+                    }
+                    
+                    return ListView.builder(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemCount: friends.length,
+                      itemBuilder: (context, index) {
+                        final friend = friends[index];
+                        return _FriendListItem(friend: friend);
+                      },
+                    );
+                  },
+                  loading: () => const Center(
+                    child: CircularProgressIndicator(
+                      color: AppColors.gold,
+                    ),
+                  ),
+                  error: (error, stackTrace) => Center(
+                    child: Text(
+                      'Error loading friends',
+                      style: GoogleFonts.inter(
+                        color: Colors.red,
+                        fontSize: 16,
                       ),
-                      const SizedBox(height: 16),
-                      Text(
-                        'Friend list coming soon',
-                        style: GoogleFonts.outfit(
-                          color: Colors.white,
-                          fontSize: 20,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'You have ${profile.friendCount} ${profile.friendCount == 1 ? 'friend' : 'friends'} on HIVE',
-                        style: GoogleFonts.inter(
-                          color: Colors.white.withOpacity(0.7),
-                          fontSize: 16,
-                          fontWeight: FontWeight.w400,
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
-                    ],
+                    ),
                   ),
                 ),
               ],
@@ -252,110 +274,80 @@ class FriendsTab extends ConsumerWidget {
   }
 }
 
-/// A custom sliver delegate for the tab bar
-class SliverTabBarDelegate extends SliverPersistentHeaderDelegate {
-  /// The tab bar to display
-  final TabBar tabBar;
-
-  /// Constructor
-  SliverTabBarDelegate(this.tabBar);
-
-  @override
-  Widget build(
-      BuildContext context, double shrinkOffset, bool overlapsContent) {
-    return Container(
-      color: AppColors.black.withOpacity(0.8),
-      child: tabBar,
-    );
-  }
-
-  @override
-  double get maxExtent => 48;
-
-  @override
-  double get minExtent => 48;
-
-  @override
-  bool shouldRebuild(covariant SliverTabBarDelegate oldDelegate) {
-    return tabBar != oldDelegate.tabBar;
-  }
-}
-
-/// A tab switching component for the profile page
+/// A custom tab bar for the profile page
 class ProfileTabs extends StatelessWidget {
-  /// The index of the currently selected tab
+  /// The currently selected tab index
   final int selectedIndex;
   
-  /// Callback function when a tab is tapped
-  final void Function(int) onTabChanged;
-
+  /// Callback when a tab is selected
+  final Function(int) onTabChanged;
+  
   /// Constructor
   const ProfileTabs({
     super.key,
     required this.selectedIndex,
     required this.onTabChanged,
   });
-
+  
   @override
   Widget build(BuildContext context) {
     return Container(
       height: 48,
-      decoration: BoxDecoration(
-        color: AppColors.black,
+      decoration: const BoxDecoration(
         border: Border(
           bottom: BorderSide(
-            color: AppColors.gold.withOpacity(0.3),
+            color: Colors.white10,
             width: 0.5,
           ),
         ),
       ),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceAround,
+        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         children: [
-          _buildTabItem("Spaces", 0, selectedIndex == 0, onTabChanged),
-          _buildTabItem("Events", 1, selectedIndex == 1, onTabChanged),
-          _buildTabItem("Friends", 2, selectedIndex == 2, onTabChanged),
+          _buildTab(context, 'Spaces', 0),
+          _buildTab(context, 'Events', 1),
+          _buildTab(context, 'Friends', 2),
         ],
       ),
     );
   }
-
-  /// Builds a single tab item 
-  Widget _buildTabItem(String label, int index, bool isActive, void Function(int) onTap) {
-    return GestureDetector(
-      onTap: () {
-        HapticFeedback.selectionClick();
-        onTap(index);
-      },
-      child: Semantics(
-        button: true,
-        selected: isActive,
-        label: '$label tab',
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(
-                label, 
-                style: GoogleFonts.inter(
-                  color: isActive ? AppColors.gold : Colors.white.withOpacity(0.7),
-                  fontWeight: isActive ? FontWeight.w600 : FontWeight.w500,
-                  fontSize: 14,
+  
+  /// Build an individual tab
+  Widget _buildTab(BuildContext context, String title, int index) {
+    final bool isSelected = selectedIndex == index;
+    
+    return Expanded(
+      child: InkWell(
+        onTap: () {
+          HapticFeedback.selectionClick();
+          onTabChanged(index);
+        },
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              child: Text(
+                title,
+                style: GoogleFonts.outfit(
+                  color: isSelected ? AppColors.gold : AppColors.textTertiary,
+                  fontSize: 16,
+                  fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
                 ),
               ),
-              const SizedBox(height: 4),
-              if (isActive)
-                Container(
-                  height: 2, 
-                  width: 24, 
-                  decoration: BoxDecoration(
-                    color: AppColors.gold,
-                    borderRadius: BorderRadius.circular(1),
-                  ),
-                )
-            ],
-          ),
+            ),
+            // Indicator line
+            Container(
+              height: 3,
+              width: 40,
+              decoration: BoxDecoration(
+                color: isSelected ? AppColors.gold : Colors.transparent,
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(3),
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -408,6 +400,136 @@ class TabCountBadge extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// A widget that displays a single friend in the friends list
+class _FriendListItem extends StatelessWidget {
+  final Friend friend;
+
+  const _FriendListItem({required this.friend});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+      decoration: BoxDecoration(
+        color: Colors.black.withOpacity(0.3),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: Colors.white.withOpacity(0.05),
+          width: 0.5,
+        ),
+      ),
+      child: Row(
+        children: [
+          // Profile image
+          Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: Colors.grey[800],
+            ),
+            child: friend.imageUrl != null && friend.imageUrl!.isNotEmpty
+                ? ClipOval(
+                    child: Image.network(
+                      friend.imageUrl!,
+                      fit: BoxFit.cover,
+                      width: 48,
+                      height: 48,
+                      errorBuilder: (context, error, stackTrace) {
+                        return _buildInitialsAvatar();
+                      },
+                    ),
+                  )
+                : _buildInitialsAvatar(),
+          ),
+          
+          const SizedBox(width: 16),
+          
+          // Friend information
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  friend.name,
+                  style: GoogleFonts.inter(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  '${friend.major} • ${friend.year}',
+                  style: GoogleFonts.inter(
+                    color: Colors.white.withOpacity(0.7),
+                    fontSize: 14,
+                    fontWeight: FontWeight.w400,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+          
+          // Online indicator
+          Container(
+            width: 12,
+            height: 12,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: friend.isOnline ? AppColors.gold : Colors.grey,
+              border: Border.all(
+                color: Colors.black, 
+                width: 1,
+              ),
+            ),
+          ),
+          
+          // Message icon button
+          IconButton(
+            onPressed: () {
+              HapticFeedback.lightImpact();
+              // Navigate to chat with this friend
+              context.push('/messages/chat/${friend.id}');
+            },
+            icon: const HugeIcon(
+              icon: HugeIcons.message,
+              color: AppColors.gold,
+              size: 24,
+            ),
+            style: IconButton.styleFrom(
+              padding: const EdgeInsets.all(8),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+  
+  /// Build initials avatar when image is not available
+  Widget _buildInitialsAvatar() {
+    final initials = friend.name.isNotEmpty
+        ? friend.name.characters.first.toUpperCase()
+        : '?';
+        
+    return Center(
+      child: Text(
+        initials,
+        style: GoogleFonts.inter(
+          color: Colors.white,
+          fontSize: 18,
+          fontWeight: FontWeight.w500,
+        ),
       ),
     );
   }

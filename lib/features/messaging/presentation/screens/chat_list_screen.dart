@@ -1,12 +1,9 @@
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:hive_ui/components/buttons.dart';
+import 'package:hive_ui/core/navigation/routes.dart';
 import 'package:hive_ui/features/messaging/domain/entities/chat.dart';
-import 'package:hive_ui/features/messaging/injection.dart' as injection;
-import 'package:intl/intl.dart';
-import 'package:hive_ui/theme/app_icons.dart';
 import 'package:hive_ui/features/messaging/application/providers/messaging_providers.dart';
 import 'package:hive_ui/features/messaging/presentation/widgets/chat_list_item.dart';
 import 'package:hive_ui/features/messaging/presentation/widgets/friend_suggestions_list.dart';
@@ -31,15 +28,13 @@ class ChatListScreen extends ConsumerWidget {
           IconButton(
             icon: const Icon(Icons.search),
             onPressed: () {
-              // Show search dialog/screen
               // TODO: Implement search functionality
             },
           ),
           IconButton(
             icon: const Icon(Icons.person_add),
             onPressed: () {
-              // Navigate to find friends screen
-              // TODO: Implement navigation to friend finder
+              context.push(AppRoutes.createChat);
             },
           ),
         ],
@@ -62,12 +57,12 @@ class ChatListScreen extends ConsumerWidget {
         ],
       ),
       floatingActionButton: FloatingActionButton(
+        heroTag: 'chat_list_fab',
         onPressed: () {
-          // Navigate to new message screen
-          // TODO: Implement navigation to new message screen
+          context.push(AppRoutes.createChat);
         },
-        child: const Icon(Icons.chat),
         backgroundColor: Colors.amber[700],
+        child: const Icon(Icons.chat),
       ),
     );
   }
@@ -97,16 +92,16 @@ class ChatListScreen extends ConsumerWidget {
                 final chat = sortedChats[index];
                 return ChatListItem(
                   chat: chat,
-                  currentUserId: userId,
                   onTap: () {
                     // Set current chat ID and navigate to chat detail
                     ref.read(currentChatIdProvider.notifier).state = chat.id;
                     
-                    Navigator.pushNamed(
-                      context,
-                      '/chat_detail',
-                      arguments: {'chatId': chat.id},
-                    );
+                    // Navigate using GoRouter
+                    context.push('/messaging/chat/${chat.id}', extra: {
+                      'chatName': chat.title,
+                      'chatAvatar': chat.imageUrl,
+                      'isGroupChat': chat.isGroupChat,
+                    });
                   },
                 );
               },
@@ -120,12 +115,15 @@ class ChatListScreen extends ConsumerWidget {
       },
     );
   }
-  
+
   List<Chat> _sortChatsByRecency(List<Chat> chats) {
-    return [...chats]..sort((a, b) {
+    final sortedChats = [...chats];
+    sortedChats.sort((a, b) {
+      if (a.lastMessageAt == null && b.lastMessageAt == null) return 0;
       if (a.lastMessageAt == null) return 1;
       if (b.lastMessageAt == null) return -1;
       return b.lastMessageAt!.compareTo(a.lastMessageAt!);
     });
+    return sortedChats;
   }
-}
+} 

@@ -4,7 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'dart:ui';
 import '../models/club.dart';
-import '../features/clubs/presentation/pages/club_space_page.dart';
+import '../features/clubs/presentation/widgets/space_detail/space_detail_screen.dart';
 import '../providers/club_providers.dart';
 import '../providers/event_providers.dart';
 import '../theme/app_colors.dart';
@@ -155,7 +155,7 @@ class _ClubsPageState extends ConsumerState<ClubsPage>
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => ClubSpacePage(club: club),
+        builder: (context) => SpaceDetailScreen(club: club),
       ),
     );
   }

@@ -9,6 +9,7 @@ import 'package:hive_ui/features/profile/domain/usecases/create_profile_usecase.
 import 'package:hive_ui/features/profile/domain/usecases/get_profile_usecase.dart';
 import 'package:hive_ui/features/profile/domain/usecases/remove_profile_image_usecase.dart';
 import 'package:hive_ui/features/profile/domain/usecases/update_profile_usecase.dart';
+import 'package:hive_ui/features/profile/domain/usecases/update_user_interests_usecase.dart';
 import 'package:hive_ui/features/profile/domain/usecases/upload_profile_image_usecase.dart';
 import 'package:hive_ui/features/profile/domain/usecases/watch_profile_usecase.dart';
 import 'package:hive_ui/models/user_profile.dart';
@@ -112,6 +113,11 @@ final updateProfileUseCaseProvider = Provider<UpdateProfileUseCase>((ref) {
   return UpdateProfileUseCase(repository);
 });
 
+final updateUserInterestsUseCaseProvider = Provider<UpdateUserInterestsUseCase>((ref) {
+  final repository = ref.watch(profileRepositoryProvider);
+  return UpdateUserInterestsUseCase(repository);
+});
+
 final createProfileUseCaseProvider = Provider<CreateProfileUseCase>((ref) {
   final repository = ref.watch(profileRepositoryProvider);
   return CreateProfileUseCase(repository);
@@ -142,6 +148,7 @@ class ProfileNotifier extends StateNotifier<ProfileState> {
   final UploadProfileImageUseCase _uploadProfileImageUseCase;
   final RemoveProfileImageUseCase _removeProfileImageUseCase;
   final WatchProfileUseCase _watchProfileUseCase;
+  final UpdateUserInterestsUseCase _updateUserInterestsUseCase;
 
   ProfileNotifier({
     required GetProfileUseCase getProfileUseCase,
@@ -150,12 +157,14 @@ class ProfileNotifier extends StateNotifier<ProfileState> {
     required UploadProfileImageUseCase uploadProfileImageUseCase,
     required RemoveProfileImageUseCase removeProfileImageUseCase,
     required WatchProfileUseCase watchProfileUseCase,
+    required UpdateUserInterestsUseCase updateUserInterestsUseCase,
   })  : _getProfileUseCase = getProfileUseCase,
         _updateProfileUseCase = updateProfileUseCase,
         _createProfileUseCase = createProfileUseCase,
         _uploadProfileImageUseCase = uploadProfileImageUseCase,
         _removeProfileImageUseCase = removeProfileImageUseCase,
         _watchProfileUseCase = watchProfileUseCase,
+        _updateUserInterestsUseCase = updateUserInterestsUseCase,
         super(const ProfileState());
 
   /// Load the current user's profile
@@ -378,7 +387,7 @@ class ProfileNotifier extends StateNotifier<ProfileState> {
           friendCount: 24,
           createdAt: DateTime.now().subtract(const Duration(days: 110)),
           updatedAt: DateTime.now().subtract(const Duration(days: 2)),
-          interests: ['Hackathons', 'Programming', 'Machine Learning', 'Game Development'],
+          interests: const ['Hackathons', 'Programming', 'Machine Learning', 'Game Development'],
           isVerified: true,
           profileImageUrl: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?ixlib=rb-1.2.1&auto=format&fit=crop&w=500&q=80',
         ),
@@ -397,7 +406,7 @@ class ProfileNotifier extends StateNotifier<ProfileState> {
           friendCount: 18,
           createdAt: DateTime.now().subtract(const Duration(days: 85)),
           updatedAt: DateTime.now().subtract(const Duration(days: 5)),
-          interests: ['Music Production', 'Classical Piano', 'Concert Photography', 'Vinyl Collection'],
+          interests: const ['Music Production', 'Classical Piano', 'Concert Photography', 'Vinyl Collection'],
           isVerified: false,
           profileImageUrl: 'https://images.unsplash.com/photo-1522075469751-3a6694fb2f61?ixlib=rb-1.2.1&auto=format&fit=crop&w=500&q=80',
         ),
@@ -416,7 +425,7 @@ class ProfileNotifier extends StateNotifier<ProfileState> {
           friendCount: 35,
           createdAt: DateTime.now().subtract(const Duration(days: 210)),
           updatedAt: DateTime.now().subtract(const Duration(days: 1)),
-          interests: ['Film Studies', 'Screenwriting', 'Photography', 'Visual Arts'],
+          interests: const ['Film Studies', 'Screenwriting', 'Photography', 'Visual Arts'],
           isVerified: true,
           profileImageUrl: 'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?ixlib=rb-1.2.1&auto=format&fit=crop&w=500&q=80',
         ),
@@ -435,7 +444,7 @@ class ProfileNotifier extends StateNotifier<ProfileState> {
           friendCount: 9,
           createdAt: DateTime.now().subtract(const Duration(days: 45)),
           updatedAt: DateTime.now().subtract(const Duration(days: 3)),
-          interests: ['Basketball', 'Tennis', 'Hiking', 'Rock Climbing'],
+          interests: const ['Basketball', 'Tennis', 'Hiking', 'Rock Climbing'],
           isVerified: false,
           profileImageUrl: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?ixlib=rb-1.2.1&auto=format&fit=crop&w=500&q=80',
         ),
@@ -454,7 +463,7 @@ class ProfileNotifier extends StateNotifier<ProfileState> {
           friendCount: 28,
           createdAt: DateTime.now().subtract(const Duration(days: 150)),
           updatedAt: DateTime.now().subtract(const Duration(hours: 12)),
-          interests: ['Book Club', 'Poetry Writing', 'Literary Criticism', 'Creative Writing'],
+          interests: const ['Book Club', 'Poetry Writing', 'Literary Criticism', 'Creative Writing'],
           isVerified: true,
           profileImageUrl: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?ixlib=rb-1.2.1&auto=format&fit=crop&w=500&q=80',
         ),
@@ -475,7 +484,7 @@ class ProfileNotifier extends StateNotifier<ProfileState> {
         friendCount: 15,
         createdAt: DateTime.now().subtract(const Duration(days: 90)),
         updatedAt: DateTime.now(),
-        interests: ['Technology', 'Programming', 'Design', 'Music'],
+        interests: const ['Technology', 'Programming', 'Design', 'Music'],
         isVerified: false,
         profileImageUrl: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?ixlib=rb-1.2.1&auto=format&fit=crop&w=500&q=80',
       );
@@ -493,6 +502,40 @@ class ProfileNotifier extends StateNotifier<ProfileState> {
       );
     }
   }
+
+  /// Update just the interests for a user
+  Future<void> updateUserInterests(String userId, List<String> interests) async {
+    try {
+      state = state.copyWith(isLoading: true, error: null);
+      
+      // Validate inputs
+      if (userId.isEmpty) {
+        throw Exception('User ID cannot be empty');
+      }
+      
+      // Update interests using dedicated use case
+      await _updateUserInterestsUseCase.execute(userId, interests);
+      
+      // If this is the current user's profile, update the state
+      if (state.profile != null && state.profile!.id == userId) {
+        state = state.copyWith(
+          profile: state.profile!.copyWith(
+            interests: interests,
+            updatedAt: DateTime.now(),
+          ),
+          isLoading: false,
+        );
+      } else {
+        state = state.copyWith(isLoading: false);
+      }
+    } catch (e) {
+      debugPrint('ProfileNotifier: Error updating interests: $e');
+      state = state.copyWith(
+        isLoading: false,
+        error: 'Failed to update interests: $e',
+      );
+    }
+  }
 }
 
 // Profile state notifier provider
@@ -507,6 +550,7 @@ final profileProvider =
   final removeProfileImageUseCase =
       ref.watch(removeProfileImageUseCaseProvider);
   final watchProfileUseCase = ref.watch(watchProfileUseCaseProvider);
+  final updateUserInterestsUseCase = ref.watch(updateUserInterestsUseCaseProvider);
 
   return ProfileNotifier(
     getProfileUseCase: getProfileUseCase,
@@ -515,6 +559,7 @@ final profileProvider =
     uploadProfileImageUseCase: uploadProfileImageUseCase,
     removeProfileImageUseCase: removeProfileImageUseCase,
     watchProfileUseCase: watchProfileUseCase,
+    updateUserInterestsUseCase: updateUserInterestsUseCase,
   );
 });
 

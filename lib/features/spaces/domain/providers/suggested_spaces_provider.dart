@@ -14,12 +14,10 @@ final suggestedSpacesProvider = FutureProvider.autoDispose<List<SpaceEntity>>((r
   
   try {
     // Get spaces recommended for the user based on interests and location
-    final suggestedSpaces = await spaceRepository.getSuggestedSpacesForUser(
-      userId: currentUser.id,
-      limit: 3, // Limit to 3 suggestions for the feed
-    );
+    final suggestedSpaces = await spaceRepository.getRecommendedSpaces(currentUser.id);
     
-    return suggestedSpaces;
+    // Limit to 3 suggestions for the feed
+    return suggestedSpaces.take(3).toList();
   } catch (e) {
     // Log error but don't crash the feed
     print('Error loading suggested spaces: $e');

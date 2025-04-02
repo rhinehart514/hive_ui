@@ -118,6 +118,7 @@ class _ChatCreationScreenState extends ConsumerState<ChatCreationScreen> {
       name: user.displayName,
       avatarUrl: user.profilePicture,
       isOnline: false,
+      lastActive: DateTime.now(),
     )).toList();
 
     return Scaffold(

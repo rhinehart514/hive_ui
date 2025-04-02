@@ -25,7 +25,7 @@ class RealtimeMessagingService {
   void _initDatabase() {
     try {
       // Apply Windows-specific fixes if needed
-      RealtimeDatabaseWindowsFix.initialize();
+      RealtimeDbWindowsFix.initialize();
       
       // Only enable persistence on non-Windows platforms
       if (defaultTargetPlatform != TargetPlatform.windows) {
@@ -47,15 +47,17 @@ class RealtimeMessagingService {
   /// Updates the typing status of a user in a chat
   Future<void> updateTypingStatus(String chatId, String userId, bool isTyping) async {
     try {
-      final ref = _database.ref('$_typingPath/$chatId/$userId');
-      
-      if (isTyping) {
-        // Set server timestamp when typing starts/continues
-        await ref.set(ServerValue.timestamp);
-      } else {
-        // Remove the typing indicator when typing stops
-        await ref.remove();
-      }
+      return await RealtimeDbWindowsFix.runOperation(() async {
+        final ref = _database.ref('$_typingPath/$chatId/$userId');
+        
+        if (isTyping) {
+          // Set server timestamp when typing starts/continues
+          await ref.set(ServerValue.timestamp);
+        } else {
+          // Remove the typing indicator when typing stops
+          await ref.remove();
+        }
+      });
     } catch (e) {
       debugPrint('Error updating typing status: $e');
     }
@@ -99,28 +101,30 @@ class RealtimeMessagingService {
   /// Updates a user's online status
   Future<void> updateOnlineStatus(String userId, bool isOnline) async {
     try {
-      final ref = _database.ref('$_onlinePath/$userId');
-      
-      if (isOnline) {
-        // Set presence and last active timestamp
-        await ref.set({
-          'online': true,
-          'lastActive': ServerValue.timestamp,
-        });
+      return await RealtimeDbWindowsFix.runOperation(() async {
+        final ref = _database.ref('$_onlinePath/$userId');
         
-        // Set up an onDisconnect operation to update status when client disconnects
-        await ref.onDisconnect().update({
-          'online': false,
-          'lastActive': ServerValue.timestamp,
-        });
-      } else {
-        // Explicitly set offline and cancel any pending onDisconnect operations
-        await ref.update({
-          'online': false,
-          'lastActive': ServerValue.timestamp,
-        });
-        await ref.onDisconnect().cancel();
-      }
+        if (isOnline) {
+          // Set presence and last active timestamp
+          await ref.set({
+            'online': true,
+            'lastActive': ServerValue.timestamp,
+          });
+          
+          // Set up an onDisconnect operation to update status when client disconnects
+          await ref.onDisconnect().update({
+            'online': false,
+            'lastActive': ServerValue.timestamp,
+          });
+        } else {
+          // Explicitly set offline and cancel any pending onDisconnect operations
+          await ref.update({
+            'online': false,
+            'lastActive': ServerValue.timestamp,
+          });
+          await ref.onDisconnect().cancel();
+        }
+      });
     } catch (e) {
       debugPrint('Error updating online status: $e');
     }
@@ -159,14 +163,16 @@ class RealtimeMessagingService {
   /// Gets a single user's online status
   Future<bool> getUserOnlineStatus(String userId) async {
     try {
-      final ref = _database.ref('$_onlinePath/$userId/online');
-      final snapshot = await ref.get();
-      
-      if (snapshot.exists && snapshot.value is bool) {
-        return snapshot.value as bool;
-      }
-      
-      return false;
+      return await RealtimeDbWindowsFix.runOperation(() async {
+        final ref = _database.ref('$_onlinePath/$userId/online');
+        final snapshot = await ref.get();
+        
+        if (snapshot.exists && snapshot.value is bool) {
+          return snapshot.value as bool;
+        }
+        
+        return false;
+      });
     } catch (e) {
       debugPrint('Error getting user online status: $e');
       return false;
@@ -176,14 +182,16 @@ class RealtimeMessagingService {
   /// Gets a user's last active timestamp
   Future<DateTime?> getUserLastActive(String userId) async {
     try {
-      final ref = _database.ref('$_onlinePath/$userId/lastActive');
-      final snapshot = await ref.get();
-      
-      if (snapshot.exists && snapshot.value is int) {
-        return DateTime.fromMillisecondsSinceEpoch(snapshot.value as int);
-      }
-      
-      return null;
+      return await RealtimeDbWindowsFix.runOperation(() async {
+        final ref = _database.ref('$_onlinePath/$userId/lastActive');
+        final snapshot = await ref.get();
+        
+        if (snapshot.exists && snapshot.value is int) {
+          return DateTime.fromMillisecondsSinceEpoch(snapshot.value as int);
+        }
+        
+        return null;
+      });
     } catch (e) {
       debugPrint('Error getting user last active: $e');
       return null;
@@ -199,11 +207,13 @@ class RealtimeMessagingService {
     MessageDeliveryStatus status,
   ) async {
     try {
-      final ref = _database.ref('$_deliveryPath/$messageId/$receiverId');
-      
-      await ref.set({
-        'status': status.index,
-        'timestamp': ServerValue.timestamp,
+      return await RealtimeDbWindowsFix.runOperation(() async {
+        final ref = _database.ref('$_deliveryPath/$messageId/$receiverId');
+        
+        await ref.set({
+          'status': status.index,
+          'timestamp': ServerValue.timestamp,
+        });
       });
     } catch (e) {
       debugPrint('Error updating message delivery status: $e');

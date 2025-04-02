@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/semantics.dart';
 
 /// A helper class providing utilities for accessibility in the profile screen
 class ProfileAccessibilityHelper {

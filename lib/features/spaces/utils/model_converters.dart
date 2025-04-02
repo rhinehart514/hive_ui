@@ -96,6 +96,8 @@ class SpaceModelConverters {
         return SpaceType.campusLiving;
       case legacy_type.SpaceType.fraternityAndSorority:
         return SpaceType.fraternityAndSorority;
+      case legacy_type.SpaceType.hiveExclusive:
+        return SpaceType.hiveExclusive;
       case legacy_type.SpaceType.other:
         return SpaceType.other;
       default:

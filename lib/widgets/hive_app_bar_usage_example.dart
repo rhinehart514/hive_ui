@@ -47,10 +47,10 @@ class _HiveAppBarExamplesState extends ConsumerState<HiveAppBarExamples> with Si
           controller: _scrollController,
           headerSliverBuilder: (context, innerBoxIsScrolled) {
             return [
-              SliverToBoxAdapter(
+              const SliverToBoxAdapter(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  children: const [
+                  children: [
                     Padding(
                       padding: EdgeInsets.all(16.0),
                       child: Text(
@@ -155,13 +155,13 @@ class _HiveAppBarExamplesState extends ConsumerState<HiveAppBarExamples> with Si
                     // Handle search query
                     print('Search query: $query');
                   },
-                  tabBar: TabBar(
+                  tabBar: const TabBar(
                     labelColor: AppColors.gold,
                     unselectedLabelColor: AppColors.textTertiary,
                     indicatorColor: AppColors.gold,
                     indicatorWeight: 3,
                     indicatorSize: TabBarIndicatorSize.label,
-                    tabs: const [
+                    tabs: [
                       Tab(text: 'Trending'),
                       Tab(text: 'Following'),
                       Tab(text: 'Popular'),
@@ -193,7 +193,7 @@ class _HiveAppBarExamplesState extends ConsumerState<HiveAppBarExamples> with Si
               _buildExampleSection(
                 title: 'Transparent App Bar',
                 containerColor: AppColors.gold.withOpacity(0.2),
-                example: HiveAppBar(
+                example: const HiveAppBar(
                   title: 'Photo View',
                   style: HiveAppBarStyle.transparent,
                   showBottomBorder: false,

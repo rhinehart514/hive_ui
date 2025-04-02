@@ -2,13 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hive_ui/theme/app_colors.dart';
+import 'dart:math';
 
 /// Types of navigation feedback
 enum NavigationFeedbackType {
   pageTransition,
-  tabSwitch,
+  tabChange,
   modalOpen,
   modalClose,
+  modalDismiss,
+  error,
 }
 
 /// Navigation transition types for cleaner API
@@ -34,7 +37,7 @@ class NavigationTransitions {
       case NavigationFeedbackType.pageTransition:
         HapticFeedback.selectionClick();
         break;
-      case NavigationFeedbackType.tabSwitch:
+      case NavigationFeedbackType.tabChange:
         HapticFeedback.lightImpact();
         break;
       case NavigationFeedbackType.modalOpen:
@@ -42,6 +45,12 @@ class NavigationTransitions {
         break;
       case NavigationFeedbackType.modalClose:
         HapticFeedback.lightImpact();
+        break;
+      case NavigationFeedbackType.modalDismiss:
+        HapticFeedback.lightImpact();
+        break;
+      case NavigationFeedbackType.error:
+        HapticFeedback.mediumImpact();
         break;
     }
   }
@@ -81,7 +90,13 @@ class NavigationTransitions {
                 animation, secondaryAnimation, child);
         }
       },
-      transitionDuration: const Duration(milliseconds: 350),
+      // Updated durations to match iOS
+      transitionDuration: type == TransitionType.cupertinoModal || 
+                         type == TransitionType.cupertinoFullscreenModal
+          ? const Duration(milliseconds: 500)  // Modal presentations are slightly longer
+          : const Duration(milliseconds: 350), // Standard push transitions
+      // Reverse transitions are slightly faster
+      reverseTransitionDuration: const Duration(milliseconds: 300),
     );
   }
 
@@ -106,10 +121,10 @@ class NavigationTransitions {
             .chain(CurveTween(curve: Curves.easeOutCubic));
     final parallaxAnimation = secondaryAnimation.drive(parallaxTween);
 
-    // Create fade animation
+    // Create fade animation with subtle delay
     final fadeAnimation = Tween(begin: 0.0, end: 1.0)
         .chain(CurveTween(
-            curve: const Interval(0.0, 0.8, curve: Curves.easeInOut)))
+            curve: const Interval(0.1, 1.0, curve: Curves.easeOutCubic)))
         .animate(animation);
 
     // Create shadow animation
@@ -159,35 +174,45 @@ class NavigationTransitions {
     Animation<double> secondaryAnimation,
     Widget child,
   ) {
-    // Define the primary animation
+    // Define the primary animation with spring curve
     const begin = Offset(0.0, 1.0);
     const end = Offset.zero;
-    const curve = Curves.easeOutCubic;
+    
+    // Create the slide animation with spring physics
+    final slideAnimation = CurvedAnimation(
+      parent: animation,
+      curve: const SpringCurve(
+        mass: 1.0,
+        stiffness: 1000.0,
+        damping: 500.0,
+      ),
+    );
 
-    // Create the slide animation
-    final tween = Tween(begin: begin, end: end).chain(CurveTween(curve: curve));
-    final slideAnimation = animation.drive(tween);
+    final offsetAnimation = Tween(begin: begin, end: end).animate(slideAnimation);
 
-    // Create a dimming effect for the background
+    // Create a dimming effect for the background with subtle blur
     final fadeAnimation = Tween(begin: 0.0, end: 0.5)
         .chain(CurveTween(curve: Curves.easeOutCubic))
         .animate(animation);
 
     // Create scale effect for background
-    final scaleAnimation = Tween(begin: 1.0, end: 0.95)
+    final scaleAnimation = Tween(begin: 1.0, end: 0.92)
         .chain(CurveTween(curve: Curves.easeOutCubic))
         .animate(animation);
 
     return Stack(
       children: [
-        // Dim and scale the background
-        FadeTransition(
-          opacity: fadeAnimation,
-          child: Container(color: Colors.black),
+        // Scale and dim the background
+        ScaleTransition(
+          scale: scaleAnimation,
+          child: FadeTransition(
+            opacity: fadeAnimation,
+            child: Container(color: Colors.black),
+          ),
         ),
-        // The modal slides in from the bottom
+        // The modal slides in from the bottom with spring physics
         SlideTransition(
-          position: slideAnimation,
+          position: offsetAnimation,
           child: child,
         ),
       ],
@@ -377,5 +402,25 @@ class NavigationTransitions {
         ),
       ],
     );
+  }
+}
+
+/// Custom spring curve for more natural iOS-like animations
+class SpringCurve extends Curve {
+  final double mass;
+  final double stiffness;
+  final double damping;
+
+  const SpringCurve({
+    this.mass = 1.0,
+    this.stiffness = 1000.0,
+    this.damping = 500.0,
+  });
+
+  @override
+  double transform(double t) {
+    final oscillation = exp(-damping * t / (2 * mass));
+    final frequency = sqrt(stiffness / mass - pow(damping / (2 * mass), 2));
+    return 1.0 - oscillation * cos(frequency * t);
   }
 }

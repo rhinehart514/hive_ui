@@ -15,9 +15,15 @@ class FeedService {
   static const String _feedLastFetchKey = 'feed_last_fetch';
   // Increase cache duration to 12 hours to prevent frequent RSS polling
   static const Duration _cacheDuration = Duration(hours: 12);
+  // Add minimum refresh interval to prevent excessive feed refreshes
+  static const Duration _minimumRefreshInterval = Duration(minutes: 5);
+  // Last refresh timestamp to limit frequency
+  static DateTime? _lastRefreshTime;
 
   // Flag to control RSS feed fetching
   static bool _enableRssFeedFetching = false;
+  // Flag to track if a fetch is in progress
+  static bool _isFetchInProgress = false;
 
   /// Set whether RSS feed fetching is enabled
   static void setRssFeedFetchingEnabled(bool enabled) {
@@ -34,6 +40,30 @@ class FeedService {
     EventFilters? filters,
     bool userInitiated = false,
   }) async {
+    // Prevent multiple simultaneous fetches
+    if (_isFetchInProgress) {
+      debugPrint('Feed fetch already in progress, returning empty results');
+      return {
+        'events': <Event>[],
+        'totalCount': 0,
+        'hasMore': false,
+        'fromCache': true,
+        'page': page,
+        'pageSize': pageSize,
+        'error': 'Another fetch is already in progress'
+      };
+    }
+
+    // Rate limit refreshes unless forced
+    if (!forceRefresh && _lastRefreshTime != null) {
+      final timeSinceLastRefresh = DateTime.now().difference(_lastRefreshTime!);
+      if (timeSinceLastRefresh < _minimumRefreshInterval) {
+        debugPrint('Skipping refresh due to rate limiting (last refresh: ${timeSinceLastRefresh.inSeconds}s ago)');
+        forceRefresh = false;
+      }
+    }
+
+    _isFetchInProgress = true;
     try {
       final now = DateTime.now();
       final prefs = await SharedPreferences.getInstance();
@@ -100,46 +130,94 @@ class FeedService {
       bool shouldFetchRss =
           _enableRssFeedFetching || userInitiated || forceRefresh;
 
-      // Try multiple approaches to fetch data
+      // Track fetch start time for performance monitoring
+      final fetchStartTime = DateTime.now();
+      
+      // Try direct events query first - this is typically much faster
+      debugPrint('======= FETCHING EVENTS DIRECTLY FROM EVENTS COLLECTION =======');
       try {
-        // First attempt: Try to get events through SpaceEventManager
         debugPrint('Attempting to fetch events from SpaceEventManager');
-        events = await SpaceEventManager.getAllEvents(
-          // Request enough events to ensure we have sufficient after filtering
-          limit: page * pageSize * 2,
-          // Adjust start date to include today's events
-          startDate: filters?.dateRange?.start ?? now.subtract(const Duration(hours: 6)),
-          endDate: filters?.dateRange?.end,
-          category: filters?.categories.isNotEmpty == true
-              ? filters?.categories.first
-              : null,
-        );
-      } catch (e) {
-        debugPrint('Error fetching events from SpaceEventManager: $e');
-
-        // Second attempt: Try fetching through EventService only if RSS is enabled
-        if (shouldFetchRss) {
-          try {
-            debugPrint(
-                'Attempting to fetch events from EventService (RSS feeds)');
-            events = await EventService.getEvents(forceRefresh: userInitiated);
-          } catch (fallbackError) {
-            debugPrint('RSS event fetch failed: $fallbackError');
-
-            // Third attempt: Try to get mock/sample events as a last resort
-            try {
-              debugPrint('Attempting to create mock events as last resort');
-              events = _createSampleEvents();
-            } catch (mockError) {
-              debugPrint('Failed to create mock events: $mockError');
-              // Return empty array but don't fail
-              events = [];
-            }
-          }
+        debugPrint('Using direct events query approach first');
+        debugPrint('Fetching events directly from events collection');
+        
+        // Query Firestore directly for faster response
+        final eventsSnapshot = await FirebaseFirestore.instance
+            .collection('events')
+            .where('startDate', isGreaterThan: Timestamp.fromDate(
+                now.subtract(const Duration(days: 1))))
+            .orderBy('startDate')
+            .limit(50) // Limit to a reasonable number
+            .get();
+            
+        if (eventsSnapshot.docs.isNotEmpty) {
+          debugPrint('Retrieved ${eventsSnapshot.docs.length} events from events collection');
+          
+          // Convert to Event objects
+          events = eventsSnapshot.docs.map((doc) {
+            final data = doc.data();
+            data['id'] = doc.id;
+            return Event.fromJson(data);
+          }).toList();
+          
+          debugPrint('Updating feed with ${events.length} events');
+        }
+        
+        if (events.isNotEmpty) {
+          debugPrint('Retrieved ${events.length} events directly from events collection');
+          debugPrint('Found ${events.length} events directly from events collection');
         } else {
-          debugPrint('Skipping RSS feed fetching (disabled)');
-          // Try to use mock events directly since RSS fetching is disabled
-          events = _createSampleEvents();
+          debugPrint('No events found in direct query, falling back to SpaceEventManager');
+          // Fall back to SpaceEventManager if direct query returns no results
+          events = await SpaceEventManager.getAllEvents(
+            limit: page * pageSize * 2,
+            startDate: filters?.dateRange?.start ?? now.subtract(const Duration(hours: 6)),
+            endDate: filters?.dateRange?.end,
+            category: filters?.categories.isNotEmpty == true
+                ? filters?.categories.first
+                : null,
+          );
+        }
+      } catch (e) {
+        debugPrint('Error fetching events from direct query: $e');
+
+        // Second attempt: Try to get events through SpaceEventManager
+        try {
+          debugPrint('Falling back to SpaceEventManager.getAllEvents()');
+          events = await SpaceEventManager.getAllEvents(
+            limit: page * pageSize * 2,
+            startDate: filters?.dateRange?.start ?? now.subtract(const Duration(hours: 6)),
+            endDate: filters?.dateRange?.end,
+            category: filters?.categories.isNotEmpty == true
+                ? filters?.categories.first
+                : null,
+          );
+        } catch (managerError) {
+          debugPrint('Error fetching events from SpaceEventManager: $managerError');
+
+          // Third attempt: Try fetching through EventService only if RSS is enabled
+          if (shouldFetchRss) {
+            try {
+              debugPrint(
+                  'Attempting to fetch events from EventService (RSS feeds)');
+              events = await EventService.getEvents(forceRefresh: userInitiated);
+            } catch (fallbackError) {
+              debugPrint('RSS event fetch failed: $fallbackError');
+
+              // Fourth attempt: Try to get mock/sample events as a last resort
+              try {
+                debugPrint('Attempting to create mock events as last resort');
+                events = _createSampleEvents();
+              } catch (mockError) {
+                debugPrint('Failed to create mock events: $mockError');
+                // Return empty array but don't fail
+                events = [];
+              }
+            }
+          } else {
+            debugPrint('Skipping RSS feed fetching (disabled)');
+            // Try to use mock events directly since RSS fetching is disabled
+            events = _createSampleEvents();
+          }
         }
       }
 
@@ -159,6 +237,13 @@ class FeedService {
         await _updateCache(events);
       }
 
+      // Update last refresh time
+      _lastRefreshTime = DateTime.now();
+      
+      // Log performance metrics
+      final fetchDuration = _lastRefreshTime!.difference(fetchStartTime);
+      debugPrint('Feed fetch completed in ${fetchDuration.inMilliseconds}ms');
+
       // Track performance
       AnalyticsService.logEvent('feed_events_loaded', parameters: {
         'count': events.length,
@@ -167,7 +252,8 @@ class FeedService {
         'user_initiated': userInitiated,
         'rss_fetch_enabled': shouldFetchRss,
         'page': page,
-        'page_size': pageSize
+        'page_size': pageSize,
+        'fetch_duration_ms': fetchDuration.inMilliseconds,
       });
 
       // Apply pagination
@@ -196,67 +282,54 @@ class FeedService {
         'error': e.toString(),
       });
 
-      // Try to load from cache as a last resort, even if it's expired
-      try {
-        final prefs = await SharedPreferences.getInstance();
-        final cacheStr = prefs.getString(_feedCacheKey);
-
-        if (cacheStr != null) {
-          final cachedData = json.decode(cacheStr) as Map<String, dynamic>;
-          final events = (cachedData['events'] as List)
-              .map((e) => Event.fromJson(e as Map<String, dynamic>))
-              .toList();
-              
-          // Filter out past events
-          final now = DateTime.now();
-          final relevantEvents = _filterPastEvents(events, now);
-          
-          // Normalize dates to fix events with incorrect future years
-          final normalizedEvents = _normalizeEventDates(relevantEvents);
-
-          // Apply pagination
-          final paginatedEvents = _paginateEvents(normalizedEvents, page, pageSize);
-          final hasMore = page * pageSize < normalizedEvents.length;
-
-          return {
-            'events': paginatedEvents,
-            'totalCount': normalizedEvents.length,
-            'hasMore': hasMore,
-            'fromCache': true,
-            'fromExpiredCache': true,
-            'page': page,
-            'pageSize': pageSize,
-          };
-        }
-      } catch (cacheError) {
-        debugPrint('Error loading from expired cache: $cacheError');
-      }
-
-      // Return empty result instead of throwing
       return {
         'events': <Event>[],
         'totalCount': 0,
         'hasMore': false,
-        'fromCache': false,
         'error': e.toString(),
         'page': page,
         'pageSize': pageSize,
       };
+    } finally {
+      _isFetchInProgress = false;
     }
   }
 
   /// Filter out past events that are no longer relevant
   static List<Event> _filterPastEvents(List<Event> events, DateTime now) {
-    return events.where((event) {
-      // Keep events that haven't ended yet
-      if (event.endDate.isAfter(now)) {
-        return true;
+    debugPrint('Filtering ${events.length} events to remove past events');
+    
+    // Only keep events that haven't ended yet (strictly in the future)
+    final filteredEvents = events.where((event) {
+      // Check if event has ended - only keep events where end date is after now
+      final isUpcoming = event.endDate.isAfter(now);
+      
+      if (!isUpcoming) {
+        // Log details about filtered events
+        final hoursAgo = now.difference(event.endDate).inHours;
+        debugPrint('⚠️ Filtering out past event: "${event.title}" - ended ${hoursAgo} hours ago at ${event.endDate}');
+      } else {
+        // For upcoming events, calculate and log how soon they are
+        final hoursUntilStart = event.startDate.difference(now).inHours;
+        final hoursUntilEnd = event.endDate.difference(now).inHours;
+        
+        if (hoursUntilStart <= 0) {
+          // Event is happening now
+          debugPrint('✅ Keeping currently happening event: "${event.title}" - started ${-hoursUntilStart} hours ago, ends in ${hoursUntilEnd} hours');
+        } else {
+          // Event is in the future
+          debugPrint('✅ Keeping upcoming event: "${event.title}" - starts in ${hoursUntilStart} hours, ends in ${hoursUntilEnd} hours');
+        }
       }
       
-      // Keep events that ended less than 3 hours ago
-      final hoursSinceEnd = now.difference(event.endDate).inHours;
-      return hoursSinceEnd < 3;
+      return isUpcoming;
     }).toList();
+    
+    // Sort events by start date (soonest first)
+    filteredEvents.sort((a, b) => a.startDate.compareTo(b.startDate));
+    
+    debugPrint('Filtered out ${events.length - filteredEvents.length} past events, keeping ${filteredEvents.length} upcoming events');
+    return filteredEvents;
   }
 
   /// Normalize event dates to ensure they are in the correct year range

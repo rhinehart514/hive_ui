@@ -1,10 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_ui/components/navigation_bar.dart';
 import 'package:hive_ui/core/navigation/transitions.dart';
 import 'package:hive_ui/theme/app_colors.dart';
 import 'package:hive_ui/theme/huge_icons.dart';
 import 'package:google_fonts/google_fonts.dart';
+
+/// Provider to control the visibility of the navigation bar
+final navigationBarVisibilityProvider = StateProvider<bool>((ref) => true);
 
 /// Error boundary widget to catch rendering errors
 class ErrorBoundaryWidget extends StatefulWidget {
@@ -125,11 +129,28 @@ class Shell extends StatefulWidget {
 class _ShellState extends State<Shell> {
   // Track previous index for transition direction
   int _previousIndex = 0;
+  
+  // Store a reference to the ProviderContainer
+  late ProviderContainer _container;
+  
+  @override
+  void initState() {
+    super.initState();
+    // Create a standalone container to manage providers
+    _container = ProviderContainer();
+  }
+  
+  @override
+  void dispose() {
+    // Dispose of the container when the widget is disposed
+    _container.dispose();
+    super.dispose();
+  }
 
   void _onTap(BuildContext context, int index) {
     // Apply haptic feedback
     NavigationTransitions.applyNavigationFeedback(
-      type: NavigationFeedbackType.tabSwitch,
+      type: NavigationFeedbackType.tabChange,
     );
 
     // Store previous index for transition
@@ -154,56 +175,63 @@ class _ShellState extends State<Shell> {
     // Get current index
     final currentIndex = widget.navigationShell.currentIndex;
     
+    // Check if navigation bar should be visible
+    final isNavBarVisible = _container.read(navigationBarVisibilityProvider);
+    
     // Wrap the entire shell in an error boundary
-    return ErrorBoundaryWidget(
-      child: Scaffold(
-        backgroundColor: Colors.black,
-        body: Stack(
-          children: [
-            // Main content with smooth tab transition
-            Positioned.fill(
-              child: SafeArea(
-                bottom: false,
-                // Use a simpler approach to avoid animation issues
-                child: widget.navigationShell,
-              ),
-            ),
-
-            // Bottom navigation bar
-            Positioned(
-              bottom: 0,
-              left: 0,
-              right: 0,
-              child: Container(
-                child: HiveNavigationBar(
-                  selectedIndex: currentIndex,
-                  onDestinationSelected: (index) => _onTap(context, index),
-                  style: HiveNavigationBarStyle.glass,
-                  selectedItemColor: AppColors.gold,
-                  showLabels: true,
-                  destinations: const [
-                    HiveNavigationDestination(
-                      icon: HugeIcons.home,
-                      selectedIcon: HugeIcons.home,
-                      label: 'Feed',
-                    ),
-                    HiveNavigationDestination(
-                      icon: HugeIcons.constellation,
-                      selectedIcon: HugeIcons.constellation,
-                      label: 'Spaces',
-                    ),
-                    HiveNavigationDestination(
-                      icon: HugeIcons.user,
-                      selectedIcon: HugeIcons.user,
-                      label: 'Profile',
-                    ),
-                  ],
+    return UncontrolledProviderScope(
+      container: _container,
+      child: ErrorBoundaryWidget(
+        child: Scaffold(
+          backgroundColor: Colors.black,
+          body: Stack(
+            children: [
+              // Main content with smooth tab transition
+              Positioned.fill(
+                child: SafeArea(
+                  bottom: false,
+                  // Use a simpler approach to avoid animation issues
+                  child: widget.navigationShell,
                 ),
               ),
-            ),
-          ],
+
+              // Bottom navigation bar
+              if (isNavBarVisible)
+                Positioned(
+                  bottom: 0,
+                  left: 0,
+                  right: 0,
+                  child: Container(
+                    child: HiveNavigationBar(
+                      selectedIndex: currentIndex,
+                      onDestinationSelected: (index) => _onTap(context, index),
+                      style: HiveNavigationBarStyle.glass,
+                      selectedItemColor: AppColors.gold,
+                      showLabels: true,
+                      destinations: const [
+                        HiveNavigationDestination(
+                          icon: HugeIcons.home,
+                          selectedIcon: HugeIcons.home,
+                          label: 'Feed',
+                        ),
+                        HiveNavigationDestination(
+                          icon: HugeIcons.constellation,
+                          selectedIcon: HugeIcons.constellation,
+                          label: 'Spaces',
+                        ),
+                        HiveNavigationDestination(
+                          icon: HugeIcons.user,
+                          selectedIcon: HugeIcons.user,
+                          label: 'Profile',
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          extendBody: true, // Allow content to go under the nav bar
         ),
-        extendBody: true, // Allow content to go under the nav bar
       ),
     );
   }

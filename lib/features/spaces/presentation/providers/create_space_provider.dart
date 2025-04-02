@@ -5,11 +5,12 @@ import 'package:hive_ui/features/auth/domain/repositories/auth_repository.dart';
 import 'package:hive_ui/features/auth/presentation/providers/auth_provider.dart';
 import 'package:hive_ui/features/spaces/domain/entities/space.dart' as domain_space;
 import 'package:hive_ui/features/spaces/domain/entities/space_entity.dart';
+import 'package:hive_ui/features/spaces/domain/entities/space_metrics_entity.dart';
 import 'package:hive_ui/features/spaces/domain/repositories/space_repository.dart';
 import 'package:hive_ui/features/spaces/domain/repositories/spaces_repository.dart';
 import 'package:hive_ui/features/spaces/domain/usecases/create_space_usecase.dart';
 import 'package:hive_ui/features/spaces/presentation/providers/spaces_repository_provider.dart';
-import 'package:hive_ui/utils/auth_utils.dart';
+import 'package:hive_ui/models/event.dart';
 
 /// Adapter class to bridge between SpacesRepository and SpaceRepository interfaces
 class SpaceRepositoryAdapter implements SpaceRepository {
@@ -18,17 +19,17 @@ class SpaceRepositoryAdapter implements SpaceRepository {
   SpaceRepositoryAdapter(this._spacesRepository);
   
   @override
-  Future<bool> createSpace(domain_space.Space space, {File? coverImage}) async {
+  Future<bool> createSpace(SpaceEntity space, {File? coverImage}) async {
     try {
       await _spacesRepository.createSpace(
         name: space.name,
         description: space.description,
-        spaceType: _mapSpaceType(space.type),
+        spaceType: space.spaceType,
         tags: space.tags,
-        isPrivate: space.privacy == domain_space.SpacePrivacy.private,
-        iconCodePoint: 0xe491, // Default icon
-        creatorId: space.ownerId,
-        isHiveExclusive: true,
+        isPrivate: space.isPrivate,
+        iconCodePoint: space.iconCodePoint,
+        creatorId: space.admins.isNotEmpty ? space.admins.first : '',
+        isHiveExclusive: space.hiveExclusive,
       );
       return true;
     } catch (e) {
@@ -36,68 +37,87 @@ class SpaceRepositoryAdapter implements SpaceRepository {
     }
   }
   
-  /// Maps from Space.SpaceType to SpaceEntity.SpaceType
-  SpaceType _mapSpaceType(domain_space.SpaceType type) {
-    switch (type) {
-      case domain_space.SpaceType.academic:
-        return SpaceType.studentOrg;
-      case domain_space.SpaceType.community:
-        return SpaceType.other;
-      case domain_space.SpaceType.club:
-        return SpaceType.universityOrg;
-      case domain_space.SpaceType.event:
-        return SpaceType.other;
-      default:
-        return SpaceType.other;
+  @override
+  Future<SpaceEntity?> getSpaceById(String spaceId, {String? spaceType}) async {
+    try {
+      // Pass the spaceType to the underlying repository if it supports it
+      return await _spacesRepository.getSpaceById(spaceId);
+    } catch (e) {
+      return null;
     }
   }
   
   @override
-  Future<domain_space.Space?> getSpaceById(String spaceId) async {
-    // Implementation omitted for brevity
-    throw UnimplementedError();
+  Future<List<SpaceEntity>> getUserSpaces(String userId) async {
+    try {
+      // SpacesRepository doesn't have a method that takes userId, 
+      // using getJoinedSpaces() as a fallback
+      return await _spacesRepository.getJoinedSpaces();
+    } catch (e) {
+      return [];
+    }
   }
   
   @override
-  Future<List<domain_space.Space>> getUserSpaces() async {
-    // Implementation omitted for brevity
-    throw UnimplementedError();
+  Future<List<SpaceEntity>> getInvitedSpaces(String userId) async {
+    // Not directly supported by SpacesRepository, return empty list
+    return [];
   }
   
   @override
-  Future<List<domain_space.Space>> getTrendingSpaces() async {
-    // Implementation omitted for brevity
-    throw UnimplementedError();
+  Future<List<SpaceEntity>> getTrendingSpaces() async {
+    try {
+      return await _spacesRepository.getTrendingSpaces();
+    } catch (e) {
+      return [];
+    }
   }
   
   @override
-  Future<List<domain_space.Space>> getRecommendedSpaces() async {
-    // Implementation omitted for brevity
-    throw UnimplementedError();
+  Future<List<SpaceEntity>> getRecommendedSpaces(String userId) async {
+    try {
+      // Ignoring userId parameter since the underlying repository 
+      // doesn't support it
+      return await _spacesRepository.getRecommendedSpaces();
+    } catch (e) {
+      return [];
+    }
   }
   
   @override
-  Future<bool> joinSpace(String spaceId) async {
-    // Implementation omitted for brevity
-    throw UnimplementedError();
+  Future<bool> joinSpace(String spaceId, String userId) async {
+    try {
+      // SpacesRepository's joinSpace doesn't take userId
+      await _spacesRepository.joinSpace(spaceId);
+      return true;
+    } catch (e) {
+      return false;
+    }
   }
   
   @override
-  Future<bool> leaveSpace(String spaceId) async {
-    // Implementation omitted for brevity
-    throw UnimplementedError();
+  Future<bool> leaveSpace(String spaceId, String userId) async {
+    try {
+      // SpacesRepository's leaveSpace doesn't take userId
+      await _spacesRepository.leaveSpace(spaceId);
+      return true;
+    } catch (e) {
+      return false;
+    }
   }
   
   @override
-  Future<bool> updateSpace(domain_space.Space space, {File? coverImage}) async {
-    // Implementation omitted for brevity
-    throw UnimplementedError();
+  Future<bool> updateSpace(SpaceEntity space, {File? coverImage}) async {
+    // Not directly supported by SpacesRepository
+    // In a real implementation, you would call a method to update the space
+    return false;
   }
   
   @override
   Future<bool> deleteSpace(String spaceId) async {
-    // Implementation omitted for brevity
-    throw UnimplementedError();
+    // Not directly supported by SpacesRepository
+    // In a real implementation, you would call a method to delete the space
+    return false;
   }
   
   @override
@@ -107,26 +127,102 @@ class SpaceRepositoryAdapter implements SpaceRepository {
   }
   
   @override
-  Future<List<domain_space.Space>> searchSpaces(String query) async {
-    // Implementation omitted for brevity
-    throw UnimplementedError();
+  Future<List<SpaceEntity>> searchSpaces(String query) async {
+    try {
+      return await _spacesRepository.searchSpaces(query);
+    } catch (e) {
+      return [];
+    }
   }
   
   @override
-  Future<List<SpaceEntity>> getSuggestedSpacesForUser({
-    required String userId,
-    int limit = 5,
-  }) async {
+  Future<bool> inviteUsers(String spaceId, List<String> userIds) async {
+    // Not directly supported by SpacesRepository
+    return false;
+  }
+  
+  @override
+  Future<bool> removeInvites(String spaceId, List<String> userIds) async {
+    // Not directly supported by SpacesRepository
+    return false;
+  }
+  
+  @override
+  Future<bool> addAdmin(String spaceId, String userId) async {
+    // Not directly supported by SpacesRepository
+    return false;
+  }
+  
+  @override
+  Future<bool> removeAdmin(String spaceId, String userId) async {
+    // Not directly supported by SpacesRepository
+    return false;
+  }
+  
+  @override
+  Future<bool> createSpaceEvent(String spaceId, String eventId, String creatorId) async {
+    // Not directly supported by SpacesRepository
+    return false;
+  }
+  
+  @override
+  Future<SpaceMetrics> getSpaceMetrics(String spaceId) async {
+    // Not directly supported by SpacesRepository
+    return const SpaceMetrics(
+      memberCount: 0,
+      eventCount: 0,
+      activeMembers: 0,
+    );
+  }
+  
+  @override
+  Future<List<String>> getUserInterests(String userId) async {
+    // Not directly supported by SpacesRepository
+    return [];
+  }
+  
+  @override
+  Future<bool> updateSpaceVerification(String spaceId, bool isVerified) async {
+    // Not directly supported by SpacesRepository
+    return false;
+  }
+  
+  @override
+  Future<List<Event>> getSpaceEvents(String spaceId) async {
     try {
-      // Use the available getRecommendedSpaces method as a substitute
-      final recommendedSpaces = await _spacesRepository.getRecommendedSpaces();
+      // Get events from the space's events subcollection
+      final events = await _spacesRepository.getSpaceEvents(spaceId);
       
-      // Limit the number of spaces returned
-      final limitedSpaces = recommendedSpaces.take(limit).toList();
+      // Convert to Event objects and sort by start date
+      final List<Event> eventsList = events.map((eventData) {
+        return Event(
+          id: eventData.id,
+          title: eventData.title,
+          description: eventData.description,
+          startDate: eventData.startDate,
+          endDate: eventData.endDate,
+          location: eventData.location,
+          organizerEmail: eventData.organizerEmail,
+          organizerName: eventData.organizerName,
+          category: eventData.category,
+          status: eventData.status,
+          link: eventData.link,
+          imageUrl: eventData.imageUrl,
+          source: eventData.source,
+          createdBy: eventData.createdBy,
+          lastModified: eventData.lastModified,
+          visibility: eventData.visibility,
+          attendees: eventData.attendees ?? [],
+          spaceId: spaceId, // Set the spaceId for the event
+        );
+      }).toList();
+
+      // Sort events by start date
+      eventsList.sort((a, b) => a.startDate.compareTo(b.startDate));
       
-      return limitedSpaces;
+      return eventsList;
     } catch (e) {
-      // Return empty list on error
+      print('Error fetching space events: $e');
       return [];
     }
   }
@@ -184,12 +280,10 @@ class CreateSpaceState {
 
 /// Notifier for create space operations
 class CreateSpaceNotifier extends StateNotifier<CreateSpaceState> {
-  final CreateSpaceUseCase _createSpaceUseCase;
   final SpacesRepository _spacesRepository;
   final AuthRepository _authRepository;
 
   CreateSpaceNotifier(
-    this._createSpaceUseCase, 
     this._spacesRepository,
     this._authRepository
   ) : super(const CreateSpaceState());
@@ -244,15 +338,15 @@ class CreateSpaceNotifier extends StateNotifier<CreateSpaceState> {
       // Get current user ID from auth
       final creatorId = _authRepository.getCurrentUser().id;
 
-      // Create space through repository
+      // Create space through repository - force HIVE exclusive type regardless of passed spaceType
       final createdSpace = await _spacesRepository.createSpace(
         name: name,
         description: description,
-        spaceType: spaceType,
+        spaceType: SpaceType.hiveExclusive, // Always force HIVE exclusive type
         tags: tags,
         isPrivate: true, // Enforced by business rule
         iconCodePoint: iconCodePoint,
-        isHiveExclusive: isHiveExclusive,
+        isHiveExclusive: true, // Always set to true
         creatorId: creatorId,
       );
       
@@ -276,8 +370,7 @@ class CreateSpaceNotifier extends StateNotifier<CreateSpaceState> {
 
 /// Provider for the create space state
 final createSpaceProvider = StateNotifierProvider<CreateSpaceNotifier, CreateSpaceState>((ref) {
-  final createSpaceUseCase = ref.watch(createSpaceUseCaseProvider);
   final spacesRepository = ref.watch(spacesRepositoryProvider);
   final authRepository = ref.watch(authRepositoryProvider);
-  return CreateSpaceNotifier(createSpaceUseCase, spacesRepository, authRepository);
+  return CreateSpaceNotifier(spacesRepository, authRepository);
 }); 

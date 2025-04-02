@@ -44,19 +44,34 @@ class MessageUseCase {
 
   // Space messaging
 
-  /// Tries to get a space chat, returning null if the space doesn't have enough members
+  /// Get or create a chat for a space
   Future<Chat?> getSpaceChat(String spaceId) async {
     return await _spaceMessagingService.getOrCreateSpaceChat(spaceId);
   }
 
-  /// Checks if a space has enough members to have chat enabled
+  /// Check if a space has enough members to unlock chat
   Future<bool> isSpaceChatUnlocked(String spaceId) async {
     return await _spaceMessagingService.isSpaceChatUnlocked(spaceId);
   }
 
-  /// Gets number of members needed to unlock chat
+  /// Get number of members needed to unlock chat
   Future<int> getMembersNeededForChat(String spaceId) async {
     return await _spaceMessagingService.getMembersNeededToUnlockChat(spaceId);
+  }
+
+  /// Send an announcement to a space chat
+  Future<Message?> sendSpaceAnnouncement(String spaceId, String senderId, String content) async {
+    return await _spaceMessagingService.sendSpaceAnnouncement(spaceId, senderId, content);
+  }
+
+  /// Get all spaces with chats for a user
+  Future<List<String>> getSpacesWithChatsForUser(String userId) async {
+    return await _spaceMessagingService.getSpacesWithChatsForUser(userId);
+  }
+
+  /// Sync space members with the chat participants
+  Future<void> syncSpaceMembersWithChat(String spaceId) async {
+    await _spaceMessagingService.syncSpaceMembersWithChat(spaceId);
   }
 
   // General chat functionality
@@ -143,6 +158,23 @@ class MessageUseCase {
     return await _updateMessageAfterSend(message, chat.participantIds);
   }
 
+  /// Sends a text message as a reply in a thread with delivery tracking
+  Future<Message> sendTextMessageReply(String chatId, String senderId, String content, String threadParentId) async {
+    // Send the thread reply message via repository
+    final message = await _messageRepository.sendTextMessageReply(
+      chatId, 
+      senderId, 
+      content, 
+      threadParentId
+    );
+    
+    // Get chat details to find recipients
+    final chat = await _messageRepository.getChatDetails(chatId);
+    
+    // Update delivery status for all recipients
+    return await _updateMessageAfterSend(message, chat.participantIds);
+  }
+
   /// Sends an image message with delivery tracking
   Future<Message> sendImageMessage(String chatId, String senderId, File imageFile, {String? caption}) async {
     // Send the message via repository
@@ -153,6 +185,42 @@ class MessageUseCase {
     
     // Update delivery status for all recipients
     return await _updateMessageAfterSend(message, chat.participantIds);
+  }
+
+  /// Sends a file message with delivery tracking
+  Future<Message> sendFileMessage(String chatId, String senderId, File file, String fileName) async {
+    // Upload the file to storage
+    final downloadUrl = await _messageRepository.uploadAttachment(file, chatId, senderId);
+    
+    // Create a message with file attachment
+    final fileExtension = fileName.split('.').last.toLowerCase();
+    
+    // Determine message type based on file extension
+    MessageType messageType;
+    if (['jpg', 'jpeg', 'png', 'gif'].contains(fileExtension)) {
+      messageType = MessageType.image;
+    } else if (['mp4', 'mov', 'avi'].contains(fileExtension)) {
+      messageType = MessageType.video;
+    } else if (['mp3', 'wav', 'm4a'].contains(fileExtension)) {
+      messageType = MessageType.audio;
+    } else {
+      messageType = MessageType.file;
+    }
+    
+    // Send the message with attachment
+    final message = await _messageRepository.sendMessageWithAttachment(
+      chatId,
+      senderId,
+      downloadUrl,
+      fileName,
+      messageType,
+    );
+    
+    // Get chat details to find recipients
+    final chatDetails = await _messageRepository.getChatDetails(chatId);
+    
+    // Update delivery status for all recipients
+    return await _updateMessageAfterSend(message, chatDetails.participantIds);
   }
 
   /// Marks a message as read for the current user
@@ -177,6 +245,16 @@ class MessageUseCase {
         await markMessageAsRead(message.id, userId);
       }
     }
+  }
+
+  /// Adds a reaction to a message
+  Future<void> addMessageReaction(String chatId, String messageId, String userId, String emoji) async {
+    await _messageRepository.addMessageReaction(chatId, messageId, userId, emoji);
+  }
+
+  /// Removes a reaction from a message
+  Future<void> removeMessageReaction(String chatId, String messageId, String userId, String emoji) async {
+    await _messageRepository.removeMessageReaction(chatId, messageId, userId, emoji);
   }
 
   /// Gets users in a chat

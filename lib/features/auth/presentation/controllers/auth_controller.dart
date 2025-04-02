@@ -86,6 +86,15 @@ class AuthController extends StateNotifier<AsyncValue<void>> {
       String email, String password) async {
     state = const AsyncValue.loading();
     try {
+      // Track signup attempt
+      await _analyticsService.trackEvent(
+        'signup_attempt',
+        parameters: {
+          'email_domain': email.split('@').last,
+          'platform': defaultTargetPlatform.toString(),
+        },
+      );
+
       await _signUpUseCase(SignUpParams(email: email, password: password));
 
       // Track successful signup
@@ -93,24 +102,60 @@ class AuthController extends StateNotifier<AsyncValue<void>> {
         method: 'email_password',
         additionalParams: {
           'email_domain': email.split('@').last,
+          'platform': defaultTargetPlatform.toString(),
+          'status': 'success',
         },
       );
 
+      // Send email verification
+      try {
+        await _sendEmailVerificationUseCase();
+      } catch (e) {
+        debugPrint('Failed to send verification email: $e');
+        // Don't rethrow - we still want to complete signup
+      }
+
       state = const AsyncValue.data(null);
     } catch (e, stack) {
-      // Track auth error
-      final errorCode = e.toString().contains('firebase_auth')
-          ? e.toString().split('/')[1].split(']')[0]
-          : 'unknown_error';
+      String errorCode;
+      String errorMessage;
 
+      if (e.toString().contains('firebase_auth')) {
+        errorCode = e.toString().split('/')[1].split(']')[0];
+        errorMessage = _getReadableErrorMessage(errorCode);
+      } else {
+        errorCode = 'unknown_error';
+        errorMessage = e.toString();
+      }
+
+      // Track auth error
       await _analyticsService.trackAuthError(
         method: 'signup_email_password',
         errorCode: errorCode,
-        errorMessage: e.toString(),
+        errorMessage: errorMessage,
+        additionalParams: {
+          'platform': defaultTargetPlatform.toString(),
+        },
       );
 
-      state = AsyncValue.error(e, stack);
-      rethrow;
+      state = AsyncValue.error(errorMessage, stack);
+      throw errorMessage;
+    }
+  }
+
+  /// Convert Firebase error codes to user-friendly messages
+  String _getReadableErrorMessage(String errorCode) {
+    switch (errorCode) {
+      case 'email-already-in-use':
+        return 'This email is already registered. Please try signing in instead.';
+      case 'invalid-email':
+        return 'Please enter a valid email address.';
+      case 'operation-not-allowed':
+        return 'Email/password accounts are not enabled. Please contact support.';
+      case 'weak-password':
+        return 'Please choose a stronger password. Use at least 6 characters with a mix of letters and numbers.';
+      default:
+        return 'An error occurred during sign up. Please try again.';
     }
   }
 

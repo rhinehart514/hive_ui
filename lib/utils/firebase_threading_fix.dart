@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 
 /// Utility class to handle Firebase Firestore threading issues.
 ///
@@ -60,18 +61,34 @@ extension StreamExtension<T> on Stream<T> {
   Stream<T> switchToUiThread() {
     if (kIsWeb) return this; // No threading issues on web
     
-    return transform(
-      StreamTransformer.fromHandlers(
-        handleData: (data, sink) {
-          Future.microtask(() => sink.add(data));
-        },
-        handleError: (error, stackTrace, sink) {
-          Future.microtask(() => sink.addError(error, stackTrace));
-        },
-        handleDone: (sink) {
-          Future.microtask(() => sink.close());
-        },
-      ),
+    // Enhanced version to ensure everything happens on the main thread
+    final controller = StreamController<T>.broadcast();
+    
+    listen(
+      (data) {
+        // Ensure we're posting to the UI thread
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!controller.isClosed) {
+            controller.add(data);
+          }
+        });
+      },
+      onError: (error, stackTrace) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!controller.isClosed) {
+            controller.addError(error, stackTrace);
+          }
+        });
+      },
+      onDone: () {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!controller.isClosed) {
+            controller.close();
+          }
+        });
+      },
     );
+    
+    return controller.stream;
   }
 }

@@ -1,3 +1,6 @@
+import 'package:hive_ui/models/club.dart';
+import 'package:hive_ui/models/space.dart';
+
 /// Route path constants for the application
 class AppRoutes {
   // Auth routes
@@ -29,9 +32,11 @@ class AppRoutes {
   static const String organizations = 'organizations';
   static const String organizationProfile = 'organizations/:organizationId';
   static const String hiveLab = 'hivelab';
+  static const String createPost = 'post/create';
 
   // Spaces sub-routes
-  static const String clubSpace = 'club';
+  static const String clubSpace = 'club'; // Legacy route - will be removed
+  static const String spaceDetail = ':type/spaces/:id'; // New format
   static const String spacesRevamp = 'revamp';
   static const String createSpace = 'create';
   static const String createEvent = 'create-event';
@@ -59,8 +64,9 @@ class AppRoutes {
   static String getOrganizationProfilePath(String id) =>
       '$home/organizations/$id';
   static String getHiveLabPath() => '$home/$hiveLab';
-  static String getClubSpacePath() => '$spaces/$clubSpace';
   static String getSpacesRevampPath() => '$spaces/$spacesRevamp';
+  static String getSpaceDetailPath(String type, String id) => '$spaces/$type/spaces/$id';
+  static String getLegacyClubSpacePath(String id) => '$spaces/$clubSpace?id=$id'; // Legacy - will be removed
   static String getCreateSpacePath() => '$spaces/$createSpace';
   static String getSpaceSearchPath() => '$spaces/$spaceSearch';
   static String getSpaceViewPath(String id) => '$spaces/$id';
@@ -109,10 +115,39 @@ class GroupMembersRouteParams {
   Map<String, String> toPathParameters() => {'chatId': chatId};
 }
 
+/// Route parameters for space navigation
+class SpaceRouteParams {
+  final String spaceId;
+  final String spaceType;
+  final Space? space; // Optional space object for direct navigation
+
+  const SpaceRouteParams({
+    required this.spaceId,
+    required this.spaceType,
+    this.space,
+  });
+
+  Map<String, String> toPathParameters() => {
+    'id': spaceId,
+    'type': spaceType,
+  };
+
+  Map<String, dynamic>? toExtra() => space != null ? {'space': space} : null;
+}
+
+/// Legacy route parameters for club navigation
+/// @deprecated Use SpaceRouteParams instead
+@Deprecated('Use SpaceRouteParams instead')
 class ClubSpaceRouteParams {
   final String clubId;
+  final Club? club;
 
-  const ClubSpaceRouteParams({required this.clubId});
+  const ClubSpaceRouteParams({
+    required this.clubId,
+    this.club,
+  });
 
   Map<String, String> toQueryParameters() => {'id': clubId};
+  
+  Map<String, dynamic>? toExtra() => club != null ? {'club': club} : null;
 }

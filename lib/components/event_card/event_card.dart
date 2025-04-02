@@ -3,16 +3,21 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../models/event.dart';
+import '../../models/user_profile.dart';
+import '../../models/repost_content_type.dart';
 import '../../theme/app_colors.dart';
-import '../../providers/profile_provider.dart';
-import '../../theme/app_icons.dart';
 import '../../theme/huge_icons.dart';
 import '../../services/event_service.dart';
-import '../optimized_image.dart';
-import '../../models/repost_content_type.dart';
-import '../../services/feed/feed_analytics.dart';
-import '../../models/user_profile.dart';
+import '../../providers/profile_provider.dart';
+import '../../providers/reposted_events_provider.dart';
+import '../../components/optimized_image.dart';
 import 'repost_options_card.dart';
+import 'package:go_router/go_router.dart';
+import '../../providers/feed_provider.dart';
+import '../../theme/app_icons.dart';
+import '../../services/feed/feed_analytics.dart';
+import '../../utils/auth_utils.dart';
+import 'package:intl/intl.dart';
 
 /// A premium event card component that follows HIVE's brand aesthetic:
 /// - Black/white core with layered visual depth
@@ -54,6 +59,9 @@ class HiveEventCard extends ConsumerStatefulWidget {
   /// List of boost timestamps for today (to check if already boosted)
   final List<DateTime> todayBoosts;
 
+  /// Whether this card is being displayed as part of a quote
+  final bool isQuoted;
+
   /// Constructor
   const HiveEventCard({
     Key? key,
@@ -68,6 +76,7 @@ class HiveEventCard extends ConsumerStatefulWidget {
     this.onRepost,
     this.followsClub = false,
     this.todayBoosts = const [],
+    this.isQuoted = false,
   }) : super(key: key);
 
   @override
@@ -146,6 +155,34 @@ class _HiveEventCardState extends ConsumerState<HiveEventCard>
     }
   }
   
+  // Check if current user has reposted this event
+  bool _hasUserReposted() {
+    try {
+      final currentUser = ref.watch(profileProvider).profile;
+      if (currentUser != null) {
+        final repostedEvents = ref.watch(repostedEventsProvider);
+        return repostedEvents.any((repost) => 
+          repost.event.id == widget.event.id && 
+          repost.repostedBy.id == currentUser.id
+        );
+      }
+    } catch (e) {
+      debugPrint('Error checking if user reposted: $e');
+    }
+    return false;
+  }
+  
+  // Get repost count for this event
+  int _getRepostCount() {
+    try {
+      final repostedEvents = ref.watch(repostedEventsProvider);
+      return repostedEvents.where((repost) => repost.event.id == widget.event.id).length;
+    } catch (e) {
+      debugPrint('Error getting repost count: $e');
+      return 0;
+    }
+  }
+  
   // Log view interaction for analytics
   void _logViewInteraction() {
     try {
@@ -157,9 +194,15 @@ class _HiveEventCardState extends ConsumerState<HiveEventCard>
 
   // Handle card tap with haptic feedback
   void _handleTap() {
-    if (widget.onTap != null) {
-      HapticFeedback.selectionClick();
-      widget.onTap!(widget.event);
+    HapticFeedback.selectionClick();
+    
+    // Navigate to event details using router with relative path
+    final context = this.context;
+    if (context.mounted) {
+      GoRouter.of(context).push(
+        'event/${widget.event.id}',  // Use relative path instead of absolute
+        extra: {'event': widget.event},
+      );
     }
   }
 
@@ -213,9 +256,23 @@ class _HiveEventCardState extends ConsumerState<HiveEventCard>
     
     // Show repost options bottom sheet
     if (widget.onRepost != null) {
+      // No longer need to check authentication here as it's handled in the parent
       context.showRepostOptions(
         event: widget.event,
-        onRepostSelected: widget.onRepost!,
+        onRepostSelected: (event, comment, contentType) async {
+          // Call the callback
+          if (widget.onRepost != null) {
+            await widget.onRepost!(event, comment, contentType);
+            
+            // Just trigger the animation without showing a duplicate message
+            if (mounted) {
+              // Trigger a confetti animation or other visual feedback
+              _animationController.forward().then((_) {
+                _animationController.reverse();
+              });
+            }
+          }
+        },
         followsClub: widget.followsClub,
         todayBoosts: widget.todayBoosts,
       );
@@ -235,85 +292,183 @@ class _HiveEventCardState extends ConsumerState<HiveEventCard>
 
   @override
   Widget build(BuildContext context) {
-    // Log view when visible
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!_hasLoggedView) {
-        _logViewInteraction();
-        _hasLoggedView = true;
-      }
-    });
+    final now = DateTime.now();
+    final eventDate = widget.event.startDate;
+    final dateFormatter = DateFormat('MMM d');
+    final timeFormatter = DateFormat('h:mm a');
 
-    // Check if the card is reposted
-    final isReposted = widget.isRepost && widget.repostedBy != null;
-    final isQuote = isReposted && widget.repostType == RepostContentType.quote && widget.quoteText != null && widget.quoteText!.isNotEmpty;
-
-    return AnimatedSize(
-      duration: const Duration(milliseconds: 300),
-      curve: Curves.easeInOut,
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.black,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: Colors.white.withOpacity(0.1),
+          width: 0.5,
+        ),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Show repost header if this is a repost with animation
-          AnimatedSwitcher(
-            duration: const Duration(milliseconds: 300),
-            transitionBuilder: (Widget child, Animation<double> animation) {
-              return SlideTransition(
-                position: Tween<Offset>(
-                  begin: const Offset(0, -0.5),
-                  end: Offset.zero,
-                ).animate(animation),
-                child: FadeTransition(
-                  opacity: animation,
-                  child: child,
-                ),
-              );
-            },
-            child: isReposted
-                ? isQuote 
-                    ? _QuoteRepostHeader(
-                        key: ValueKey('quote_${widget.event.id}'),
-                        user: widget.repostedBy!,
-                        time: widget.repostTimestamp ?? DateTime.now(),
-                        quoteText: widget.quoteText!,
-                        event: widget.event,
-                        onEventTap: widget.onTap != null ? () => widget.onTap!(widget.event) : null,
-                      )
-                    : _RepostHeader(
-                        key: ValueKey('repost_${widget.event.id}'),
-                        user: widget.repostedBy!,
-                        time: widget.repostTimestamp ?? DateTime.now(),
-                        repostType: widget.repostType,
-                      )
-                : const SizedBox.shrink(key: ValueKey('no_repost')),
-          ),
-          
-          // Only show the main card if this is not a quote repost
-          // For quote reposts, the quoted event is shown in the header
-          if (!isQuote)
-            AnimatedScale(
-              scale: _isPressed ? 0.98 : 1.0,
-              duration: const Duration(milliseconds: 150),
-              curve: Curves.easeOut,
-              child: GestureDetector(
-                onTap: _handleTap,
-                onTapDown: (_) => setState(() => _isPressed = true),
-                onTapUp: (_) => setState(() => _isPressed = false),
-                onTapCancel: () => setState(() => _isPressed = false),
-                child: _EventCardBody(
-                  event: widget.event,
-                  isRsvped: _isRsvped,
-                  isRepostScaling: _isRepostScaling,
-                  onRsvp: _handleRsvp,
-                  onRepostScale: _triggerRepostScale,
-                  onRepost: _handleRepost,
-                  followsClub: widget.followsClub,
-                  todayBoosts: widget.todayBoosts,
-                ),
+          // Repost header if applicable
+          if (widget.isRepost && widget.repostedBy != null)
+            Padding(
+              padding: const EdgeInsets.all(12),
+              child: Row(
+                children: [
+                  Text(
+                    '${widget.repostedBy!.displayName} reposted',
+                    style: GoogleFonts.inter(
+                      color: Colors.white.withOpacity(0.7),
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  if (widget.repostTimestamp != null)
+                    Text(
+                      ' · ${_formatTimeAgo(widget.repostTimestamp!)}',
+                      style: GoogleFonts.inter(
+                        color: Colors.white.withOpacity(0.5),
+                        fontSize: 14,
+                      ),
+                    ),
+                ],
               ),
             ),
+
+          // Event content
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Date header
+                Text(
+                  dateFormatter.format(eventDate).toUpperCase(),
+                  style: GoogleFonts.inter(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+                const SizedBox(height: 8),
+
+                // Event title
+                Text(
+                  widget.event.title,
+                  style: GoogleFonts.inter(
+                    color: Colors.white,
+                    fontSize: 20,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 12),
+
+                // Time and location
+                Row(
+                  children: [
+                    Icon(
+                      Icons.access_time,
+                      size: 16,
+                      color: Colors.white.withOpacity(0.7),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      '${timeFormatter.format(widget.event.startDate)} - ${timeFormatter.format(widget.event.endDate)}',
+                      style: GoogleFonts.inter(
+                        color: Colors.white.withOpacity(0.7),
+                        fontSize: 14,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Icon(
+                      Icons.location_on,
+                      size: 16,
+                      color: Colors.white.withOpacity(0.7),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      widget.event.location,
+                      style: GoogleFonts.inter(
+                        color: Colors.white.withOpacity(0.7),
+                        fontSize: 14,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+
+                // RSVP button and actions
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    // RSVP Button
+                    TextButton(
+                      onPressed: _handleRsvp,
+                      style: TextButton.styleFrom(
+                        backgroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                      child: Text(
+                        'RSVP',
+                        style: GoogleFonts.inter(
+                          color: Colors.black,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                    // Circular indicator/action button
+                    Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: AppColors.gold.withOpacity(0.5),
+                          width: 2,
+                        ),
+                      ),
+                      child: IconButton(
+                        icon: Icon(
+                          Icons.more_horiz,
+                          color: AppColors.gold,
+                          size: 20,
+                        ),
+                        onPressed: _handleRepost,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
         ],
       ),
     );
+  }
+
+  String _formatTimeAgo(DateTime time) {
+    final now = DateTime.now();
+    final difference = now.difference(time);
+    
+    if (difference.inDays > 0) {
+      return '${difference.inDays}d';
+    } else if (difference.inHours > 0) {
+      return '${difference.inHours}h';
+    } else if (difference.inMinutes > 0) {
+      return '${difference.inMinutes}m';
+    } else {
+      return 'now';
+    }
   }
 }
 
@@ -486,6 +641,8 @@ class _QuoteRepostHeader extends StatelessWidget {
                         color: AppColors.textPrimary,
                         fontSize: 15,
                       ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
                     Text(
                       _formatTimeAgo(time),
@@ -505,7 +662,7 @@ class _QuoteRepostHeader extends StatelessWidget {
                   color: AppColors.gold.withOpacity(0.15),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: Icon(
+                child: const Icon(
                   Icons.format_quote,
                   size: 16,
                   color: AppColors.gold,
@@ -515,25 +672,71 @@ class _QuoteRepostHeader extends StatelessWidget {
           ),
           
           // Quote text
-          if (quoteText.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.only(top: 12, bottom: 12),
-              child: Text(
-                quoteText,
-                style: GoogleFonts.inter(
-                  fontSize: 16,
-                  color: AppColors.textPrimary,
-                  height: 1.3,
-                ),
-                maxLines: 6,
-                overflow: TextOverflow.ellipsis,
+          Padding(
+            padding: const EdgeInsets.only(top: 12, bottom: 16),
+            child: Text(
+              quoteText,
+              style: GoogleFonts.inter(
+                color: AppColors.textPrimary,
+                fontSize: 16,
+                height: 1.4,
               ),
             ),
+          ),
           
-          // Quoted event card
-          _QuotedEventCard(
-            event: event,
-            onTap: onEventTap,
+          // Quoted event preview
+          Container(
+            decoration: BoxDecoration(
+              color: AppColors.cardBackground,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: AppColors.grey800,
+                width: 1,
+              ),
+            ),
+            clipBehavior: Clip.antiAlias,
+            child: InkWell(
+              onTap: onEventTap,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (event.imageUrl.isNotEmpty)
+                    AspectRatio(
+                      aspectRatio: 16 / 9,
+                      child: Image.network(
+                        event.imageUrl,
+                        fit: BoxFit.cover,
+                      ),
+                    ),
+                  Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          event.title,
+                          style: GoogleFonts.inter(
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.textPrimary,
+                            fontSize: 14,
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          '${event.formattedTimeRange} • ${event.organizerName}',
+                          style: GoogleFonts.inter(
+                            color: AppColors.textSecondary,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ),
         ],
       ),
@@ -570,6 +773,8 @@ class _EventCardBody extends StatelessWidget {
   final VoidCallback onRepost;
   final bool followsClub;
   final List<DateTime> todayBoosts;
+  final EdgeInsets margin;
+  final double borderRadius;
 
   const _EventCardBody({
     required this.event,
@@ -580,6 +785,8 @@ class _EventCardBody extends StatelessWidget {
     required this.onRepost,
     this.followsClub = false,
     this.todayBoosts = const [],
+    this.margin = const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+    this.borderRadius = 24.0,
   });
 
   @override
@@ -588,10 +795,10 @@ class _EventCardBody extends StatelessWidget {
       duration: const Duration(milliseconds: 300),
       curve: Curves.easeInOut,
       width: double.infinity,
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      margin: margin,
       decoration: BoxDecoration(
         color: Colors.black.withOpacity(0.75),
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: BorderRadius.circular(borderRadius),
         border: Border.all(color: Colors.white.withOpacity(0.08)),
         boxShadow: [
           BoxShadow(
@@ -607,9 +814,9 @@ class _EventCardBody extends StatelessWidget {
           // Event image if available
           if (event.imageUrl.isNotEmpty)
             ClipRRect(
-              borderRadius: const BorderRadius.only(
-                topLeft: Radius.circular(24),
-                topRight: Radius.circular(24),
+              borderRadius: BorderRadius.only(
+                topLeft: Radius.circular(borderRadius),
+                topRight: Radius.circular(borderRadius),
               ),
               child: OptimizedImage(
                 imageUrl: event.imageUrl,
@@ -999,95 +1206,6 @@ class _AnimatedRsvpButtonState extends State<_AnimatedRsvpButton>
             ),
           );
         },
-      ),
-    );
-  }
-}
-
-/// Specialized component for displaying a quoted event in X/Twitter format
-class _QuotedEventCard extends StatelessWidget {
-  final Event event;
-  final VoidCallback? onTap;
-  
-  const _QuotedEventCard({
-    required this.event,
-    this.onTap,
-  });
-  
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: double.infinity,
-        decoration: BoxDecoration(
-          color: Colors.black.withOpacity(0.3),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: Colors.white.withOpacity(0.1),
-          ),
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Event image
-            if (event.imageUrl.isNotEmpty)
-              AspectRatio(
-                aspectRatio: 16/9,
-                child: OptimizedImage(
-                  imageUrl: event.imageUrl,
-                  fit: BoxFit.cover,
-                ),
-              ),
-            
-            // Event details
-            Padding(
-              padding: const EdgeInsets.all(12.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Event title
-                  Text(
-                    event.title,
-                    style: GoogleFonts.inter(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16,
-                      color: AppColors.white,
-                    ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  
-                  const SizedBox(height: 4),
-                  
-                  // Event time and location
-                  Text(
-                    '${event.formattedTimeRange} • ${event.location}',
-                    style: GoogleFonts.inter(
-                      fontSize: 14,
-                      color: AppColors.textSecondary,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  
-                  // Organizer
-                  Padding(
-                    padding: const EdgeInsets.only(top: 8.0),
-                    child: Text(
-                      'By ${event.organizerName}',
-                      style: GoogleFonts.inter(
-                        fontSize: 14,
-                        color: AppColors.textSecondary,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }

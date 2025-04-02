@@ -235,11 +235,33 @@ class UserDataNotifier extends StateNotifier<UserData?> {
     
     // Also update Firestore
     if (state?.id != null) {
-      FirebaseFirestore.instance.collection('users').doc(state!.id).update({
-        'followedSpaces': FieldValue.arrayUnion([clubId]),
-        'updatedAt': FieldValue.serverTimestamp(),
+      // Get the current followedSpaces array length to update clubCount
+      FirebaseFirestore.instance.collection('users').doc(state!.id).get().then((doc) {
+        if (doc.exists) {
+          final data = doc.data();
+          if (data != null) {
+            List<String> followedSpaces = [];
+            if (data['followedSpaces'] is List) {
+              followedSpaces = List<String>.from(data['followedSpaces']);
+            }
+            
+            // Add the club if it's not already in the list
+            if (!followedSpaces.contains(clubId)) {
+              followedSpaces.add(clubId);
+            }
+            
+            // Update both followedSpaces and clubCount
+            FirebaseFirestore.instance.collection('users').doc(state!.id).update({
+              'followedSpaces': FieldValue.arrayUnion([clubId]),
+              'clubCount': followedSpaces.length,
+              'updatedAt': FieldValue.serverTimestamp(),
+            }).catchError((error) {
+              debugPrint('UserDataNotifier: Error updating Firestore: $error');
+            });
+          }
+        }
       }).catchError((error) {
-        debugPrint('UserDataNotifier: Error updating Firestore: $error');
+        debugPrint('UserDataNotifier: Error getting user document: $error');
       });
     }
   }
@@ -252,11 +274,33 @@ class UserDataNotifier extends StateNotifier<UserData?> {
     
     // Also update Firestore
     if (state?.id != null) {
-      FirebaseFirestore.instance.collection('users').doc(state!.id).update({
-        'followedSpaces': FieldValue.arrayRemove([clubId]),
-        'updatedAt': FieldValue.serverTimestamp(),
+      // Get the current followedSpaces array length to update clubCount
+      FirebaseFirestore.instance.collection('users').doc(state!.id).get().then((doc) {
+        if (doc.exists) {
+          final data = doc.data();
+          if (data != null) {
+            List<String> followedSpaces = [];
+            if (data['followedSpaces'] is List) {
+              followedSpaces = List<String>.from(data['followedSpaces']);
+            }
+            
+            // Remove the club if it's in the list
+            if (followedSpaces.contains(clubId)) {
+              followedSpaces.remove(clubId);
+            }
+            
+            // Update both followedSpaces and clubCount
+            FirebaseFirestore.instance.collection('users').doc(state!.id).update({
+              'followedSpaces': FieldValue.arrayRemove([clubId]),
+              'clubCount': followedSpaces.length,
+              'updatedAt': FieldValue.serverTimestamp(),
+            }).catchError((error) {
+              debugPrint('UserDataNotifier: Error updating Firestore: $error');
+            });
+          }
+        }
       }).catchError((error) {
-        debugPrint('UserDataNotifier: Error updating Firestore: $error');
+        debugPrint('UserDataNotifier: Error getting user document: $error');
       });
     }
   }

@@ -236,7 +236,7 @@ Future<void> checkSpacesInCollection(String spaceType, Map<String, dynamic> stat
           // Check if space is in the wrong collection
           if (correctType != spaceType) {
             stats['inconsistent_spaces'] = (stats['inconsistent_spaces'] as int) + 1;
-            print('Space ${spaceDoc.id} has type ${declaredType} but is in $spaceType collection');
+            print('Space ${spaceDoc.id} has type $declaredType but is in $spaceType collection');
           }
         }
         

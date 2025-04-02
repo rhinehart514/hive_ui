@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hive_ui/core/navigation/routes.dart';
 import 'package:hive_ui/core/navigation/transitions.dart';
@@ -36,14 +37,14 @@ class NavigationService {
 
   /// Navigate to the sign in page
   static void goToSignIn(BuildContext context) {
-    _applyTransition(NavigationFeedbackType.pageTransition);
-    GoRouter.of(context).go(AppRoutes.signIn);
+    _applyTransition(NavigationFeedbackType.modalOpen);
+    GoRouter.of(context).push(AppRoutes.signIn);
   }
 
   /// Navigate to the create account page
   static void goToCreateAccount(BuildContext context) {
-    _applyTransition(NavigationFeedbackType.pageTransition);
-    GoRouter.of(context).go(AppRoutes.createAccount);
+    _applyTransition(NavigationFeedbackType.modalOpen);
+    GoRouter.of(context).push(AppRoutes.createAccount);
   }
 
   /// Navigate to the onboarding page
@@ -60,7 +61,7 @@ class NavigationService {
 
   /// Navigate to the spaces screen
   static void goToSpaces(BuildContext context) {
-    _applyTransition(NavigationFeedbackType.pageTransition);
+    _applyTransition(NavigationFeedbackType.tabChange);
     GoRouter.of(context).go(AppRoutes.spaces);
   }
 
@@ -77,13 +78,13 @@ class NavigationService {
 
   /// Navigate to profile page
   static void goToProfile(BuildContext context) {
-    _applyTransition(NavigationFeedbackType.pageTransition);
+    _applyTransition(NavigationFeedbackType.tabChange);
     GoRouter.of(context).go(AppRoutes.profile);
   }
 
   /// Navigate to messaging page
   static void goToMessaging(BuildContext context) {
-    _applyTransition(NavigationFeedbackType.pageTransition);
+    _applyTransition(NavigationFeedbackType.tabChange);
     GoRouter.of(context).go(AppRoutes.messaging);
   }
 
@@ -113,8 +114,24 @@ class NavigationService {
 
   /// Apply navigation transition feedback with the appropriate feedback type
   static void _applyTransition(NavigationFeedbackType type) {
-    NavigationTransitions.applyNavigationFeedback(
-      type: type,
-    );
+    NavigationTransitions.applyNavigationFeedback(type: type);
+  }
+
+  /// Pop the current route
+  static void pop(BuildContext context) {
+    if (GoRouter.of(context).canPop()) {
+      _applyTransition(NavigationFeedbackType.modalDismiss);
+      GoRouter.of(context).pop();
+    }
+  }
+
+  /// Pop to a specific route
+  static void popUntil(BuildContext context, String routeName) {
+    final router = GoRouter.of(context);
+    while (router.canPop() && 
+           !router.routeInformationProvider.value.location!.startsWith(routeName)) {
+      _applyTransition(NavigationFeedbackType.modalDismiss);
+      router.pop();
+    }
   }
 }

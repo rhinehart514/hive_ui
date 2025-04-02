@@ -6,9 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:hive_ui/features/friends/domain/entities/suggested_friend.dart';
 import 'package:hive_ui/features/friends/presentation/providers/suggested_friends_provider.dart' as friends_providers;
 import 'package:hive_ui/theme/app_colors.dart';
-import 'package:hive_ui/features/profile/presentation/providers/profile_providers.dart';
 import 'package:hive_ui/theme/huge_icons.dart';
-import 'dart:ui';
 
 /// Card widget displaying a suggested friend in the feed
 class FeedSuggestedFriendCard extends StatefulWidget {
@@ -83,7 +81,7 @@ class _FeedSuggestedFriendCardState extends State<FeedSuggestedFriendCard> {
                       // Section title with premium styling
                       Row(
                         children: [
-                          Icon(
+                          const Icon(
                             HugeIcons.user,
                             size: 16,
                             color: AppColors.gold,

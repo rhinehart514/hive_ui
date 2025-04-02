@@ -166,7 +166,7 @@ class _EventCardState extends ConsumerState<EventCard>
                   const BorderRadius.vertical(top: Radius.circular(16)),
               child: EventImage(
                 event: widget.event,
-                height: 240,
+                height: imageHeight,
                 width: double.infinity,
                 fit: BoxFit.cover,
               ),

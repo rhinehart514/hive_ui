@@ -109,56 +109,10 @@ class FirebaseAuthRepository implements AuthRepository {
     try {
       debugPrint('Starting email/password sign in');
 
-      // Check if we're on Windows which has known Firebase plugin issues
-      final isWindowsPlatform = defaultTargetPlatform == TargetPlatform.windows;
-      
-      if (isWindowsPlatform) {
-        // Windows-specific handling to prevent thread issues
-        try {
-          final userCredential = await _firebaseAuth.signInWithEmailAndPassword(
-            email: email,
-            password: password,
-          );
-          
-          final user = userCredential.user;
-          if (user != null) {
-            // Fire and forget profile update to reduce blocking time
-            _updateUserLoginTime(user.uid);
-          }
-          
-          // Return the mapped user
-          final authUser = _mapFirebaseUserToAuthUser(user);
-          _cachedUser = authUser;
-          _lastUserCheck = DateTime.now();
-          
-          return authUser;
-        } catch (e) {
-          debugPrint('Windows auth error: $e');
-          
-          // Special Windows error recovery
-          if (e.toString().contains('PigeonUserDetails') || 
-              e.toString().contains('List<Object?>') ||
-              e.toString().contains('platform thread')) {
-            
-            // Wait a moment for auth state to update despite the error
-            await Future.delayed(const Duration(milliseconds: 500));
-            
-            // Check if we're actually signed in despite the error
-            final currentUser = _firebaseAuth.currentUser;
-            if (currentUser != null) {
-              debugPrint('Windows platform recovery successful');
-              final authUser = _mapFirebaseUserToAuthUser(currentUser);
-              _cachedUser = authUser;
-              _lastUserCheck = DateTime.now();
-              return authUser;
-            }
-          }
-          rethrow; // If recovery failed, rethrow the error for default handling
-        }
-      } else {
-        // Non-Windows platform regular flow
+      // Windows-specific error handling for PigeonUserDetails issue
+      try {
         final userCredential = await _firebaseAuth.signInWithEmailAndPassword(
-          email: email,
+          email: email.trim(),
           password: password,
         );
 
@@ -174,39 +128,35 @@ class FirebaseAuthRepository implements AuthRepository {
         _lastUserCheck = DateTime.now();
 
         return authUser;
+      } catch (e) {
+        // Handle Windows-specific PigeonUserDetails error
+        if (e.toString().contains('PigeonUserDetails')) {
+          debugPrint('Handling Windows-specific PigeonUserDetails error');
+          // Wait for auth state to propagate
+          await Future.delayed(const Duration(milliseconds: 200));
+          
+          // Check if the user was actually signed in
+          final currentUser = _firebaseAuth.currentUser;
+          if (currentUser != null) {
+            debugPrint('User successfully signed in despite PigeonUserDetails error');
+            // Update login time
+            _updateUserLoginTime(currentUser.uid);
+            
+            // Return the user object
+            final authUser = _mapFirebaseUserToAuthUser(currentUser);
+            _cachedUser = authUser;
+            _lastUserCheck = DateTime.now();
+            return authUser;
+          }
+        }
+        rethrow;
       }
     } on FirebaseAuthException catch (e) {
       debugPrint('Firebase auth error: ${e.code} - ${e.message}');
       throw _mapFirebaseAuthExceptionToMessage(e);
     } catch (e) {
-      debugPrint('Unknown error during sign in: $e');
-
-      // Check if we're on Windows which has known Firebase plugin issues
-      final isWindowsPlatform = defaultTargetPlatform == TargetPlatform.windows;
-
-      if (isWindowsPlatform &&
-          (e.toString().contains('PigeonUserDetails') ||
-              e.toString().contains('NoSuchMethodError') ||
-              e.toString().contains('null check') ||
-              e.toString().contains('platform channel') ||
-              e.toString().contains('List<Object?>'))) {
-        // Special Windows recovery - try to find the user
-        // Wait a moment for auth state to update despite the error
-        await Future.delayed(const Duration(milliseconds: 1000));
-        
-        final currentUser = _firebaseAuth.currentUser;
-        if (currentUser != null) {
-          debugPrint('Windows platform recovery successful');
-          final authUser = _mapFirebaseUserToAuthUser(currentUser);
-          _cachedUser = authUser;
-          _lastUserCheck = DateTime.now();
-          return authUser;
-        }
-      }
-
-      throw isWindowsPlatform
-          ? 'Sign-in encountered a temporary issue on Windows. Please try again or restart the app.'
-          : 'An unexpected error occurred. Please try again.';
+      debugPrint('Error during sign in: $e');
+      throw 'An unexpected error occurred. Please try again.';
     }
   }
 
@@ -214,70 +164,110 @@ class FirebaseAuthRepository implements AuthRepository {
   Future<AuthUser> createUserWithEmailPassword(
       String email, String password) async {
     try {
-      // Check if we're on Windows which has known Firebase plugin issues
-      final isWindowsPlatform = defaultTargetPlatform == TargetPlatform.windows;
-      
-      User? userResult;
-      if (isWindowsPlatform) {
-        // Windows-specific handling to prevent thread issues
-        try {
-          final userCredential = await _firebaseAuth.createUserWithEmailAndPassword(
-            email: email,
-            password: password,
-          );
-          
-          userResult = userCredential.user;
-        } catch (e) {
-          debugPrint('Windows account creation error: $e');
-          
-          // Special Windows error recovery
-          if (e.toString().contains('PigeonUserDetails') || 
-              e.toString().contains('List<Object?>') ||
-              e.toString().contains('platform thread')) {
-            
-            // Wait a moment for auth state to update despite the error
-            await Future.delayed(const Duration(milliseconds: 800));
-            
-            // Check if the account was actually created despite the error
-            userResult = _firebaseAuth.currentUser;
-            if (userResult != null) {
-              debugPrint('Windows platform recovery successful for account creation');
-            } else {
-              rethrow; // If recovery failed, rethrow the error
-            }
-          } else {
-            rethrow; // Rethrow non-Windows specific errors
-          }
-        }
-      } else {
-        // Non-Windows platform regular flow
+      // Input validation
+      if (email.isEmpty || !email.contains('@')) {
+        throw 'Please enter a valid email address';
+      }
+      if (password.isEmpty || password.length < 6) {
+        throw 'Password must be at least 6 characters long';
+      }
+
+      // Windows-specific error handling for PigeonUserDetails issue
+      try {
+        // Create user account
         final userCredential = await _firebaseAuth.createUserWithEmailAndPassword(
-          email: email,
+          email: email.trim(),
           password: password,
         );
         
-        userResult = userCredential.user;
-      }
+        final user = userCredential.user;
+        if (user == null) {
+          throw 'Account creation failed: No user returned';
+        }
 
-      // Handle null user (should not happen in normal operation)
-      if (userResult == null) {
-        throw 'Account creation failed: No user returned';
-      }
-      
-      // We now have a non-null user
-      final user = userResult;
-
-      // Create the initial user profile in Firestore
-      // This is important for new users so we'll await it but with timeout
-      _createUserProfile(user).timeout(
-        const Duration(seconds: 3),
-        onTimeout: () {
-          debugPrint(
-              'Profile creation timed out, continuing with local save');
+        // Create the initial user profile in Firestore
+        try {
+          await _createUserProfile(user).timeout(
+            const Duration(seconds: 5),  // Mobile-optimized timeout
+            onTimeout: () {
+              debugPrint('Profile creation timed out, continuing with local save');
+              _saveUserProfileLocally(user);
+            },
+          );
+        } catch (e) {
+          debugPrint('Error creating user profile: $e');
+          // Continue despite profile creation error - we can fix this later
           _saveUserProfileLocally(user);
-        },
+        }
+
+        // Return the mapped user
+        final authUser = _mapFirebaseUserToAuthUser(user);
+        _cachedUser = authUser;
+        _lastUserCheck = DateTime.now();
+
+        return authUser;
+      } catch (e) {
+        // Handle Windows-specific PigeonUserDetails error
+        if (e.toString().contains('PigeonUserDetails')) {
+          debugPrint('Handling Windows-specific PigeonUserDetails error');
+          // Wait for auth state to propagate
+          await Future.delayed(const Duration(milliseconds: 200));
+          
+          // Check if the user was actually created
+          final currentUser = _firebaseAuth.currentUser;
+          if (currentUser != null) {
+            // Create profile for the user
+            await _createUserProfile(currentUser);
+            
+            // Return the user object
+            final authUser = _mapFirebaseUserToAuthUser(currentUser);
+            _cachedUser = authUser;
+            _lastUserCheck = DateTime.now();
+            return authUser;
+          }
+        }
+        rethrow;
+      }
+    } on FirebaseAuthException catch (e) {
+      debugPrint('Firebase auth error: ${e.code} - ${e.message}');
+      throw _mapFirebaseAuthExceptionToMessage(e);
+    } catch (e) {
+      debugPrint('Error during account creation: $e');
+      throw 'An unexpected error occurred. Please try again.';
+    }
+  }
+
+  @override
+  Future<AuthUser> signInWithGoogle() async {
+    try {
+      if (_googleSignIn == null) {
+        throw 'Google Sign-In is not supported on this platform';
+      }
+
+      // Start Google sign-in flow
+      final googleUser = await _googleSignIn!.signIn();
+      if (googleUser == null) {
+        throw 'Google sign-in was cancelled';
+      }
+
+      // Get auth details from request
+      final googleAuth = await googleUser.authentication;
+      final credential = GoogleAuthProvider.credential(
+        accessToken: googleAuth.accessToken,
+        idToken: googleAuth.idToken,
       );
 
+      // Sign in with Firebase
+      final userCredential = await _firebaseAuth.signInWithCredential(credential);
+      final user = userCredential.user;
+      
+      if (user == null) {
+        throw 'Failed to complete Google sign-in';
+      }
+
+      // Update last login time without blocking
+      _updateUserLoginTime(user.uid);
+      
       // Return the mapped user
       final authUser = _mapFirebaseUserToAuthUser(user);
       _cachedUser = authUser;
@@ -288,169 +278,11 @@ class FirebaseAuthRepository implements AuthRepository {
       debugPrint('Firebase auth error: ${e.code} - ${e.message}');
       throw _mapFirebaseAuthExceptionToMessage(e);
     } catch (e) {
-      debugPrint('Unknown error during account creation: $e');
-
-      // Check for Windows-specific issues
-      final isWindowsPlatform = defaultTargetPlatform == TargetPlatform.windows;
-
-      if (isWindowsPlatform &&
-          (e.toString().contains('PigeonUserDetails') ||
-              e.toString().contains('List<Object?>') ||
-              e.toString().contains('NoSuchMethodError') ||
-              e.toString().contains('platform thread'))) {
-        // Wait longer for Windows to handle the auth state change
-        await Future.delayed(const Duration(milliseconds: 1500));
-        
-        // Try to find the user that may have been created
-        final currentUser = _firebaseAuth.currentUser;
-        if (currentUser != null) {
-          debugPrint('Windows platform recovery successful');
-          final authUser = _mapFirebaseUserToAuthUser(currentUser);
-          _cachedUser = authUser;
-          _lastUserCheck = DateTime.now();
-          return authUser;
-        }
-      }
-
-      throw isWindowsPlatform
-          ? 'Account creation encountered a temporary issue. Please restart the app and try again.'
-          : 'An unexpected error occurred. Please try again.';
-    }
-  }
-
-  @override
-  Future<AuthUser> signInWithGoogle() async {
-    try {
-      final isWindowsPlatform = defaultTargetPlatform == TargetPlatform.windows;
-      
-      if (kIsWeb) {
-        // Web specific sign-in
-        GoogleAuthProvider authProvider = GoogleAuthProvider();
-        final userCredential =
-            await _firebaseAuth.signInWithPopup(authProvider);
-
-        final user = userCredential.user;
-        if (user != null) {
-          // Update last login time without blocking
-          _updateUserLoginTime(user.uid);
-        }
-
-        // Return the mapped user
-        final authUser = _mapFirebaseUserToAuthUser(user);
-        _cachedUser = authUser;
-        _lastUserCheck = DateTime.now();
-
-        return authUser;
-      } else if (_googleSignIn != null) {
-        // Mobile sign-in
-        User? user;
-        
-        // Windows has specific issues with Google Sign In
-        if (isWindowsPlatform) {
-          try {
-            final googleUser = await _googleSignIn!.signIn();
-            if (googleUser == null) {
-              throw 'Google sign-in was cancelled';
-            }
-
-            final googleAuth = await googleUser.authentication;
-            final credential = GoogleAuthProvider.credential(
-              accessToken: googleAuth.accessToken,
-              idToken: googleAuth.idToken,
-            );
-
-            final userCredential =
-                await _firebaseAuth.signInWithCredential(credential);
-
-            user = userCredential.user;
-          } catch (e) {
-            debugPrint('Windows Google sign-in error: $e');
-            
-            // Special Windows error recovery
-            if (e.toString().contains('PigeonUserDetails') || 
-                e.toString().contains('List<Object?>') ||
-                e.toString().contains('platform thread')) {
-              
-              // Wait a moment for auth state to update despite the error
-              await Future.delayed(const Duration(milliseconds: 800));
-              
-              // Check if we're actually signed in despite the error
-              user = _firebaseAuth.currentUser;
-              if (user != null) {
-                debugPrint('Windows platform recovery successful for Google sign-in');
-              } else {
-                rethrow; // If recovery failed, rethrow the error
-              }
-            } else if (e.toString().contains('sign-in was cancelled')) {
-              // This is expected if the user cancels
-              throw 'Google sign-in was cancelled';
-            } else {
-              rethrow; // Rethrow other errors
-            }
-          }
-        } else {
-          // Regular mobile platforms
-          final googleUser = await _googleSignIn!.signIn();
-          if (googleUser == null) {
-            throw 'Google sign-in was cancelled';
-          }
-
-          final googleAuth = await googleUser.authentication;
-          final credential = GoogleAuthProvider.credential(
-            accessToken: googleAuth.accessToken,
-            idToken: googleAuth.idToken,
-          );
-
-          final userCredential =
-              await _firebaseAuth.signInWithCredential(credential);
-
-          user = userCredential.user;
-        }
-        
-        if (user != null) {
-          // Update last login time without blocking
-          _updateUserLoginTime(user.uid);
-          
-          // Return the mapped user
-          final authUser = _mapFirebaseUserToAuthUser(user);
-          _cachedUser = authUser;
-          _lastUserCheck = DateTime.now();
-
-          return authUser;
-        } else {
-          throw 'Failed to complete Google sign-in';
-        }
-      } else {
-        throw 'Google Sign-In is not supported on this platform';
-      }
-    } on FirebaseAuthException catch (e) {
-      debugPrint('Firebase auth error: ${e.code} - ${e.message}');
-      throw _mapFirebaseAuthExceptionToMessage(e);
-    } catch (e) {
       debugPrint('Error during Google sign-in: $e');
-
-      // Windows or other platform-specific recovery
-      final isWindowsPlatform = defaultTargetPlatform == TargetPlatform.windows;
-      
-      if (isWindowsPlatform && 
-          (e.toString().contains('PigeonUserDetails') ||
-           e.toString().contains('List<Object?>') ||
-           e.toString().contains('platform thread'))) {
-        // Wait longer for Windows to handle the auth state change
-        await Future.delayed(const Duration(milliseconds: 1500));
-        
-        final currentUser = _firebaseAuth.currentUser;
-        if (currentUser != null) {
-          final authUser = _mapFirebaseUserToAuthUser(currentUser);
-          _cachedUser = authUser;
-          _lastUserCheck = DateTime.now();
-          return authUser;
-        }
+      if (e.toString().contains('sign-in was cancelled')) {
+        throw 'Google sign-in was cancelled';
       }
-
-      throw isWindowsPlatform
-          ? 'Could not complete Google sign-in on Windows. Please try again or use email/password sign-in instead.'
-          : 'Could not complete Google sign-in. Please try again.';
+      throw 'Could not complete Google sign-in. Please try again.';
     }
   }
 
@@ -499,31 +331,72 @@ class FirebaseAuthRepository implements AuthRepository {
       }
 
       final userDocRef = _firestore.collection(_usersCollection).doc(user.uid);
+      
+      // Add retry logic for profile creation
+      int retryCount = 0;
+      const maxRetries = 3;
+      const retryDelay = Duration(milliseconds: 500);
 
-      // Use server timestamp for consistent timing
-      final now = FieldValue.serverTimestamp();
+      while (retryCount < maxRetries) {
+        try {
+          // Use server timestamp for consistent timing
+          final now = FieldValue.serverTimestamp();
 
-      // Create minimal profile data - only what's essential
-      final profileData = {
-        'id': user.uid,
-        'email': user.email,
-        'displayName': user.displayName,
-        'profileImageUrl': user.photoURL,
-        'createdAt': now,
-        'updatedAt': now,
-        'lastLogin': now,
-        'isEmailVerified': user.emailVerified,
-        'username': user.displayName ?? 'User ${user.uid.substring(0, 4)}',
-        'accountTier': 'public'
-      };
+          // Create minimal profile data with proper type safety
+          final Map<String, dynamic> profileData = {
+            'id': user.uid,
+            'email': user.email ?? '',
+            'displayName': user.displayName ?? 'New User',
+            'username': user.displayName ?? 'User ${user.uid.substring(0, 4)}',
+            'profileImageUrl': user.photoURL ?? '',
+            'createdAt': now,
+            'updatedAt': now,
+            'lastLogin': now,
+            'isEmailVerified': user.emailVerified,
+            'accountTier': 'public',
+            // Add required fields for UserProfile model with explicit types
+            'year': 'Freshman',
+            'major': 'Undecided',
+            'residence': 'Off Campus',
+            'eventCount': 0,
+            'clubCount': 0,
+            'friendCount': 0,
+            'interests': <String>[],
+            'savedEvents': <Map<String, dynamic>>[],
+            'followedSpaces': <String>[],
+            'isPublic': false,
+            'isVerified': false,
+            'isVerifiedPlus': false,
+            'bio': '',
+            // Ensure all fields from UserProfile model are included with proper types
+            'clubAffiliation': '',
+            'clubRole': ''
+          };
 
-      // Set the document with merge option
-      await userDocRef.set(profileData, SetOptions(merge: true));
-      debugPrint('User profile created in Firestore');
+          // Set the document with merge option
+          await userDocRef.set(profileData, SetOptions(merge: true));
+          debugPrint('User profile created in Firestore successfully');
+          
+          // Also save to local storage as backup
+          _saveUserProfileLocally(user);
+          return;
+        } catch (e) {
+          retryCount++;
+          if (retryCount < maxRetries) {
+            debugPrint('Retry $retryCount: Error creating profile, retrying after delay: $e');
+            await Future.delayed(retryDelay);
+          } else {
+            debugPrint('Final attempt failed. Error creating profile: $e');
+            throw e;
+          }
+        }
+      }
     } catch (e) {
-      debugPrint('Error creating user profile: $e');
+      debugPrint('Error creating user profile after all retries: $e');
       // Fallback to local storage
       _saveUserProfileLocally(user);
+      // Rethrow to handle in the UI
+      throw 'Failed to create user profile. Please try again.';
     }
   }
 

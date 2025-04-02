@@ -276,6 +276,36 @@ class FeedAnalytics {
     }
   }
 
+  /// Log an error event with metadata
+  static Future<void> logError(String errorType, Map<String, dynamic> metadata) async {
+    try {
+      // Log to analytics service
+      AnalyticsService.logEvent('feed_error', parameters: {
+        'error_type': errorType,
+        ...metadata,
+      });
+
+      // Store error in local storage for debugging
+      final prefs = await SharedPreferences.getInstance();
+      final errors = prefs.getStringList('feed_errors') ?? [];
+
+      // Keep the last 50 errors
+      if (errors.length >= 50) {
+        errors.removeAt(0);
+      }
+
+      errors.add(json.encode({
+        'error_type': errorType,
+        'metadata': metadata,
+        'timestamp': DateTime.now().toIso8601String(),
+      }));
+
+      await prefs.setStringList('feed_errors', errors);
+    } catch (e) {
+      debugPrint('Error logging feed error: $e');
+    }
+  }
+
   // Private helper methods
 
   /// Add event to view history

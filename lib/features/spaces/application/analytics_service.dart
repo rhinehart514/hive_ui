@@ -124,6 +124,12 @@ class SpacesAnalyticsService {
     }
   }
 
+  /// Track when a space is updated
+  void trackSpaceUpdate(String spaceId) {
+    // Implement analytics tracking for space updates
+    debugPrint('🔄 Space updated: $spaceId');
+  }
+
   /// Helper method to estimate days as a member
   int _getDaysAsMember(SpaceEntity space) {
     // This is a placeholder - in a real app, you would store the join date

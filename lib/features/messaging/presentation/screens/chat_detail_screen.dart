@@ -3,10 +3,13 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_ui/features/messaging/application/providers/messaging_providers.dart';
-import 'package:hive_ui/features/messaging/domain/entities/chat.dart';
 import 'package:hive_ui/features/messaging/domain/entities/chat_user.dart';
 import 'package:hive_ui/features/messaging/domain/entities/message.dart';
 import 'package:hive_ui/features/messaging/presentation/widgets/message_bubble.dart';
+import 'package:hive_ui/features/messaging/presentation/widgets/typing_indicator.dart';
+import 'package:hive_ui/features/messaging/presentation/widgets/chat_input.dart';
+import 'package:hive_ui/features/messaging/presentation/widgets/system_message.dart';
+import 'package:hive_ui/features/messaging/presentation/widgets/message_search_bar.dart';
 import 'package:hive_ui/theme/app_colors.dart';
 
 class ChatDetailScreen extends ConsumerStatefulWidget {
@@ -26,6 +29,9 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
   final ScrollController _scrollController = ScrollController();
   Timer? _typingTimer;
   bool _isTyping = false;
+  bool _isSearching = false;
+  String _searchQuery = '';
+  String? _jumpToMessageId;
 
   @override
   void initState() {
@@ -137,21 +143,75 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
     }
     
     return Scaffold(
-      appBar: _buildAppBar(),
-      body: Column(
-        children: [
-          // Messages list
-          Expanded(
-            child: _buildMessagesList(userId),
-          ),
-          
-          // Typing indicators
-          _buildTypingIndicator(),
-          
-          // Message input
-          _buildMessageInput(),
-        ],
-      ),
+      appBar: _isSearching 
+          ? PreferredSize(
+              preferredSize: const Size.fromHeight(56),
+              child: MessageSearchBar(
+                chatId: widget.chatId,
+                onClose: () {
+                  setState(() {
+                    _isSearching = false;
+                    _searchQuery = '';
+                  });
+                },
+                onSearch: (query) {
+                  setState(() {
+                    _searchQuery = query;
+                  });
+                  // Save the search query to the provider
+                  ref.read(chatSearchQueryProvider.notifier).state = query;
+                },
+              ),
+            )
+          : _buildAppBar(),
+      body: _isSearching && _searchQuery.isNotEmpty
+          ? MessageSearchResults(
+              chatId: widget.chatId,
+              query: _searchQuery,
+              onClose: () {
+                setState(() {
+                  _isSearching = false;
+                  _searchQuery = '';
+                });
+              },
+              onMessageSelected: (messageId) {
+                // Set the message ID to jump to
+                setState(() {
+                  _jumpToMessageId = messageId;
+                  _isSearching = false;
+                  _searchQuery = '';
+                });
+                
+                // TODO: Implement scrolling to specific message
+              },
+            )
+          : _buildChatBody(context),
+    );
+  }
+
+  Widget _buildChatBody(BuildContext context) {
+    final userId = ref.watch(currentUserIdProvider);
+    
+    if (userId == null) {
+      return const Center(child: Text('Please log in to view messages'));
+    }
+    
+    return Column(
+      children: [
+        // Messages list
+        Expanded(
+          child: _buildMessagesList(userId),
+        ),
+        
+        // Typing indicator
+        TypingIndicator(chatId: widget.chatId),
+        
+        // Chat input
+        ChatInput(
+          chatId: widget.chatId,
+          onMessageSent: _scrollToBottom,
+        ),
+      ],
     );
   }
 
@@ -190,6 +250,15 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
         error: (error, stackTrace) => const Text('Chat'),
       ),
       actions: [
+        // Search button
+        IconButton(
+          icon: const Icon(Icons.search),
+          onPressed: () {
+            setState(() {
+              _isSearching = true;
+            });
+          },
+        ),
         IconButton(
           icon: const Icon(Icons.more_vert),
           onPressed: () {
@@ -220,24 +289,40 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
             // Group messages by date
             final groupedMessages = _groupMessagesByDate(messages);
             
-            return ListView.builder(
-              controller: _scrollController,
-              reverse: true,
-              itemCount: groupedMessages.length,
-              padding: const EdgeInsets.only(bottom: 8, top: 8),
-              itemBuilder: (context, index) {
-                final entry = groupedMessages[index];
-                
-                if (entry.isDateHeader) {
-                  return _buildDateHeader(entry.date!);
-                } else {
-                  return MessageBubble(
-                    message: entry.message!,
-                    isCurrentUser: entry.message!.senderId == userId,
-                    showSender: entry.message!.senderId != userId,
-                  );
-                }
+            return RefreshIndicator(
+              color: AppColors.gold,
+              backgroundColor: Colors.grey.shade900,
+              onRefresh: () async {
+                // Load older messages
+                await ref.read(loadMoreMessagesProvider(widget.chatId).future);
               },
+              child: ListView.builder(
+                controller: _scrollController,
+                reverse: true,
+                itemCount: groupedMessages.length,
+                padding: const EdgeInsets.only(bottom: 8, top: 8),
+                physics: const AlwaysScrollableScrollPhysics(),
+                itemBuilder: (context, index) {
+                  final entry = groupedMessages[index];
+                  
+                  if (entry.isDateHeader) {
+                    return _buildDateHeader(entry.date!);
+                  } else {
+                    // Check if it's a system message
+                    final message = entry.message!;
+                    if (message.type == MessageType.system) {
+                      return SystemMessage(message: message);
+                    } else {
+                      // Regular message
+                      return MessageBubble(
+                        message: message,
+                        isCurrentUser: message.senderId == userId,
+                        showSender: message.senderId != userId,
+                      );
+                    }
+                  }
+                },
+              ),
             );
           },
           loading: () => const Center(child: CircularProgressIndicator()),
@@ -298,6 +383,7 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
                             id: userId,
                             name: 'User',
                             isOnline: false,
+                            lastActive: DateTime.now(),
                           ),
                         )
                         .name)
@@ -442,4 +528,4 @@ class _MessageOrDateEntry {
   _MessageOrDateEntry.date(this.date) : message = null;
   
   bool get isDateHeader => date != null;
-} 
+}

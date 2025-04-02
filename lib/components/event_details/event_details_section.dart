@@ -152,6 +152,13 @@ class EventDetailsSection extends StatelessWidget {
 
   /// Build location section with map link if available
   Widget _buildLocation() {
+    final bool canShowMap = event.location.isNotEmpty && 
+        !event.location.toLowerCase().contains('virtual') &&
+        !event.location.toLowerCase().contains('online') &&
+        !event.location.toLowerCase().contains('zoom') &&
+        !event.location.toLowerCase().contains('teams') &&
+        !event.location.toLowerCase().contains('meet');
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
@@ -174,9 +181,8 @@ class EventDetailsSection extends StatelessWidget {
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
           ),
-          // Add map link button if location is specified
-          if (event.location.isNotEmpty &&
-              !event.location.toLowerCase().contains('virtual'))
+          // Add map link button if location is physical
+          if (canShowMap)
             Padding(
               padding: const EdgeInsets.only(top: 8),
               child: OutlinedButton.icon(
@@ -218,13 +224,16 @@ class EventDetailsSection extends StatelessWidget {
 
   /// Build organizer section with contact info if available
   Widget _buildOrganizer() {
+    final bool hasEmail = event.organizerEmail.isNotEmpty;
+    final bool isClub = event.isClubCreated;
+
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: AppColors.cardBackground.withOpacity(0.3),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: event.isClubCreated
+          color: isClub
               ? AppColors.white.withOpacity(0.2)
               : AppColors.white.withOpacity(0.1),
           width: 0.5,
@@ -249,7 +258,7 @@ class EventDetailsSection extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
-              if (event.isClubCreated)
+              if (isClub)
                 const Icon(
                   Icons.arrow_forward,
                   color: AppColors.white,
@@ -259,7 +268,7 @@ class EventDetailsSection extends StatelessWidget {
           ),
 
           // Organizer email if available
-          if (event.organizerEmail.isNotEmpty) ...[
+          if (hasEmail) ...[
             const SizedBox(height: 8),
             Row(
               children: [

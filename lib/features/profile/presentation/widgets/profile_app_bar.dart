@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'dart:ui';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:hive_ui/theme/app_colors.dart';
 import '../../../../theme/huge_icons.dart';
 import 'package:go_router/go_router.dart';
@@ -31,7 +30,7 @@ class ProfileAppBar extends StatefulWidget implements PreferredSizeWidget {
   State<ProfileAppBar> createState() => _ProfileAppBarState();
 
   @override
-  Size get preferredSize => Size.fromHeight(kToolbarHeight);
+  Size get preferredSize => const Size.fromHeight(kToolbarHeight);
 }
 
 class _ProfileAppBarState extends State<ProfileAppBar> with SingleTickerProviderStateMixin {
@@ -148,7 +147,7 @@ class _ProfileAppBarState extends State<ProfileAppBar> with SingleTickerProvider
                     color: Colors.transparent,
                     borderRadius: BorderRadius.circular(22),
                   ),
-                  child: Icon(
+                  child: const Icon(
                     HugeIcons.settings,
                     color: Colors.white, // Use white color for consistency
                     size: 28,

@@ -1,9 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_ui/features/auth/providers/auth_providers.dart';
-import 'package:hive_ui/theme/app_colors.dart';
 import 'package:hive_ui/widgets/hive_app_bar.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 /// The main settings screen
 class SettingsPage extends ConsumerWidget {
@@ -16,7 +14,7 @@ class SettingsPage extends ConsumerWidget {
     final authController = ref.watch(authControllerProvider.notifier);
     
     return Scaffold(
-      appBar: HiveAppBar(
+      appBar: const HiveAppBar(
         title: 'Settings',
         showBackButton: true,
       ),

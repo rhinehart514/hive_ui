@@ -87,6 +87,25 @@ class UserProfile {
   /// [followedSpaces] - Spaces (clubs/organizations) the user follows
 
   factory UserProfile.fromJson(Map<String, dynamic> json) {
+    // Handle case where json might not be a proper map
+    if (json is! Map<String, dynamic>) {
+      debugPrint('Error: Expected a Map<String, dynamic> but got ${json.runtimeType}');
+      // Return a minimal valid profile to prevent crashes
+      return UserProfile(
+        id: '',
+        username: 'User',
+        displayName: 'User',
+        year: '',
+        major: '',
+        residence: '',
+        eventCount: 0,
+        clubCount: 0,
+        friendCount: 0,
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+      );
+    }
+
     // Parse dates which could be either Timestamp objects, DateTime objects, or ISO8601 strings
     DateTime parseDate(dynamic dateValue) {
       if (dateValue == null) {
@@ -107,7 +126,7 @@ class UserProfile {
             seconds * 1000000 + (nanoseconds ~/ 1000),
           );
         } catch (e) {
-          print('Error parsing Timestamp: $e');
+          debugPrint('Error parsing Timestamp: $e');
           return DateTime.now();
         }
       }
@@ -117,7 +136,7 @@ class UserProfile {
         try {
           return DateTime.parse(dateValue);
         } catch (e) {
-          print('Error parsing date string: $e');
+          debugPrint('Error parsing date string: $e');
           return DateTime.now();
         }
       }
@@ -139,18 +158,51 @@ class UserProfile {
     // Parse string lists which might be arrays or comma-separated strings
     List<String> parseStringList(dynamic value) {
       if (value == null) return [];
-      if (value is List) {
-        try {
-          return List<String>.from(value.map((item) => item.toString()));
-        } catch (e) {
-          print('Error parsing list: $e');
-          return [];
+      
+      try {
+        if (value is List) {
+          return List<String>.from(value.map((item) => item?.toString() ?? ''))
+                           .where((s) => s.isNotEmpty)
+                           .toList();
         }
+        if (value is String) {
+          return value.split(',')
+                     .map((s) => s.trim())
+                     .where((s) => s.isNotEmpty)
+                     .toList();
+        }
+        if (value is Map) {
+          return value.values
+                     .map((v) => v?.toString() ?? '')
+                     .where((s) => s.isNotEmpty)
+                     .toList();
+        }
+        // Try to convert to string as last resort
+        return [value.toString()]
+                .where((s) => s.isNotEmpty)
+                .toList();
+      } catch (e) {
+        debugPrint('Error parsing string list: $e');
+        return [];
       }
-      if (value is String) {
-        return value.split(',').where((s) => s.isNotEmpty).toList();
+    }
+
+    // Fix for interests field
+    List<String>? parseInterests(dynamic value) {
+      if (value == null) return null;
+      
+      try {
+        if (value is List) {
+          return List<String>.from(value.map((item) => item.toString()));
+        } else if (value is String) {
+          final parts = value.split(',').where((s) => s.isNotEmpty).toList();
+          return parts.isEmpty ? null : parts;
+        }
+      } catch (e) {
+        print('Error parsing interests: $e');
       }
-      return [];
+      
+      return null;
     }
 
     return UserProfile(
@@ -169,23 +221,16 @@ class UserProfile {
       accountTier: _parseAccountTier(json['accountTier']),
       clubAffiliation: json['clubAffiliation'] as String?,
       clubRole: json['clubRole'] as String?,
-      interests: json['interests'] != null
-          ? (json['interests'] is String
-              ? (json['interests'] as String)
-                  .split(',')
-                  .where((s) => s.isNotEmpty)
-                  .toList()
-              : (json['interests'] is List
-                  ? List<String>.from(json['interests'] as List)
-                  : null))
-          : null,
+      interests: parseInterests(json['interests']),
       savedEvents: json['savedEvents'] != null
           ? (json['savedEvents'] as List)
               .map((e) => Event.fromJson(e as Map<String, dynamic>))
               .toList()
           : [],
       followedSpaces: json['followedSpaces'] != null
-          ? parseStringList(json['followedSpaces'])
+          ? (json['followedSpaces'] is String 
+              ? json['followedSpaces'].toString().split(',').where((s) => s.isNotEmpty).toList()
+              : parseStringList(json['followedSpaces']))
           : const [],
       email: json['email'] as String?,
       displayName: json['displayName'] as String,
@@ -221,8 +266,7 @@ class UserProfile {
       'accountTier': accountTier.name,
       'clubAffiliation': clubAffiliation,
       'clubRole': clubRole,
-      'interests':
-          interests != null ? (interests is List ? interests : []) : [],
+      'interests': interests ?? [],
       'savedEvents': savedEvents.map((e) => e.toJson()).toList(),
       'followedSpaces': _followedSpaces ?? const [],
       'email': email,
@@ -232,6 +276,21 @@ class UserProfile {
       'isVerifiedPlus': isVerifiedPlus,
       'tempProfileImageFile': tempProfileImageFile,
     };
+  }
+
+  /// Creates a Firestore-safe version of this profile's data
+  Map<String, dynamic> toFirestore() {
+    final data = toJson();
+    
+    // Remove any fields that shouldn't be saved directly to Firestore
+    data.remove('tempProfileImageFile');
+    
+    // Ensure interests is always a list for Firestore
+    if (data['interests'] == null) {
+      data['interests'] = [];
+    }
+    
+    return data;
   }
 
   UserProfile copyWith({
@@ -317,32 +376,5 @@ class UserProfile {
       isVerified: data['isVerified'] as bool? ?? false,
       isVerifiedPlus: data['isVerifiedPlus'] as bool? ?? false,
     );
-  }
-
-  // Convert to Firestore data
-  Map<String, dynamic> toFirestore() {
-    return {
-      'id': id,
-      'username': username,
-      'email': email,
-      'displayName': displayName,
-      'profileImageUrl': profileImageUrl,
-      'bio': bio,
-      'year': year,
-      'major': major,
-      'residence': residence,
-      'eventCount': eventCount,
-      'clubCount': clubCount,
-      'friendCount': friendCount,
-      'createdAt': Timestamp.fromDate(createdAt),
-      'updatedAt': Timestamp.fromDate(updatedAt),
-      'accountTier': accountTier.name,
-      'clubAffiliation': clubAffiliation,
-      'clubRole': clubRole,
-      'interests': interests,
-      'isPublic': isPublic,
-      'isVerified': isVerified,
-      'isVerifiedPlus': isVerifiedPlus,
-    };
   }
 }

@@ -3,8 +3,6 @@ import 'package:flutter/services.dart';
 import 'dart:ui';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:hive_ui/theme/app_colors.dart';
-import 'package:hive_ui/theme/glassmorphism_guide.dart';
-import 'package:hive_ui/theme/huge_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 /// App bar style variants for different sections of the app
@@ -213,7 +211,7 @@ class _HiveAppBarState extends ConsumerState<HiveAppBar> with SingleTickerProvid
   Widget build(BuildContext context) {
     return PreferredSize(
       preferredSize: _getPreferredSize(),
-      child: ClipRect(
+      child: ClipRRect(
         child: BackdropFilter(
           filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
           child: AnimatedContainer(
@@ -222,9 +220,9 @@ class _HiveAppBarState extends ConsumerState<HiveAppBar> with SingleTickerProvid
               color: widget.style == HiveAppBarStyle.transparent
                   ? Colors.transparent
                   : (widget.backgroundColor ?? AppColors.black).withOpacity(
-                      widget.useGlassmorphism ? 0.7 : 1.0),
+                      widget.useGlassmorphism ? 0.2 : 1.0),
               border: widget.showBottomBorder
-                  ? Border(
+                  ? const Border(
                       bottom: BorderSide(
                         color: Colors.white10,
                         width: 0.5,
@@ -235,8 +233,9 @@ class _HiveAppBarState extends ConsumerState<HiveAppBar> with SingleTickerProvid
                   ? [
                       BoxShadow(
                         color: Colors.black.withOpacity(_elevationAnimation.value * 0.3),
-                        blurRadius: 8 * _elevationAnimation.value,
-                        offset: Offset(0, 2 * _elevationAnimation.value),
+                        blurRadius: 30 * _elevationAnimation.value,
+                        spreadRadius: -5,
+                        offset: Offset(0, 10 * _elevationAnimation.value),
                       ),
                     ]
                   : null,
@@ -313,7 +312,7 @@ class _HiveAppBarState extends ConsumerState<HiveAppBar> with SingleTickerProvid
   
   Widget _buildTopSection() {
     return SizedBox(
-      height: widget.subtitle != null ? 71.5 : 55.5, // Adjusted heights to prevent overflow
+      height: widget.subtitle != null ? 71.5 : 55.5,
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 16),
         child: Row(
@@ -325,9 +324,13 @@ class _HiveAppBarState extends ConsumerState<HiveAppBar> with SingleTickerProvid
               IconButton(
                 padding: EdgeInsets.zero,
                 constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
-                icon: const Icon(Icons.arrow_back, color: AppColors.white),
+                icon: Icon(
+                  Icons.arrow_back,
+                  color: widget.iconColor ?? AppColors.white,
+                  size: 24,
+                ),
                 onPressed: () {
-                  HapticFeedback.selectionClick();
+                  HapticFeedback.lightImpact();
                   if (widget.onBackPressed != null) {
                     widget.onBackPressed!();
                   } else {
@@ -346,11 +349,12 @@ class _HiveAppBarState extends ConsumerState<HiveAppBar> with SingleTickerProvid
                 children: [
                   Text(
                     widget.title,
-                    style: widget.titleStyle ?? GoogleFonts.outfit(
+                    style: widget.titleStyle ?? GoogleFonts.inter(
                       color: AppColors.white,
                       fontSize: 24,
                       fontWeight: FontWeight.w700,
                       letterSpacing: -0.5,
+                      height: 1.2,
                     ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -360,10 +364,11 @@ class _HiveAppBarState extends ConsumerState<HiveAppBar> with SingleTickerProvid
                     const SizedBox(height: 2),
                     Text(
                       widget.subtitle!,
-                      style: GoogleFonts.outfit(
+                      style: GoogleFonts.inter(
                         color: AppColors.textSecondary,
                         fontSize: 14,
                         fontWeight: FontWeight.w400,
+                        letterSpacing: 0.1,
                       ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
@@ -388,9 +393,10 @@ class _HiveAppBarState extends ConsumerState<HiveAppBar> with SingleTickerProvid
   Widget _buildSearchBar() {
     return AnimatedContainer(
       duration: const Duration(milliseconds: 300),
+      curve: Curves.easeOutQuint,
       height: _isSearchExpanded ? 60 : 0,
       decoration: BoxDecoration(
-        color: AppColors.black.withOpacity(0.7),
+        color: AppColors.black.withOpacity(0.2),
         border: const Border(
           bottom: BorderSide(
             color: Colors.white10,
@@ -407,9 +413,9 @@ class _HiveAppBarState extends ConsumerState<HiveAppBar> with SingleTickerProvid
                     child: Container(
                       decoration: BoxDecoration(
                         color: AppColors.black.withOpacity(0.3),
-                        borderRadius: BorderRadius.circular(8),
+                        borderRadius: BorderRadius.circular(12),
                         border: Border.all(
-                          color: AppColors.gold.withOpacity(0.3),
+                          color: AppColors.yellow.withOpacity(0.3),
                           width: 1,
                         ),
                       ),
@@ -419,21 +425,25 @@ class _HiveAppBarState extends ConsumerState<HiveAppBar> with SingleTickerProvid
                         style: GoogleFonts.inter(
                           color: AppColors.white,
                           fontSize: 16,
+                          fontWeight: FontWeight.w400,
+                          letterSpacing: 0.1,
                         ),
                         decoration: InputDecoration(
                           hintText: 'Search...',
                           hintStyle: GoogleFonts.inter(
-                            color: AppColors.textSecondary,
+                            color: AppColors.textTertiary,
                             fontSize: 16,
+                            fontWeight: FontWeight.w400,
+                            letterSpacing: 0.1,
                           ),
-                          prefixIcon: const Icon(
+                          prefixIcon: Icon(
                             Icons.search,
-                            color: AppColors.gold,
+                            color: AppColors.yellow,
                             size: 20,
                           ),
                           border: InputBorder.none,
                           contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 8,
+                            horizontal: 12,
                             vertical: 12,
                           ),
                         ),
@@ -443,9 +453,9 @@ class _HiveAppBarState extends ConsumerState<HiveAppBar> with SingleTickerProvid
                   ),
                   const SizedBox(width: 8),
                   IconButton(
-                    icon: const Icon(Icons.close, color: AppColors.gold),
+                    icon: Icon(Icons.close, color: AppColors.yellow, size: 20),
                     onPressed: () {
-                      HapticFeedback.selectionClick();
+                      HapticFeedback.lightImpact();
                       if (widget.searchController != null) {
                         widget.searchController!.clear();
                       }

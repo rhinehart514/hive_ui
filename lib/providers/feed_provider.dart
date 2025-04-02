@@ -8,16 +8,17 @@ import '../services/rss_service.dart';
 import '../services/event_service.dart';
 import '../providers/profile_provider.dart';
 import '../models/user_profile.dart';
+import '../models/repost_content_type.dart';
 import '../services/space_event_manager.dart';
 import '../utils/space_categorizer.dart';
-import 'dart:math';
-import '../services/optimized_data_service.dart';
 import '../models/space_type.dart';
 import '../providers/personalization_provider.dart';
 import '../features/auth/providers/auth_providers.dart';
 import '../models/interactions/interaction.dart';
 import '../services/interactions/interaction_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import '../models/space_recommendation_simple.dart';
+import '../models/hive_lab_item_simple.dart';
 
 /// Simple RepostInfo class to replace the deleted implementation
 class RepostInfo {
@@ -113,10 +114,12 @@ class FeedNotifier extends StateNotifier<FeedState> {
       final firestore = FirebaseFirestore.instance;
       final List<Event> allEvents = [];
       final Set<String> processedEventIds = {};
+      final now = DateTime.now();
 
-      // Directly query the global events collection
+      // Directly query the global events collection for upcoming events
       final eventsQuery = await firestore
           .collection('events')
+          .where('startDate', isGreaterThan: Timestamp.fromDate(now))
           .orderBy('startDate')
           .limit(30) // Increased limit to get more events initially
           .get();
@@ -131,7 +134,8 @@ class FeedNotifier extends StateNotifier<FeedState> {
           final processedData = _processTimestamps(data);
           final event = Event.fromJson(processedData);
           
-          if (!processedEventIds.contains(event.id)) {
+          // Double-check that event is in the future
+          if (event.endDate.isAfter(now) && !processedEventIds.contains(event.id)) {
             processedEventIds.add(event.id);
             allEvents.add(event);
           }
@@ -140,31 +144,97 @@ class FeedNotifier extends StateNotifier<FeedState> {
         }
       }
 
-      // Sort events by start date
+      // Sort events by start date (soonest first)
       allEvents.sort((a, b) => a.startDate.compareTo(b.startDate));
+
+      // Get reposts to integrate them into the feed
+      final reposts = await _fetchReposts();
+      
+      // Filter reposts to only include those with future events
+      final filteredReposts = reposts.where((repost) => 
+          repost.event.endDate.isAfter(now)).toList();
+      
+      // Create a combined list of events and reposts
+      final List<Map<String, dynamic>> feedItems = [];
+      
+      // Add original events as regular feed items
+      for (final event in allEvents) {
+        feedItems.add({
+          'type': 'event',
+          'data': event,
+          'sortKey': event.startDate.millisecondsSinceEpoch
+        });
+      }
+      
+      // Add reposts as repost feed items
+      for (final repost in filteredReposts) {
+        // Skip reposts of events we've already added
+        if (!allEvents.any((e) => e.id == repost.event.id)) {
+          feedItems.add({
+            'type': 'repost',
+            'data': RepostItem(
+              event: repost.event,
+              reposterProfile: repost.reposterProfile,
+              repostTime: repost.repostTime,
+              comment: repost.comment,
+              contentType: repost.contentType == 'quote' 
+                ? RepostContentType.quote 
+                : RepostContentType.standard,
+            ),
+            'sortKey': repost.event.startDate.millisecondsSinceEpoch
+          });
+        }
+      }
+      
+      // Sort combined feed - events by start date (soonest first)
+      feedItems.sort((a, b) {
+        final aType = a['type'] as String;
+        final bType = b['type'] as String;
+        
+        // If both are events, sort by start date (soonest first)
+        if (aType == 'event' && bType == 'event') {
+          final aEvent = a['data'] as Event;
+          final bEvent = b['data'] as Event;
+          return aEvent.startDate.compareTo(bEvent.startDate);
+        }
+        
+        // If one is an event and one is a repost, prioritize the event
+        if (aType == 'event' && bType == 'repost') {
+          return -1;
+        }
+        if (aType == 'repost' && bType == 'event') {
+          return 1;
+        }
+        
+        // For reposts, sort by the event's start date
+        final aRepost = a['data'] as RepostItem;
+        final bRepost = b['data'] as RepostItem;
+        return aRepost.event.startDate.compareTo(bRepost.event.startDate);
+      });
 
       // Generate personalized feed using the personalization engine
       final personalizedEvents = await _generatePersonalizedFeed(allEvents);
 
       // Fetch additional content for feed
-      final reposts = await _fetchReposts();
       final spaceRecommendations = await _fetchSpaceRecommendations();
       final hiveLabItems = await _fetchHiveLabItems();
 
-      debugPrint('Updating feed with ${allEvents.length} events');
+      debugPrint('Updating feed with ${allEvents.length} events and ${filteredReposts.length} reposts');
 
       // Determine if there might be more events
       final hasMore = allEvents.length >= 20;
 
-      state = FeedState.fromItems(
+      state = state.copyWith(
+        feedItems: feedItems,
         events: allEvents,
-        reposts: reposts,
+        reposts: filteredReposts,
         spaceRecommendations: spaceRecommendations,
         hiveLabItems: hiveLabItems,
+        forYouEvents: personalizedEvents,
+        status: LoadingStatus.loaded,
         hasMoreEvents: hasMore,
         currentPage: 1,
-      ).copyWith(
-        forYouEvents: personalizedEvents,
+        clearErrorMessage: true,
       );
 
       // Log feed view interaction
@@ -202,6 +272,8 @@ class FeedNotifier extends StateNotifier<FeedState> {
         return 'campus_living';
       case SpaceType.fraternityAndSorority:
         return 'fraternity_and_sorority';
+      case SpaceType.hiveExclusive:
+        return 'hive_exclusive';
       case SpaceType.other:
         return 'other';
     }
@@ -212,19 +284,12 @@ class FeedNotifier extends StateNotifier<FeedState> {
     if (events.isEmpty) return [];
 
     try {
-      // Get current user
       final user = _ref.read(currentUserProvider);
-
-      // If no user, return generic recommendations
       if (user.isNotEmpty == false) {
         return _generateGenericRecommendations(events);
       }
-
-      // Use personalization engine to score events
       final scoredEvents =
           await _ref.read(personalizedEventsProvider(events).future);
-
-      // Return events sorted by score
       return scoredEvents.map((scored) => scored.event).toList();
     } catch (e) {
       debugPrint('Error generating personalized feed: $e');
@@ -286,57 +351,112 @@ class FeedNotifier extends StateNotifier<FeedState> {
     return result;
   }
 
-  /// Load more events for infinite scrolling (pagination)
+  /// Load more events for infinite scrolling
   Future<void> loadMoreEvents() async {
-    if (!state.pagination.hasMore ||
-        state.status == LoadingStatus.loading ||
-        state.status == LoadingStatus.refreshing) {
-      return;
-    }
-
     try {
-      // Update pagination state
-      final newPagination = state.pagination.nextPage();
-      state = state.copyWith(pagination: newPagination);
+      if (state.isLoadingMore || !state.hasMoreEvents) {
+        return;
+      }
+      setLoadingMore(true);
+      debugPrint('Loading more events (page ${state.currentPage + 1})...');
+      
+      final lastEventId = state.events.isNotEmpty ? state.events.last.id : null;
+      if (lastEventId == null) {
+        setLoadingMore(false);
+        return;
+      }
+      
+      final lastEvent = state.events.last;
+      final lastTimestamp = lastEvent.startDate;
+      final firestore = FirebaseFirestore.instance;
+      final now = DateTime.now();
+      
+      // Query for events after the last one we have
+      final newEventsQuery = await firestore
+          .collection('events')
+          .where('startDate', isGreaterThan: lastTimestamp)
+          .orderBy('startDate')
+          .limit(20)
+          .get();
 
-      // Simplified pagination - we'll just get more events without using startAfter
-      // In a real implementation, we would track the last document cursor
+      final List<Event> newEvents = [];
+      for (final doc in newEventsQuery.docs) {
+        try {
+          final data = doc.data();
+          final processedData = _processTimestamps(data);
+          final event = Event.fromJson(processedData);
+          
+          // Only add future events
+          if (event.endDate.isAfter(now)) {
+            newEvents.add(event);
+          }
+        } catch (e) {
+          debugPrint('Error parsing event ${doc.id}: $e');
+        }
+      }
 
-      // Fetch next page of events
-      final currentEvents = state.allEvents;
-      final nextPageEvents = await SpaceEventManager.getAllEvents(
-        limit: state.pagination.pageSize,
-        startDate: DateTime.now(),
+      if (newEvents.isEmpty) {
+        state = state.copyWith(hasMoreEvents: false, isLoadingMore: false);
+        return;
+      }
+
+      // Combine with existing events
+      final combinedEvents = [...state.events, ...newEvents];
+      final processedEventIds = state.events.map((e) => e.id).toSet();
+      final newFeedItems = <Map<String, dynamic>>[];
+      
+      // Add new events to feed items
+      for (final event in newEvents) {
+        if (!processedEventIds.contains(event.id)) {
+          newFeedItems.add({
+            'type': 'event',
+            'data': event,
+            'sortKey': event.startDate.millisecondsSinceEpoch,
+          });
+        }
+      }
+      
+      // Combine with existing feed items
+      final combinedFeedItems = [...state.feedItems, ...newFeedItems];
+      
+      // Re-sort the entire feed to ensure proper ordering
+      combinedFeedItems.sort((a, b) {
+        final aType = a['type'] as String;
+        final bType = b['type'] as String;
+        
+        // If both are events, sort by start date (soonest first)
+        if (aType == 'event' && bType == 'event') {
+          final aEvent = a['data'] as Event;
+          final bEvent = b['data'] as Event;
+          return aEvent.startDate.compareTo(bEvent.startDate);
+        }
+        
+        // If one is an event and one is a repost, prioritize the event
+        if (aType == 'event' && bType == 'repost') {
+          return -1;
+        }
+        if (aType == 'repost' && bType == 'event') {
+          return 1;
+        }
+        
+        // For reposts, sort by event's start date
+        final aRepost = a['data'] as RepostItem;
+        final bRepost = b['data'] as RepostItem;
+        return aRepost.event.startDate.compareTo(bRepost.event.startDate);
+      });
+      
+      state = state.copyWith(
+        events: combinedEvents,
+        feedItems: combinedFeedItems,
+        currentPage: state.currentPage + 1,
+        hasMoreEvents: newEvents.length >= 20,
+        isLoadingMore: false,
       );
 
-      // Filter out events we already have
-      final existingIds = currentEvents.map((e) => e.id).toSet();
-      final newEvents =
-          nextPageEvents.where((e) => !existingIds.contains(e.id)).toList();
-
-      // If no new events or less than expected, we're at the end
-      if (newEvents.isEmpty || newEvents.length < state.pagination.pageSize) {
-        state = state.copyWith(
-          pagination: state.pagination.copyWith(hasMore: false),
-        );
-      }
-
-      // Add new events to state
-      if (newEvents.isNotEmpty) {
-        final combinedEvents = [...currentEvents, ...newEvents];
-        final personalizedEvents =
-            await _generatePersonalizedFeed(combinedEvents);
-
-        state = state.copyWith(
-          allEvents: combinedEvents,
-          forYouEvents: personalizedEvents,
-          categorizedEvents: _categorizeByCategory(combinedEvents),
-          timeEvents: _categorizeByTime(combinedEvents),
-        );
-      }
+      debugPrint('Loaded ${newEvents.length} more events (total: ${combinedEvents.length})');
     } catch (e) {
-      // Don't change to error state - just keep current state and show a snackbar
       debugPrint('Error loading more events: $e');
+      state = state.copyWith(isLoadingMore: false);
     }
   }
 
@@ -367,10 +487,10 @@ class FeedNotifier extends StateNotifier<FeedState> {
       await EventService.saveUserEvent(event);
 
       // Add to state
-      final newEvents = [...state.allEvents, event];
+      final newEvents = [...state.events, event];
 
       state = state.copyWith(
-        allEvents: newEvents,
+        events: newEvents,
         categorizedEvents: _categorizeByCategory(newEvents),
         timeEvents: _categorizeByTime(newEvents),
       );
@@ -429,7 +549,7 @@ class FeedNotifier extends StateNotifier<FeedState> {
   Future<bool> deleteEvent(String eventId) async {
     try {
       // Find the event in our state to get its space info
-      final event = state.allEvents.firstWhere(
+      final event = state.events.firstWhere(
         (e) => e.id == eventId,
         orElse: () => throw Exception('Event not found'),
       );
@@ -457,10 +577,10 @@ class FeedNotifier extends StateNotifier<FeedState> {
       if (success) {
         // Update state
         final newEvents =
-            state.allEvents.where((e) => e.id != eventId).toList();
+            state.events.where((e) => e.id != eventId).toList();
 
         state = state.copyWith(
-          allEvents: newEvents,
+          events: newEvents,
           categorizedEvents: _categorizeByCategory(newEvents),
           timeEvents: _categorizeByTime(newEvents),
         );
@@ -477,35 +597,48 @@ class FeedNotifier extends StateNotifier<FeedState> {
   Future<void> rsvpToEvent(String eventId, bool rsvp) async {
     try {
       // Find the event in our state
-      final event = state.allEvents.firstWhere(
+      final event = state.events.firstWhere(
         (e) => e.id == eventId,
         orElse: () => throw Exception('Event not found'),
       );
 
       final profileNotifier = _ref.read(profileProvider.notifier);
 
-      if (rsvp) {
-        await profileNotifier.saveEvent(event);
-      } else {
-        // Profile provider method signature is different
-        // In a production app, you would need to add a removeEvent method
-        // that takes an eventId
-        // This is a simplified implementation
-        final profileState = _ref.read(profileProvider);
-        if (profileState is AsyncData<UserProfile>) {
-          final newSavedEvents = profileState.value?.savedEvents
-                  .where((e) => e.id != eventId)
-                  .toList() ??
-              [];
-
-          final updatedProfile = profileState.value?.copyWith(
-            savedEvents: newSavedEvents,
-          );
-
-          if (updatedProfile != null) {
-            await profileNotifier.updateProfile(updatedProfile.toJson());
-          }
+      // Update backend first
+      final success = await EventService.rsvpToEvent(eventId, rsvp);
+      
+      if (success) {
+        if (rsvp) {
+          await profileNotifier.saveEvent(event);
+        } else {
+          await profileNotifier.removeEvent(eventId);
         }
+        
+        // Refresh profile to ensure UI is up to date
+        await profileNotifier.refreshProfile();
+        
+        // Update local feed state
+        final updatedEvents = state.events.map((e) {
+          if (e.id == eventId) {
+            final currentAttendees = List<String>.from(e.attendees);
+            final userId = _getCurrentUserId();
+            
+            if (rsvp && !currentAttendees.contains(userId)) {
+              currentAttendees.add(userId);
+            } else if (!rsvp && currentAttendees.contains(userId)) {
+              currentAttendees.remove(userId);
+            }
+            
+            return e.copyWith(attendees: currentAttendees);
+          }
+          return e;
+        }).toList();
+        
+        state = state.copyWith(
+          events: updatedEvents,
+          categorizedEvents: _categorizeByCategory(updatedEvents),
+          timeEvents: _categorizeByTime(updatedEvents),
+        );
       }
     } catch (e) {
       debugPrint('Error updating RSVP status: $e');
@@ -552,7 +685,7 @@ class FeedNotifier extends StateNotifier<FeedState> {
       // Set state to refreshing
       state = state.copyWith(
         status: LoadingStatus.refreshing,
-        clearError: true,
+        errorMessage: null,
       );
 
       // Resync all RSS events
@@ -572,124 +705,169 @@ class FeedNotifier extends StateNotifier<FeedState> {
     }
   }
 
-  /// Create sample repost items for demonstration
-  List<RepostItem> _createSampleReposts(List<Event> events) {
-    if (events.isEmpty) return [];
-
-    // Use up to 3 events for reposts
-    final repostEvents = events.length > 3 ? events.sublist(0, 3) : events;
-
-    // Sample reposter names
-    final reposterNames = [
-      'Alex Turner',
-      'Jamie Smith',
-      'Michael Johnson',
-      'Emma Davis',
-    ];
-
-    // Sample comments
-    final comments = [
-      'This event looks amazing! Who\'s going?',
-      'Can\'t wait for this one!',
-      'I attended this last year and it was fantastic.',
-      'Anyone interested in joining me?',
-      null, // Some reposts won't have comments
-    ];
-
-    // Create reposts
-    final random = Random();
-    final reposts = <RepostItem>[];
-
-    for (final event in repostEvents) {
-      final reposterName = reposterNames[random.nextInt(reposterNames.length)];
-      final comment = comments[random.nextInt(comments.length)];
-
-      // Create a repost 1-3 days ago
-      final repostTime = DateTime.now().subtract(
-        Duration(
-          days: random.nextInt(3) + 1,
-          hours: random.nextInt(24),
-          minutes: random.nextInt(60),
-        ),
-      );
-
-      reposts.add(
-        RepostItem(
-          event: event,
-          comment: comment,
-          reposterName: reposterName,
-          repostTime: repostTime,
-          reposterImageUrl:
-              'https://picsum.photos/200?random=${random.nextInt(100)}',
-        ),
-      );
-    }
-
-    return reposts;
+  /// Get reposts for the current feed state
+  List<RepostItem> getReposts(FeedState state) {
+    if (state.events.isEmpty) return [];
+    return [];  // Return empty list instead of mock data
   }
 
-  /// Create sample space recommendations
-  List<SpaceRecommendation> _createSampleSpaceRecommendations() {
-    // Create a diverse set of space recommendations
-    return [
-      const SpaceRecommendation(
-        name: 'Photography Club',
-        category: 'Arts',
-        description: 'Share your passion for photography with fellow students.',
-        memberCount: 128,
-        isOfficial: true,
-      ),
-      const SpaceRecommendation(
-        name: 'AI Research Group',
-        category: 'Technology',
-        description:
-            'Explore the latest in artificial intelligence and machine learning.',
-        memberCount: 75,
-        isOfficial: true,
-      ),
-      const SpaceRecommendation(
-        name: 'Basketball Team',
-        category: 'Sports',
-        description: 'Join us for weekly games and practice sessions.',
-        memberCount: 42,
-      ),
-    ];
-  }
-
-  /// Create sample HIVE Lab items
-  List<HiveLabItem> _createSampleHiveLabItems() {
-    return [
-      const HiveLabItem(
-        title: 'Help Shape HIVE',
-        description:
-            'Suggest features, report bugs, and help make HIVE better for everyone.',
-        actionLabel: 'Join HIVE Lab',
-      ),
-      const HiveLabItem(
-        title: 'Upcoming Feature: Group Chats',
-        description:
-            'Group messaging is coming soon! Help us test this feature early.',
-        actionLabel: 'Join Beta',
-      ),
-    ];
-  }
-
-  /// Create sample repost items for demonstration
+  /// Fetch reposts from Firestore
   Future<List<RepostItem>> _fetchReposts() async {
-    // Implementation of _createSampleReposts
-    return _createSampleReposts(state.allEvents);
+    try {
+      final repostsSnapshot = await FirebaseFirestore.instance
+          .collection('reposts')
+          .orderBy('repostedAt', descending: true)
+          .limit(20)
+          .get();
+      
+      if (repostsSnapshot.docs.isEmpty) {
+        debugPrint('No reposts found in database');
+        return [];
+      }
+      
+      // Process reposts and load associated events and users
+      final List<RepostItem> loadedReposts = [];
+      
+      for (final doc in repostsSnapshot.docs) {
+        try {
+          final data = doc.data();
+          final eventId = data['eventId'] as String;
+          final repostedById = data['repostedById'] as String;
+          
+          // Get the event document
+          final eventDoc = await FirebaseFirestore.instance
+              .collection('events')
+              .doc(eventId)
+              .get();
+          
+          if (!eventDoc.exists) {
+            debugPrint('Event ${eventId} not found for repost');
+            continue;
+          }
+          
+          // Get the user profile document
+          final userDoc = await FirebaseFirestore.instance
+              .collection('users')
+              .doc(repostedById)
+              .get();
+          
+          if (!userDoc.exists) {
+            debugPrint('User ${repostedById} not found for repost');
+            continue;
+          }
+          
+          // Create Event and UserProfile objects
+          final eventData = eventDoc.data()!;
+          eventData['id'] = eventDoc.id;
+          final event = Event.fromJson(eventData);
+          
+          final userData = userDoc.data() ?? {};
+          final userProfile = UserProfile(
+            id: userDoc.id,
+            displayName: userData['displayName'] ?? 'User',
+            username: userData['username'] ?? 'user_${userDoc.id.substring(0, 5)}',
+            profileImageUrl: userData['profileImageUrl'],
+            email: userData['email'] ?? '',
+            year: userData['year'] ?? '',
+            major: userData['major'] ?? '',
+            residence: userData['residence'] ?? '',
+            eventCount: userData['eventCount'] ?? 0,
+            clubCount: userData['clubCount'] ?? 0,
+            friendCount: userData['friendCount'] ?? 0,
+            createdAt: _parseTimestamp(userData['createdAt']),
+            updatedAt: _parseTimestamp(userData['updatedAt']),
+          );
+          
+          // Create RepostItem for feed
+          final repost = RepostItem(
+            event: event,
+            reposterProfile: userProfile,
+            repostTime: _parseTimestamp(data['repostedAt']),
+            comment: data['comment'] as String?,
+            contentType: data['repostType'] == 'quote' 
+              ? RepostContentType.quote 
+              : RepostContentType.standard,
+          );
+          
+          loadedReposts.add(repost);
+        } catch (e) {
+          debugPrint('Error processing repost document: $e');
+          continue;
+        }
+      }
+      
+      debugPrint('Loaded ${loadedReposts.length} reposts from database');
+      return loadedReposts;
+    } catch (e) {
+      debugPrint('Error loading reposts: $e');
+      return [];
+    }
   }
 
-  /// Create sample space recommendations
-  Future<List<SpaceRecommendation>> _fetchSpaceRecommendations() async {
-    // Implementation of _createSampleSpaceRecommendations
-    return _createSampleSpaceRecommendations();
+  /// Fetch space recommendations from Firestore
+  Future<List<SpaceRecommendationSimple>> _fetchSpaceRecommendations() async {
+    try {
+      final firestore = FirebaseFirestore.instance;
+      final userId = FirebaseAuth.instance.currentUser?.uid;
+      if (userId == null) return [];
+
+      final recommendationsQuery = await firestore
+          .collection('users')
+          .doc(userId)
+          .collection('recommendations')
+          .where('type', isEqualTo: 'space')
+          .orderBy('score', descending: true)
+          .limit(5)
+          .get();
+
+      return Future.wait(recommendationsQuery.docs.map((doc) async {
+        final data = doc.data();
+        final spaceDoc = await firestore
+            .collection('spaces')
+            .doc(data['spaceId'] as String)
+            .get();
+            
+        if (!spaceDoc.exists) return null;
+        
+        final spaceData = spaceDoc.data()!;
+        return SpaceRecommendationSimple(
+          name: spaceData['name'] ?? '',
+          description: spaceData['description'] ?? '',
+          imageUrl: spaceData['imageUrl'],
+          category: spaceData['category'] ?? 'Other',
+          score: (data['score'] as num?)?.toDouble() ?? 0.0,
+        );
+      })).then((list) => list.whereType<SpaceRecommendationSimple>().toList());
+    } catch (e) {
+      debugPrint('Error fetching space recommendations: $e');
+      return [];
+    }
   }
 
-  /// Create sample HIVE Lab items
-  Future<List<HiveLabItem>> _fetchHiveLabItems() async {
-    // Implementation of _createSampleHiveLabItems
-    return _createSampleHiveLabItems();
+  /// Fetch HIVE lab items from Firestore
+  Future<List<HiveLabItemSimple>> _fetchHiveLabItems() async {
+    try {
+      final firestore = FirebaseFirestore.instance;
+      final hiveLabQuery = await firestore
+          .collection('hive_lab')
+          .where('status', isEqualTo: 'active')
+          .orderBy('createdAt', descending: true)
+          .limit(5)
+          .get();
+
+      return hiveLabQuery.docs.map((doc) {
+        final data = doc.data();
+        return HiveLabItemSimple(
+          title: data['title'] ?? '',
+          description: data['description'] ?? '',
+          link: data['link'] ?? '',
+          timestamp: (data['createdAt'] as Timestamp).toDate(),
+        );
+      }).toList();
+    } catch (e) {
+      debugPrint('Error fetching HIVE lab items: $e');
+      return [];
+    }
   }
 
   /// Log feed view interaction
@@ -709,7 +887,7 @@ class FeedNotifier extends StateNotifier<FeedState> {
         action: InteractionAction.view,
         metadata: {
           'timestamp': DateTime.now().millisecondsSinceEpoch,
-          'feedSize': state.allEvents.length,
+          'feedSize': state.events.length,
         },
       );
     } catch (e) {
@@ -785,6 +963,11 @@ class FeedNotifier extends StateNotifier<FeedState> {
         throw Exception('You must be logged in to repost');
       }
 
+      // Determine content type based on comment
+      final contentType = (repostInfo.comment != null && repostInfo.comment!.isNotEmpty)
+          ? RepostContentType.quote.toString()
+          : RepostContentType.standard.toString();
+
       // Create repost data for Firestore
       final repostData = {
         'eventId': event.id,
@@ -792,14 +975,16 @@ class FeedNotifier extends StateNotifier<FeedState> {
         'userName': repostInfo.userName,
         'avatarUrl': repostInfo.avatarUrl,
         'comment': repostInfo.comment,
+        'contentType': contentType,
         'createdAt': Timestamp.fromDate(repostInfo.createdAt),
       };
 
       // Add to reposts collection
       await FirebaseFirestore.instance.collection('reposts').add(repostData);
-
-      // Update local state with new repost
-      // In a real app, you might fetch all reposts from Firestore
+      
+      // Don't modify the feed state - the repost will just be associated with 
+      // the original event and not appear as a separate item in the feed
+      debugPrint('✓ Repost saved to Firestore (not adding to feed items)');
 
       // Return success
       return true;
@@ -808,4 +993,154 @@ class FeedNotifier extends StateNotifier<FeedState> {
       rethrow;
     }
   }
+
+  /// Refresh feed with proper filtering and deduplication
+  Future<void> refreshFeed() async {
+    try {
+      debugPrint('🔄 Refreshing feed with proper filtering...');
+      
+      // Get fresh events from the database
+      await fetchEvents(refresh: true);
+      
+      // Explicitly fetch reposts 
+      final repostItems = await _fetchReposts();
+      
+      // Filter out past events - strict filtering to only show future events
+      final now = DateTime.now();
+      final filteredEvents = state.events
+          .where((event) => event.endDate.isAfter(now))
+          .toList();
+      
+      // Sort filtered events by start date (soonest first)
+      filteredEvents.sort((a, b) => a.startDate.compareTo(b.startDate));
+      
+      // Create a set of event IDs to track duplicates
+      final processedEventIds = <String>{};
+      
+      // Create feed items with proper deduplication
+      final List<Map<String, dynamic>> feedItems = [];
+      
+      // Add events to feed items (only if not already processed)
+      for (final event in filteredEvents) {
+        if (!processedEventIds.contains(event.id)) {
+          feedItems.add({
+            'type': 'event',
+            'data': event,
+            'sortKey': event.startDate.millisecondsSinceEpoch,
+          });
+          processedEventIds.add(event.id);
+        }
+      }
+      
+      // Add reposts to feed items (only if not already processed and the event is not past)
+      for (final repost in repostItems) {
+        if (!processedEventIds.contains(repost.event.id) && repost.event.endDate.isAfter(now)) {
+          feedItems.add({
+            'type': 'repost',
+            'data': repost,
+            'sortKey': repost.repostTime.millisecondsSinceEpoch,
+          });
+          processedEventIds.add(repost.event.id);
+        }
+      }
+      
+      // Sort feed items - events by start date (soonest first), then reposts
+      feedItems.sort((a, b) {
+        final aType = a['type'] as String;
+        final bType = b['type'] as String;
+        
+        // If both are events, sort by start date (soonest first)
+        if (aType == 'event' && bType == 'event') {
+          final aEvent = a['data'] as Event;
+          final bEvent = b['data'] as Event;
+          return aEvent.startDate.compareTo(bEvent.startDate);
+        }
+        
+        // If one is an event and one is a repost, prioritize the event
+        if (aType == 'event' && bType == 'repost') {
+          return -1;
+        }
+        if (aType == 'repost' && bType == 'event') {
+          return 1;
+        }
+        
+        // If both are reposts, sort by repost time (most recent first)
+        final aRepost = a['data'] as RepostItem;
+        final bRepost = b['data'] as RepostItem;
+        return bRepost.repostTime.compareTo(aRepost.repostTime);
+      });
+      
+      // Update state with filtered events, reposts, and deduplicated feed items
+      state = state.copyWith(
+        events: filteredEvents,
+        reposts: repostItems,
+        feedItems: feedItems,
+      );
+      
+      debugPrint('Feed refreshed with ${feedItems.length} total unique items');
+    } catch (e) {
+      debugPrint('Error refreshing feed: $e');
+    }
+  }
+  
+  /// Hide an event from the feed when user swipes it away
+  void hideEvent(String eventId) {
+    try {
+      // Filter out the event from events list
+      final updatedEvents = state.events.where((event) => event.id != eventId).toList();
+      
+      // Filter out any reposts containing the event
+      final updatedReposts = state.reposts.where((repost) => repost.event.id != eventId).toList();
+      
+      // Update feed items
+      final updatedFeedItems = state.feedItems.where((item) {
+        final itemType = item['type'] as String;
+        if (itemType == 'event') {
+          final event = item['data'] as Event;
+          return event.id != eventId;
+        } else if (itemType == 'repost') {
+          final repost = item['data'] as RepostItem;
+          return repost.event.id != eventId;
+        }
+        return true;
+      }).toList();
+      
+      // Update the state
+      state = state.copyWith(
+        events: updatedEvents,
+        reposts: updatedReposts,
+        feedItems: updatedFeedItems,
+      );
+      
+      // Log the action
+      debugPrint('🚫 User hid event: $eventId (${updatedFeedItems.length} items remaining)');
+      
+      // In a real app, you might want to store this preference in user settings
+      // or send it to an analytics/personalization service
+    } catch (e) {
+      debugPrint('Error hiding event: $e');
+    }
+  }
+
+  /// Helper function to parse timestamp from various formats
+  DateTime _parseTimestamp(dynamic timestamp) {
+    if (timestamp == null) {
+      return DateTime.now();
+    }
+    if (timestamp is Timestamp) {
+      return timestamp.toDate();
+    }
+    if (timestamp is DateTime) {
+      return timestamp;
+    }
+    if (timestamp is String) {
+      try {
+        return DateTime.parse(timestamp);
+      } catch (e) {
+        return DateTime.now();
+      }
+    }
+    return DateTime.now();
+  }
 }
+

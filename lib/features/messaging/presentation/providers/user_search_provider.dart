@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:hive_ui/features/messaging/presentation/providers/user_tag_provider.dart';
 
 /// Represents a user in the system
 class User {
@@ -25,6 +26,14 @@ class User {
     required this.profilePicture,
     this.bio = '',
   });
+  
+  /// Convert to UserTag
+  UserTag toUserTag() {
+    return UserTag(
+      userId: id,
+      username: username,
+    );
+  }
 }
 
 /// Interface for accessing user data
@@ -121,4 +130,32 @@ class UserSearchNotifier extends StateNotifier<List<User>> {
   void clearResults() {
     state = [];
   }
+}
+
+/// Provider for selected user tags that will be auto-saved
+final selectedTagsProvider = Provider<List<UserTag>>((ref) {
+  final tagsState = ref.watch(userTagsProvider);
+  return tagsState.tags;
+});
+
+/// Check if a user is already tagged
+final isUserTaggedProvider = Provider.family<bool, String>((ref, userId) {
+  final tags = ref.watch(selectedTagsProvider);
+  return tags.any((tag) => tag.userId == userId);
+});
+
+/// Provider to get all tagged users
+final allTaggedUsersProvider = Provider<List<UserTag>>((ref) {
+  return ref.watch(selectedTagsProvider);
+});
+
+/// Function to add a tag (auto-saves)
+void addUserTag(WidgetRef ref, User user) {
+  final userTag = user.toUserTag();
+  ref.read(userTagsProvider.notifier).addTag(userTag);
+}
+
+/// Function to remove a tag (auto-saves)
+void removeUserTag(WidgetRef ref, String userId) {
+  ref.read(userTagsProvider.notifier).removeTagById(userId);
 } 

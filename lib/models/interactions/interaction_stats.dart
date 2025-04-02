@@ -87,13 +87,23 @@ class InteractionStats {
       ctr: (data['ctr'] as num?)?.toDouble() ?? 0.0,
       conversionRate: (data['conversionRate'] as num?)?.toDouble() ?? 0.0,
       engagementScore: (data['engagementScore'] as num?)?.toDouble() ?? 0.0,
-      lastUpdated:
-          (data['lastUpdated'] as Timestamp?)?.toDate() ?? DateTime.now(),
+      lastUpdated: _parseTimestamp(data['lastUpdated']),
       actionCounts: (data['actionCounts'] as Map<String, dynamic>?)?.map(
             (key, value) => MapEntry(key, value as int),
           ) ??
           {},
     );
+  }
+
+  /// Helper method to parse timestamp from different formats
+  static DateTime _parseTimestamp(dynamic timestamp) {
+    if (timestamp is Timestamp) {
+      return timestamp.toDate();
+    } else if (timestamp is int) {
+      return DateTime.fromMillisecondsSinceEpoch(timestamp);
+    } else {
+      return DateTime.now(); // Fallback to current time
+    }
   }
 
   /// Convert stats to Firestore data

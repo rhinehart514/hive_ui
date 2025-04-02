@@ -23,6 +23,9 @@ enum SpaceType {
   
   /// A space for events
   event,
+  
+  /// A space exclusive to HIVE
+  hiveExclusive,
 }
 
 /// Represents a space in the HIVE app

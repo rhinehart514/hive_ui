@@ -137,4 +137,28 @@ class SpaceMetricsEntity {
       needsIntroduction: needsIntroduction ?? this.needsIntroduction,
     );
   }
+
+  /// Convert to JSON map
+  Map<String, dynamic> toJson() {
+    return {
+      'spaceId': spaceId,
+      'memberCount': memberCount,
+      'activeMembers': activeMembers,
+      'weeklyEvents': weeklyEvents,
+      'monthlyEngagements': monthlyEngagements,
+      'lastActivity': lastActivity,
+      'hasNewContent': hasNewContent,
+      'isTrending': isTrending,
+      'activeMembers24h': activeMembers24h,
+      'activityScores': activityScores,
+      'category': category.index,
+      'size': size.index,
+      'engagementScore': engagementScore,
+      'isTimeSensitive': isTimeSensitive,
+      'expiryDate': expiryDate,
+      'connectedFriends': connectedFriends,
+      'firstActionPrompt': firstActionPrompt,
+      'needsIntroduction': needsIntroduction,
+    };
+  }
 }

@@ -78,15 +78,22 @@ class AuthAnalyticsService {
     required String method,
     required String errorCode,
     String? errorMessage,
+    Map<String, dynamic>? additionalParams,
   }) async {
     try {
+      final Map<String, dynamic> params = {
+        'method': method,
+        'error_code': errorCode,
+        'error_message': errorMessage ?? 'Unknown error',
+      };
+
+      if (additionalParams != null) {
+        params.addAll(additionalParams);
+      }
+
       await _analytics.logEvent(
         name: 'auth_error',
-        parameters: {
-          'method': method,
-          'error_code': errorCode,
-          'error_message': errorMessage ?? 'Unknown error',
-        },
+        parameters: params,
       );
 
       debugPrint(
@@ -204,6 +211,24 @@ class AuthAnalyticsService {
     } catch (e) {
       debugPrint(
           'Analytics: Failed to track email verification completed event: $e');
+    }
+  }
+
+  /// Tracks a generic event
+  Future<void> trackEvent(
+    String eventName, {
+    Map<String, dynamic>? parameters,
+  }) async {
+    try {
+      await _analytics.logEvent(
+        name: eventName,
+        parameters: parameters,
+      );
+
+      debugPrint(
+          'Analytics: Event tracked successfully (name: $eventName)');
+    } catch (e) {
+      debugPrint('Analytics: Failed to track event: $e');
     }
   }
 }

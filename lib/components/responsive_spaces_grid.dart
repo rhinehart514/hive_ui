@@ -674,7 +674,7 @@ class _ResponsiveSpacesGridState extends ConsumerState<ResponsiveSpacesGrid> {
                 // Member count
                 Row(
                   children: [
-                    Icon(
+                    const Icon(
                       Icons.people_outline,
                       size: 14,
                       color: AppColors.textTertiary,

@@ -1,27 +1,31 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:hive_ui/features/profile/presentation/providers/profile_media_provider.dart';
 import 'package:hive_ui/theme/app_colors.dart';
 import 'package:hive_ui/utils/profile_image_handler.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:hive_ui/shell.dart';
 
 /// A modal dialog that displays options for adding a profile photo
-class ProfilePhotoPicker extends ConsumerWidget {
+class ProfilePhotoPicker extends StatelessWidget {
   /// Callback when a new image is selected from camera
   final void Function(String imagePath)? onImageSelected;
 
   /// Whether to show the close button
   final bool showCloseButton;
 
+  /// Reference to the ProviderContainer (optional)
+  final ProviderContainer? container;
+
   const ProfilePhotoPicker({
     super.key,
     this.onImageSelected,
     this.showCloseButton = true,
+    this.container,
   });
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     // Configure UI overlay to hide navigation bar
     SystemChrome.setEnabledSystemUIMode(
       SystemUiMode.immersiveSticky,
@@ -29,9 +33,9 @@ class ProfilePhotoPicker extends ConsumerWidget {
     );
 
     return Container(
-      decoration: BoxDecoration(
+      decoration: const BoxDecoration(
         color: Colors.black,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -54,6 +58,11 @@ class ProfilePhotoPicker extends ConsumerWidget {
                   IconButton(
                     icon: const Icon(Icons.close, color: Colors.white),
                     onPressed: () {
+                      // Restore navigation bar visibility
+                      if (container != null) {
+                        container!.read(navigationBarVisibilityProvider.notifier).state = true;
+                      }
+                      
                       // Restore UI overlay when closing
                       SystemChrome.setEnabledSystemUIMode(
                         SystemUiMode.edgeToEdge,
@@ -73,7 +82,7 @@ class ProfilePhotoPicker extends ConsumerWidget {
             context,
             icon: Icons.camera_alt,
             label: 'Take New Photo',
-            onTap: () => _handleTakePhoto(context, ref),
+            onTap: () => _handleTakePhoto(context),
           ),
           
           const SizedBox(height: 16),
@@ -83,7 +92,7 @@ class ProfilePhotoPicker extends ConsumerWidget {
             context,
             icon: Icons.photo_library,
             label: 'Choose from Gallery',
-            onTap: () => _handleChooseGallery(context, ref),
+            onTap: () => _handleChooseGallery(context),
           ),
           
           // Safe area padding
@@ -140,7 +149,12 @@ class ProfilePhotoPicker extends ConsumerWidget {
   }
 
   /// Handle taking a new photo
-  Future<void> _handleTakePhoto(BuildContext context, WidgetRef ref) async {
+  Future<void> _handleTakePhoto(BuildContext context) async {
+    // Restore navigation bar visibility
+    if (container != null) {
+      container!.read(navigationBarVisibilityProvider.notifier).state = true;
+    }
+    
     // Restore UI overlay before opening camera
     SystemChrome.setEnabledSystemUIMode(
       SystemUiMode.edgeToEdge,
@@ -159,7 +173,12 @@ class ProfilePhotoPicker extends ConsumerWidget {
   }
 
   /// Handle choosing from gallery
-  Future<void> _handleChooseGallery(BuildContext context, WidgetRef ref) async {
+  Future<void> _handleChooseGallery(BuildContext context) async {
+    // Restore navigation bar visibility
+    if (container != null) {
+      container!.read(navigationBarVisibilityProvider.notifier).state = true;
+    }
+    
     // Restore UI overlay before opening gallery
     SystemChrome.setEnabledSystemUIMode(
       SystemUiMode.edgeToEdge,
@@ -185,6 +204,19 @@ void showProfilePhotoPicker(
 }) {
   HapticFeedback.mediumImpact();
   
+  // Find the ProviderContainer in the widget tree
+  ProviderContainer? container;
+  try {
+    final scope = context.findAncestorWidgetOfExactType<UncontrolledProviderScope>();
+    if (scope != null) {
+      container = scope.container;
+      // Hide navigation bar
+      container.read(navigationBarVisibilityProvider.notifier).state = false;
+    }
+  } catch (e) {
+    debugPrint('Error finding ProviderContainer: $e');
+  }
+  
   // Hide the navigation bar
   SystemChrome.setEnabledSystemUIMode(
     SystemUiMode.immersiveSticky,
@@ -197,8 +229,14 @@ void showProfilePhotoPicker(
     isScrollControlled: true,
     builder: (context) => ProfilePhotoPicker(
       onImageSelected: onImageSelected,
+      container: container,
     ),
   ).then((_) {
+    // Restore navigation bar
+    if (container != null) {
+      container.read(navigationBarVisibilityProvider.notifier).state = true;
+    }
+    
     // Restore system UI when dialog is closed
     SystemChrome.setEnabledSystemUIMode(
       SystemUiMode.edgeToEdge,

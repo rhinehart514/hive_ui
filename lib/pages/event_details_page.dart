@@ -691,28 +691,37 @@ class _EventDetailsPageState extends ConsumerState<EventDetailsPage>
 
     try {
       if (currentRsvpStatus) {
-        // Remove RSVP
-        profileNotifier.removeEvent(widget.event.id);
-        await EventService.rsvpToEvent(widget.event.id, false);
-        if (mounted) {
-          _showSnackBar('RSVP removed', isSuccess: true);
+        // Remove RSVP - do backend update first
+        final success = await EventService.rsvpToEvent(widget.event.id, false);
+        if (success) {
+          await profileNotifier.removeEvent(widget.event.id);
+          // Refresh profile to ensure UI is up to date
+          await profileNotifier.refreshProfile();
+          
+          if (mounted) {
+            _showSnackBar('RSVP removed', isSuccess: true);
+          }
         }
       } else {
-        // Add RSVP
-        profileNotifier.saveEvent(widget.event);
-        await EventService.rsvpToEvent(widget.event.id, true);
+        // Add RSVP - do backend update first
+        final success = await EventService.rsvpToEvent(widget.event.id, true);
+        if (success) {
+          await profileNotifier.saveEvent(widget.event);
+          // Refresh profile to ensure UI is up to date
+          await profileNotifier.refreshProfile();
 
-        if (mounted) {
-          _showSnackBar("You're going!", isSuccess: true);
+          if (mounted) {
+            _showSnackBar("You're going!", isSuccess: true);
 
-          // Ask if user wants to add to calendar
-          final addToCalendar = await showDialog<bool>(
-            context: context,
-            builder: (context) => _buildAddToCalendarDialog(),
-          );
+            // Ask if user wants to add to calendar
+            final addToCalendar = await showDialog<bool>(
+              context: context,
+              builder: (context) => _buildAddToCalendarDialog(),
+            );
 
-          if (addToCalendar == true) {
-            _addToCalendar();
+            if (addToCalendar == true) {
+              _addToCalendar();
+            }
           }
         }
       }

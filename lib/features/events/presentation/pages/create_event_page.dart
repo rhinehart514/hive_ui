@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -10,12 +8,11 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:hive_ui/models/event_creation_request.dart';
 import 'package:hive_ui/models/event.dart';
 import 'package:hive_ui/models/space.dart';
-import 'package:hive_ui/features/events/presentation/providers/create_event_provider.dart';
 import 'package:hive_ui/services/analytics_service.dart';
 import 'package:hive_ui/theme/app_colors.dart';
 import 'package:hive_ui/theme/glassmorphism_guide.dart';
 import 'package:hive_ui/extensions/glassmorphism_extension.dart';
-import 'package:hive_ui/theme/huge_icons.dart';
+import 'package:hive_ui/features/spaces/data/repositories/space_repository_impl.dart';
 
 class CreateEventPage extends ConsumerStatefulWidget {
   final Space selectedSpace;
@@ -252,78 +249,102 @@ class _CreateEventPageState extends ConsumerState<CreateEventPage> {
   Future<void> _createEvent() async {
     try {
       // Validate form
-      if (_formKey.currentState?.validate() != true) {
-        setState(() => _showErrors = true);
+      if (!_formKey.currentState!.validate()) {
+        setState(() {
+          _showErrors = true;
+        });
         return;
       }
-
-      if (_startDate.isBefore(DateTime.now())) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Start time must be in the future'),
-            backgroundColor: Colors.red,
-          ),
-        );
+      
+      if (_titleController.text.isEmpty) {
+        setState(() {
+          _showErrors = true;
+        });
         return;
       }
+      
+      // Set loading
+      setState(() {
+        _isSubmitting = true;
+      });
+      
+      // Create a Firebase reference for the new event
+      final CollectionReference eventsCollection = FirebaseFirestore.instance.collection('events');
+      final DocumentReference newEventRef = eventsCollection.doc();
 
-      if (_startDate.isAfter(_endDate)) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Start time must be before end time'),
-            backgroundColor: Colors.red,
-          ),
-        );
-        return;
-      }
-
-      setState(() => _isSubmitting = true);
-
-      // Get current user
+      // Get timestamp
+      final DateTime now = DateTime.now();
+      
+      // Determine visibility based on selection
+      String visibilityValue = _visibility;
+      
+      // First check if the user is an admin of the space if it's a club/space event
       final currentUser = FirebaseAuth.instance.currentUser;
       if (currentUser == null) {
-        throw Exception('You must be signed in to create an event');
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('You must be signed in to create an event')),
+        );
+        setState(() {
+          _isSubmitting = false;
+        });
+        return;
       }
-
-      // Log data for debugging
-      debugPrint('Creating event for space: ${widget.selectedSpace.id} (${widget.selectedSpace.name})');
-      debugPrint('Space type: ${widget.selectedSpace.spaceType}');
+      
+      // Verify admin status again as a safeguard
+      final isSpaceEvent = widget.selectedSpace.id.isNotEmpty;
+      if (isSpaceEvent) {
+        final isAdmin = widget.selectedSpace.admins.contains(currentUser.uid);
+        
+        if (!isAdmin) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('You must be an admin of this space to create an event'),
+              backgroundColor: Colors.red,
+            ),
+          );
+          setState(() {
+            _isSubmitting = false;
+          });
+          return;
+        }
+      }
       
       // Create event request
-      final eventRequest = EventCreationRequest(
+      final request = EventCreationRequest(
         title: _titleController.text,
         description: _descriptionController.text,
         location: _locationController.text,
         startDate: _startDate,
         endDate: _endDate,
         category: _category,
-        organizerName: widget.selectedSpace.name,
         visibility: _visibility,
         tags: _selectedTags,
-        isClubEvent: true,
-        clubId: widget.selectedSpace.id,
+        organizerName: widget.selectedSpace.name,
+        organizerEmail: currentUser.email ?? '',
+        clubId: isSpaceEvent ? widget.selectedSpace.id : null,
+        isClubEvent: isSpaceEvent,
       );
 
       // Validate request
-      final validationError = eventRequest.validate();
+      final validationError = request.validate();
       if (validationError != null) {
         throw Exception(validationError);
       }
 
       // Create the event
       final event = Event.createClubEvent(
-        title: eventRequest.title,
-        description: eventRequest.description,
-        location: eventRequest.location,
-        startDate: eventRequest.startDate,
-        endDate: eventRequest.endDate,
+        title: request.title,
+        description: request.description,
+        location: request.location,
+        startDate: request.startDate,
+        endDate: request.endDate,
         clubId: widget.selectedSpace.id,
         clubName: widget.selectedSpace.name,
         creatorId: currentUser.uid,
-        category: eventRequest.category,
+        category: request.category,
         organizerEmail: currentUser.email ?? '',
-        visibility: eventRequest.visibility,
-        tags: eventRequest.tags,
+        visibility: request.visibility,
+        tags: request.tags,
         imageUrl: widget.selectedSpace.imageUrl ?? '',
       );
 
@@ -338,7 +359,47 @@ class _CreateEventPageState extends ConsumerState<CreateEventPage> {
       }
       
       try {
-        // Save to Firestore
+        // Save to main events collection first
+        await FirebaseFirestore.instance
+            .collection('events')
+            .doc(event.id)
+            .set({
+          'id': event.id,
+          'title': event.title,
+          'description': event.description,
+          'location': event.location,
+          'startDate': event.startDate.toIso8601String(),
+          'endDate': event.endDate.toIso8601String(),
+          'organizerEmail': event.organizerEmail,
+          'organizerName': event.organizerName,
+          'category': event.category,
+          'status': event.status,
+          'link': event.link,
+          'imageUrl': event.imageUrl,
+          'tags': event.tags,
+          'source': 'club',
+          'createdBy': event.createdBy,
+          'lastModified': FieldValue.serverTimestamp(),
+          'visibility': event.visibility,
+          'attendees': event.attendees,
+          'spaceId': widget.selectedSpace.id, // Set the spaceId field
+        });
+        
+        debugPrint('Event saved to main events collection');
+        
+        // Now link it to the space using SpaceRepositoryImpl
+        final spaceRepository = SpaceRepositoryImpl();
+        final linked = await spaceRepository.createSpaceEvent(
+          widget.selectedSpace.id, 
+          event.id, 
+          currentUser.uid
+        );
+        
+        if (!linked) {
+          debugPrint('Warning: Failed to link event to space through SpaceRepositoryImpl');
+        }
+        
+        // Save to space-specific collection as well (as a fallback)
         await FirebaseFirestore.instance
             .collection('spaces')
             .doc(validSpaceType)
@@ -365,6 +426,7 @@ class _CreateEventPageState extends ConsumerState<CreateEventPage> {
           'lastModified': FieldValue.serverTimestamp(),
           'visibility': event.visibility,
           'attendees': event.attendees,
+          'spaceId': widget.selectedSpace.id, // Set the spaceId field
         });
         
         debugPrint('Event document created successfully');

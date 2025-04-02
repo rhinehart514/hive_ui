@@ -146,7 +146,7 @@ Future<Map<String, int>> checkOrphanedEvents() async {
           
           // Print sample of orphaned events
           if (stats['without_space']! <= 5) {
-            print('Orphaned event: ${doc.id} - "${data['title']}" by "${organizerName}"');
+            print('Orphaned event: ${doc.id} - "${data['title']}" by "$organizerName"');
           }
         }
       }

@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'event.dart';
 import 'repost_content_type.dart';
+import 'space_recommendation_simple.dart';
+import 'hive_lab_item_simple.dart';
+import 'user_profile.dart';
 
 /// Status of the feed loading process
 enum LoadingStatus {
@@ -215,58 +218,61 @@ enum FeedItemType {
   /// Reposted event with comment
   repost,
 
+  /// Quoted event with comment
+  quote,
+
+  /// Boosted event with higher visibility
+  boostedEvent,
+
   /// Suggestion for a space
   spaceRecommendation,
+
+  /// Friend recommendation
+  friendRecommendation,
 
   /// HIVE Lab card for feature requests
   hiveLab,
 }
 
-/// Class representing a repost in the feed
+/// Item representing a reposted event in the feed
 class RepostItem {
   /// The reposted event
   final Event event;
-
-  /// Comment added by the reposter
-  final String? comment;
-
-  /// Name of the user who reposted
-  final String reposterName;
-
-  /// Time of the repost
+  
+  /// The user profile who reposted the event
+  final UserProfile reposterProfile;
+  
+  /// The time when the event was reposted
   final DateTime repostTime;
-
-  /// URL of the reposter's profile image
-  final String? reposterImageUrl;
-
-  /// Type of repost content
+  
+  /// Optional comment text for quote reposts
+  final String? comment;
+  
+  /// Type of repost (standard, quote, highlight)
   final RepostContentType contentType;
-
+  
   /// Constructor
   const RepostItem({
     required this.event,
-    this.comment,
-    required this.reposterName,
+    required this.reposterProfile,
     required this.repostTime,
-    this.reposterImageUrl,
+    this.comment,
     this.contentType = RepostContentType.standard,
   });
-
+  
   /// Create a copy with some fields replaced
   RepostItem copyWith({
     Event? event,
-    String? comment,
-    String? reposterName,
+    UserProfile? reposterProfile,
     DateTime? repostTime,
-    String? reposterImageUrl,
+    String? comment,
     RepostContentType? contentType,
   }) {
     return RepostItem(
       event: event ?? this.event,
-      comment: comment ?? this.comment,
-      reposterName: reposterName ?? this.reposterName,
+      reposterProfile: reposterProfile ?? this.reposterProfile,
       repostTime: repostTime ?? this.repostTime,
-      reposterImageUrl: reposterImageUrl ?? this.reposterImageUrl,
+      comment: comment ?? this.comment,
       contentType: contentType ?? this.contentType,
     );
   }
@@ -322,326 +328,215 @@ class HiveLabItem {
   });
 }
 
-/// Feed state class
+/// Model for feed state
 class FeedState {
-  /// Current status of the feed
-  final LoadingStatus status;
+  /// All events in the feed
+  final List<Event> events;
 
-  /// List of all events in the feed
-  final List<Event> allEvents;
-
-  /// List of repost items in the feed
+  /// Reposts in the feed
   final List<RepostItem> reposts;
 
-  /// List of space recommendations in the feed
-  final List<SpaceRecommendation> spaceRecommendations;
+  /// Space recommendations
+  final List<SpaceRecommendationSimple> spaceRecommendations;
 
-  /// List of HIVE lab items in the feed
-  final List<HiveLabItem> hiveLabItems;
+  /// HIVE lab items
+  final List<HiveLabItemSimple> hiveLabItems;
 
-  /// Personalized "For You" events
-  final List<Event> forYouEvents;
+  /// Loading status
+  final LoadingStatus status;
 
-  /// Feed items with mixed content types
-  final List<Map<String, dynamic>> feedItems;
+  /// Error message if status is error
+  final String? errorMessage;
 
-  /// Current filters applied to the feed
+  /// Whether more events are being loaded
+  final bool isLoadingMore;
+
+  /// Current page number
+  final int currentPage;
+
+  /// Whether there are more events to load
+  final bool hasMoreEvents;
+
+  /// Event filters
   final EventFilters filters;
 
   /// Pagination state
   final PaginationState pagination;
-  
-  /// Whether there are more events to load
-  final bool hasMoreEvents;
-  
-  /// Current page number for batch loading
-  final int currentPage;
-  
-  /// Whether we're currently loading more items
-  final bool isLoadingMore;
 
-  /// Error message if the feed failed to load
-  final String? errorMessage;
-  
-  /// Map of events by category
-  final Map<String, List<Event>> categorizedEvents;
-  
-  /// Map of events by timeframe (today, this_week, upcoming)
-  final Map<String, List<Event>> timeEvents;
-  
-  /// Whether the feed has been initialized
-  final bool isInitialized;
-  
-  /// Search results when search is active
-  final List<Event> searchResults;
-  
-  /// Flag indicating if search is active
-  final bool isSearchActive;
-  
-  /// Current search query
-  final String? searchQuery;
+  /// Feed items combined from events, reposts and other items
+  final List<Map<String, dynamic>> feedItems;
 
-  /// Default constructor
+  /// Get events categorized by their category
+  Map<String, List<Event>> get categorizedEvents {
+    final result = <String, List<Event>>{};
+    for (final event in filteredEvents) {
+      final category = event.category;
+      if (!result.containsKey(category)) {
+        result[category] = [];
+      }
+      result[category]!.add(event);
+    }
+    return result;
+  }
+
+  /// Constructor
   const FeedState({
-    this.status = LoadingStatus.initial,
-    this.allEvents = const [],
+    this.events = const [],
     this.reposts = const [],
     this.spaceRecommendations = const [],
     this.hiveLabItems = const [],
-    this.forYouEvents = const [],
-    this.feedItems = const [],
+    this.status = LoadingStatus.initial,
+    this.errorMessage,
+    this.isLoadingMore = false,
+    this.currentPage = 1,
+    this.hasMoreEvents = true,
     this.filters = const EventFilters(),
     this.pagination = const PaginationState(),
-    this.hasMoreEvents = true,
-    this.currentPage = 1,
-    this.isLoadingMore = false,
-    this.errorMessage,
-    this.categorizedEvents = const {},
-    this.timeEvents = const {},
-    this.isInitialized = false,
-    this.searchResults = const [],
-    this.isSearchActive = false,
-    this.searchQuery,
+    this.feedItems = const [],
   });
 
-  /// Create an initial state
+  /// Initial state
   factory FeedState.initial() {
-    return const FeedState(
-      status: LoadingStatus.initial,
-      hasMoreEvents: true,
-      currentPage: 1,
-      isLoadingMore: false,
-      isInitialized: false,
-    );
+    return const FeedState();
   }
 
-  /// Create a loading state
+  /// Loading state
   factory FeedState.loading() {
-    return const FeedState(
-      status: LoadingStatus.loading,
-      hasMoreEvents: true,
-      currentPage: 1,
-      isLoadingMore: false,
-    );
+    return const FeedState(status: LoadingStatus.loading);
   }
 
-  /// Create a loaded state
-  factory FeedState.loaded(
-    List<Event> events, {
-    List<RepostItem> reposts = const [],
-    List<SpaceRecommendation> spaceRecommendations = const [],
-    List<HiveLabItem> hiveLabItems = const [],
-    bool hasMoreEvents = true, 
-    int currentPage = 1,
-  }) {
-    // Create categorized events
-    final categorizedEvents = <String, List<Event>>{};
-    for (final event in events) {
-      final category = event.category;
-      if (!categorizedEvents.containsKey(category)) {
-        categorizedEvents[category] = [];
-      }
-      categorizedEvents[category]!.add(event);
-    }
-
-    // Create time-based events
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final endOfWeek = today.add(const Duration(days: 7));
-
-    final todayEvents = <Event>[];
-    final thisWeekEvents = <Event>[];
-    final upcomingEvents = <Event>[];
-
-    for (final event in events) {
-      final eventDate = DateTime(
-        event.startDate.year,
-        event.startDate.month,
-        event.startDate.day,
-      );
-
-      if (eventDate == today) {
-        todayEvents.add(event);
-      } else if (eventDate.isAfter(today) && eventDate.isBefore(endOfWeek)) {
-        thisWeekEvents.add(event);
-      } else if (eventDate.isAfter(today)) {
-        upcomingEvents.add(event);
-      }
-    }
-
-    final timeEvents = <String, List<Event>>{
-      'today': todayEvents,
-      'this_week': thisWeekEvents,
-      'upcoming': upcomingEvents,
-    };
-
-    return FeedState(
-      status: LoadingStatus.loaded,
-      allEvents: events,
-      reposts: reposts,
-      spaceRecommendations: spaceRecommendations,
-      hiveLabItems: hiveLabItems,
-      hasMoreEvents: hasMoreEvents,
-      currentPage: currentPage,
-      isLoadingMore: false,
-      categorizedEvents: categorizedEvents,
-      timeEvents: timeEvents,
-      isInitialized: true,
-    );
-  }
-
-  /// Create a state from individual items
-  factory FeedState.fromItems({
-    required List<Event> events,
-    List<RepostItem> reposts = const [],
-    List<SpaceRecommendation> spaceRecommendations = const [],
-    List<HiveLabItem> hiveLabItems = const [],
-    bool hasMoreEvents = true,
-    int currentPage = 1,
-  }) {
-    // Create a feed with just events as feed items
-    final feedItems = events.map((event) {
-      return <String, dynamic>{
-        'type': 'event',
-        'data': event,
-      };
-    }).toList();
-    
-    // Create categorized events
-    final categorizedEvents = <String, List<Event>>{};
-    for (final event in events) {
-      final category = event.category;
-      if (!categorizedEvents.containsKey(category)) {
-        categorizedEvents[category] = [];
-      }
-      categorizedEvents[category]!.add(event);
-    }
-
-    // Create time-based events
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final endOfWeek = today.add(const Duration(days: 7));
-
-    final todayEvents = <Event>[];
-    final thisWeekEvents = <Event>[];
-    final upcomingEvents = <Event>[];
-
-    for (final event in events) {
-      final eventDate = DateTime(
-        event.startDate.year,
-        event.startDate.month,
-        event.startDate.day,
-      );
-
-      if (eventDate == today) {
-        todayEvents.add(event);
-      } else if (eventDate.isAfter(today) && eventDate.isBefore(endOfWeek)) {
-        thisWeekEvents.add(event);
-      } else if (eventDate.isAfter(today)) {
-        upcomingEvents.add(event);
-      }
-    }
-
-    final timeEvents = <String, List<Event>>{
-      'today': todayEvents,
-      'this_week': thisWeekEvents,
-      'upcoming': upcomingEvents,
-    };
-
-    return FeedState(
-      status: LoadingStatus.loaded,
-      allEvents: events,
-      reposts: reposts,
-      spaceRecommendations: spaceRecommendations,
-      hiveLabItems: hiveLabItems,
-      feedItems: feedItems,
-      hasMoreEvents: hasMoreEvents,
-      currentPage: currentPage,
-      isLoadingMore: false,
-      categorizedEvents: categorizedEvents,
-      timeEvents: timeEvents,
-      isInitialized: true,
-    );
-  }
-
-  /// Create an error state
+  /// Error state
   factory FeedState.error(String message) {
     return FeedState(
       status: LoadingStatus.error,
       errorMessage: message,
-      hasMoreEvents: false,
-      isLoadingMore: false,
+    );
+  }
+
+  /// Create from items
+  factory FeedState.fromItems({
+    required List<Event> events,
+    required List<RepostItem> reposts,
+    required List<SpaceRecommendationSimple> spaceRecommendations,
+    required List<HiveLabItemSimple> hiveLabItems,
+    bool hasMoreEvents = true,
+    int currentPage = 1,
+    List<Map<String, dynamic>> feedItems = const [],
+  }) {
+    return FeedState(
+      events: events,
+      reposts: reposts,
+      spaceRecommendations: spaceRecommendations,
+      hiveLabItems: hiveLabItems,
+      status: LoadingStatus.loaded,
+      hasMoreEvents: hasMoreEvents,
+      currentPage: currentPage,
+      feedItems: feedItems,
     );
   }
 
   /// Create a copy with some fields replaced
   FeedState copyWith({
-    LoadingStatus? status,
-    List<Event>? allEvents,
+    List<Event>? events,
     List<RepostItem>? reposts,
-    List<SpaceRecommendation>? spaceRecommendations,
-    List<HiveLabItem>? hiveLabItems,
-    List<Event>? forYouEvents,
-    List<Map<String, dynamic>>? feedItems,
+    List<SpaceRecommendationSimple>? spaceRecommendations,
+    List<HiveLabItemSimple>? hiveLabItems,
+    LoadingStatus? status,
+    String? errorMessage,
+    bool? isLoadingMore,
+    int? currentPage,
+    bool? hasMoreEvents,
     EventFilters? filters,
     PaginationState? pagination,
-    String? errorMessage,
-    bool? hasMoreEvents,
-    int? currentPage,
-    bool? isLoadingMore,
+    List<Event>? forYouEvents,
+    List<Event>? allEvents,
     Map<String, List<Event>>? categorizedEvents,
     Map<String, List<Event>>? timeEvents,
-    bool? isInitialized,
-    List<Event>? searchResults,
-    bool? isSearchActive,
-    String? searchQuery,
-    bool clearError = false,
-    bool clearSearchQuery = false,
+    List<Map<String, dynamic>>? feedItems,
+    bool clearErrorMessage = false,
   }) {
     return FeedState(
-      status: status ?? this.status,
-      allEvents: allEvents ?? this.allEvents,
+      events: allEvents ?? events ?? this.events,
       reposts: reposts ?? this.reposts,
       spaceRecommendations: spaceRecommendations ?? this.spaceRecommendations,
       hiveLabItems: hiveLabItems ?? this.hiveLabItems,
-      forYouEvents: forYouEvents ?? this.forYouEvents,
-      feedItems: feedItems ?? this.feedItems,
+      status: status ?? this.status,
+      errorMessage: clearErrorMessage ? null : (errorMessage ?? this.errorMessage),
+      isLoadingMore: isLoadingMore ?? this.isLoadingMore,
+      currentPage: currentPage ?? this.currentPage,
+      hasMoreEvents: hasMoreEvents ?? this.hasMoreEvents,
       filters: filters ?? this.filters,
       pagination: pagination ?? this.pagination,
-      errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
-      hasMoreEvents: hasMoreEvents ?? this.hasMoreEvents,
-      currentPage: currentPage ?? this.currentPage,
-      isLoadingMore: isLoadingMore ?? this.isLoadingMore,
-      categorizedEvents: categorizedEvents ?? this.categorizedEvents,
-      timeEvents: timeEvents ?? this.timeEvents,
-      isInitialized: isInitialized ?? this.isInitialized,
-      searchResults: searchResults ?? this.searchResults,
-      isSearchActive: isSearchActive ?? this.isSearchActive,
-      searchQuery: clearSearchQuery ? null : (searchQuery ?? this.searchQuery),
+      feedItems: feedItems ?? this.feedItems,
     );
   }
 
   /// Helper method to get filtered events based on current filters
   List<Event> get filteredEvents {
-    if (!filters.hasActiveFilters) return allEvents;
-    return allEvents.where((event) => filters.matches(event)).toList();
+    if (!filters.hasActiveFilters) return events;
+    return events.where((event) => filters.matches(event)).toList();
   }
 
-  /// Get filtered today events
+  /// Get today's events
   List<Event> get filteredTodayEvents {
-    final todayEvents = timeEvents['today'] ?? [];
-    return todayEvents.where((event) => filters.matches(event)).toList();
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    return filteredEvents.where((event) {
+      final eventDate = DateTime(
+        event.startDate.year,
+        event.startDate.month,
+        event.startDate.day,
+      );
+      return eventDate == today;
+    }).toList();
   }
 
-  /// Get filtered this week events
+  /// Get this week's events
   List<Event> get filteredThisWeekEvents {
-    final thisWeekEvents = timeEvents['this_week'] ?? [];
-    return thisWeekEvents.where((event) => filters.matches(event)).toList();
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final endOfWeek = today.add(const Duration(days: 7));
+    return filteredEvents.where((event) {
+      final eventDate = DateTime(
+        event.startDate.year,
+        event.startDate.month,
+        event.startDate.day,
+      );
+      return eventDate.isAfter(today) && eventDate.isBefore(endOfWeek);
+    }).toList();
   }
 
-  /// Get filtered upcoming events
+  /// Get upcoming events
   List<Event> get filteredUpcomingEvents {
-    final upcomingEvents = timeEvents['upcoming'] ?? [];
-    return upcomingEvents.where((event) => filters.matches(event)).toList();
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    return filteredEvents.where((event) {
+      final eventDate = DateTime(
+        event.startDate.year,
+        event.startDate.month,
+        event.startDate.day,
+      );
+      return eventDate.isAfter(today);
+    }).toList();
+  }
+
+  /// Get personalized "For You" events
+  List<Event> get forYouEvents => filteredEvents;
+
+  /// Alias for events - for backward compatibility
+  List<Event> get allEvents => events;
+
+  /// Alias for categorizing events by time - for backward compatibility
+  Map<String, List<Event>> get timeEvents {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final tomorrow = today.add(const Duration(days: 1));
+    final endOfWeek = today.add(const Duration(days: 7));
+    
+    return {
+      'today': filteredTodayEvents,
+      'thisWeek': filteredThisWeekEvents,
+      'upcoming': filteredUpcomingEvents,
+    };
   }
 }

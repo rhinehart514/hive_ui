@@ -6,14 +6,23 @@ import 'package:hive_ui/features/messaging/injection.dart';
 import 'package:hive_ui/theme/app_colors.dart';
 import 'package:hive_ui/theme/app_icons.dart';
 import 'package:hive_ui/components/buttons.dart';
+import 'package:hive_ui/core/navigation/routes.dart';
+import 'package:hive_ui/features/messaging/presentation/providers/mock_messages_provider.dart' as mock;
 
 /// Main messaging page that displays a user's chats and allows navigation to chat screens
 class MessagingPage extends ConsumerWidget {
-  const MessagingPage({Key? key}) : super(key: key);
+  final bool useMockData;
+  
+  const MessagingPage({
+    Key? key,
+    this.useMockData = true, // Default to mock data
+  }) : super(key: key);
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final chatsStream = ref.watch(userChatsStreamProvider);
+    final chats = useMockData 
+      ? ref.watch(mock.mockConversationsProvider)
+      : ref.watch(userChatsStreamProvider).value ?? [];
 
     return Scaffold(
       backgroundColor: Colors.black,
@@ -29,21 +38,9 @@ class MessagingPage extends ConsumerWidget {
           ),
         ],
       ),
-      body: chatsStream.when(
-        data: (chats) {
-          if (chats.isEmpty) {
-            return _buildEmptyState(context);
-          }
-          return _buildChatList(context, chats);
-        },
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, stack) => Center(
-          child: Text(
-            'Error loading chats: $error',
-            style: const TextStyle(color: Colors.white),
-          ),
-        ),
-      ),
+      body: chats.isEmpty
+          ? _buildEmptyState(context)
+          : _buildChatList(context, chats),
       floatingActionButton: FloatingActionButton(
         backgroundColor: AppColors.gold,
         onPressed: () => _navigateToCreateChat(context),
@@ -92,14 +89,16 @@ class MessagingPage extends ConsumerWidget {
     );
   }
 
-  Widget _buildChatList(BuildContext context, List<Chat> chats) {
+  Widget _buildChatList(BuildContext context, List<dynamic> chats) {
     // Sort chats by last message time
     final sortedChats = [...chats];
     sortedChats.sort((a, b) {
-      if (a.lastMessageAt == null && b.lastMessageAt == null) return 0;
-      if (a.lastMessageAt == null) return 1;
-      if (b.lastMessageAt == null) return -1;
-      return b.lastMessageAt!.compareTo(a.lastMessageAt!);
+      final aTime = a is Chat ? a.lastMessageAt : a.lastMessageTime;
+      final bTime = b is Chat ? b.lastMessageAt : b.lastMessageTime;
+      if (aTime == null && bTime == null) return 0;
+      if (aTime == null) return 1;
+      if (bTime == null) return -1;
+      return bTime.compareTo(aTime);
     });
 
     return ListView.builder(
@@ -112,9 +111,21 @@ class MessagingPage extends ConsumerWidget {
     );
   }
 
-  Widget _buildChatTile(BuildContext context, Chat chat) {
+  Widget _buildChatTile(BuildContext context, dynamic chat) {
+    final bool isMockChat = chat is mock.Conversation;
+    final String title = isMockChat ? chat.name : chat.title;
+    final String? imageUrl = isMockChat ? chat.avatarUrl : chat.imageUrl;
+    final String id = chat.id;
+    final bool isOnline = isMockChat ? chat.isOnline : false;
+    final String previewText = isMockChat 
+        ? chat.messages.isNotEmpty ? chat.messages.last.content : ''
+        : chat.lastMessageText ?? '';
+    final DateTime? timestamp = isMockChat 
+        ? chat.lastMessageTime 
+        : chat.lastMessageAt;
+
     return InkWell(
-      onTap: () => _navigateToChat(context, chat),
+      onTap: () => _navigateToChat(context, id, title, imageUrl, isMockChat),
       child: Container(
         decoration: BoxDecoration(
           border: Border(
@@ -127,9 +138,9 @@ class MessagingPage extends ConsumerWidget {
         child: ListTile(
           contentPadding:
               const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          leading: _buildChatAvatar(chat),
+          leading: _buildChatAvatar(imageUrl, isOnline),
           title: Text(
-            chat.title,
+            title,
             style: const TextStyle(
               color: Colors.white,
               fontWeight: FontWeight.w500,
@@ -138,16 +149,16 @@ class MessagingPage extends ConsumerWidget {
             overflow: TextOverflow.ellipsis,
           ),
           subtitle: Text(
-            chat.getPreviewText(),
+            previewText,
             style: const TextStyle(
               color: Colors.white54,
             ),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
-          trailing: chat.lastMessageAt != null
+          trailing: timestamp != null
               ? Text(
-                  _formatChatTime(chat.lastMessageAt!),
+                  _formatChatTime(timestamp),
                   style: const TextStyle(
                     fontSize: 12,
                     color: Colors.white54,
@@ -159,45 +170,33 @@ class MessagingPage extends ConsumerWidget {
     );
   }
 
-  Widget _buildChatAvatar(Chat chat) {
-    if (chat.imageUrl != null && chat.imageUrl!.isNotEmpty) {
-      return CircleAvatar(
-        radius: 28,
-        backgroundColor: AppColors.gold.withOpacity(0.2),
-        backgroundImage: NetworkImage(chat.imageUrl!),
-      );
-    }
-
-    IconData iconData;
-    Color backgroundColor;
-
-    switch (chat.type) {
-      case ChatType.direct:
-        iconData = Icons.person;
-        backgroundColor = AppColors.gold.withOpacity(0.2);
-        break;
-      case ChatType.group:
-        iconData = Icons.group;
-        backgroundColor = Colors.purpleAccent.withOpacity(0.2);
-        break;
-      case ChatType.club:
-        iconData = Icons.school;
-        backgroundColor = Colors.blueAccent.withOpacity(0.2);
-        break;
-      case ChatType.event:
-        iconData = Icons.event;
-        backgroundColor = Colors.greenAccent.withOpacity(0.2);
-        break;
-    }
-
-    return CircleAvatar(
-      radius: 28,
-      backgroundColor: backgroundColor,
-      child: Icon(
-        iconData,
-        color: Colors.white,
-        size: 24,
-      ),
+  Widget _buildChatAvatar(String? imageUrl, bool isOnline) {
+    return Stack(
+      children: [
+        CircleAvatar(
+          radius: 28,
+          backgroundColor: AppColors.gold.withOpacity(0.2),
+          backgroundImage: imageUrl != null ? NetworkImage(imageUrl) : null,
+          child: imageUrl == null ? const Icon(Icons.person) : null,
+        ),
+        if (isOnline)
+          Positioned(
+            right: 0,
+            bottom: 0,
+            child: Container(
+              width: 16,
+              height: 16,
+              decoration: BoxDecoration(
+                color: Colors.green,
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: Colors.black,
+                  width: 2,
+                ),
+              ),
+            ),
+          ),
+      ],
     );
   }
 
@@ -226,15 +225,16 @@ class MessagingPage extends ConsumerWidget {
     }
   }
 
-  void _navigateToChat(BuildContext context, Chat chat) {
-    context.push('/messaging/chat/${chat.id}', extra: {
-      'chatName': chat.title,
-      'chatAvatar': chat.imageUrl,
-      'isGroupChat': chat.type != ChatType.direct,
+  void _navigateToChat(BuildContext context, String id, String title, String? imageUrl, bool useMockData) {
+    context.push('/messaging/chat/$id', extra: {
+      'chatName': title,
+      'chatAvatar': imageUrl,
+      'isGroupChat': false,
+      'useMockData': useMockData,
     });
   }
 
   void _navigateToCreateChat(BuildContext context) {
-    context.push('/messaging/create');
+    context.push(AppRoutes.createChat);
   }
 }

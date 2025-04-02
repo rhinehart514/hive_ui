@@ -87,6 +87,8 @@ String getSubcollectionPath(SpaceType spaceType) {
       return 'campus_living';
     case SpaceType.fraternityAndSorority:
       return 'fraternity_and_sorority';
+    case SpaceType.hiveExclusive:
+      return 'hive_exclusive';
     case SpaceType.other:
       return 'other';
   }
@@ -108,6 +110,7 @@ Future<void> organizeSpacesByType() async {
     SpaceType.universityOrg: 0,
     SpaceType.campusLiving: 0,
     SpaceType.fraternityAndSorority: 0,
+    SpaceType.hiveExclusive: 0,
     SpaceType.other: 0,
   };
 
@@ -170,6 +173,7 @@ Future<void> organizeSpacesByType() async {
   print('- Campus Living: ${migratedCounts[SpaceType.campusLiving]} spaces');
   print(
       '- Fraternity & Sorority: ${migratedCounts[SpaceType.fraternityAndSorority]} spaces');
+  print('- Hive Exclusive: ${migratedCounts[SpaceType.hiveExclusive]} spaces');
   print('- Other: $migratedCounts[SpaceType.other] spaces');
 
   print('');

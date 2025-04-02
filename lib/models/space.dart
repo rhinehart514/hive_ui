@@ -179,7 +179,14 @@ class Space {
       } else if (spaceTypeStr.contains('frat') ||
           spaceTypeStr.contains('soror')) {
         spaceType = SpaceType.fraternityAndSorority;
+      } else if (spaceTypeStr.contains('hive') && spaceTypeStr.contains('exclusive')) {
+        spaceType = SpaceType.hiveExclusive;
       }
+    }
+
+    // We can also use a more direct approach from the enum value
+    if (json['spaceType'] != null && json['spaceType'] == 'hiveExclusive') {
+      spaceType = SpaceType.hiveExclusive;
     }
 
     // Safely parse list fields to prevent type errors

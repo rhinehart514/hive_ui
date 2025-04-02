@@ -10,6 +10,7 @@ import 'package:hive_ui/services/performance_service.dart';
 import 'package:hive_ui/services/space_service.dart';
 import 'package:hive_ui/services/analytics_service.dart';
 import 'package:hive_ui/features/messaging/injection.dart';
+import 'package:hive_ui/features/messaging/utils/messaging_initializer.dart';
 
 /// Provider responsible for handling app startup sequence and initialization
 final appStartupProvider = FutureProvider<bool>((ref) async {
@@ -74,7 +75,7 @@ final appStartupProvider = FutureProvider<bool>((ref) async {
           // Initialize messaging
           Future<void>(() async {
             try {
-              initializeMessaging();
+              initializeFirebaseMessaging();
             } catch (e) {
               debugPrint('Failed to initialize messaging: $e');
             }

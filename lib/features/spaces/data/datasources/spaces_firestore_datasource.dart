@@ -5,6 +5,7 @@ import 'package:hive_ui/features/spaces/data/models/space_model.dart';
 import 'package:hive_ui/features/spaces/data/models/space_metrics_model.dart';
 import 'package:hive_ui/features/spaces/domain/entities/space_entity.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:hive_ui/models/event.dart';
 import 'dart:convert';
 import 'dart:async';
 import 'dart:math';
@@ -32,10 +33,17 @@ class SpacesFirestoreDataSource {
   static DateTime? _lastFirestoreSync;
 
   /// Get all spaces from Firestore with optional caching
-  Future<List<SpaceModel>> getAllSpaces({bool forceRefresh = false}) async {
+  Future<List<SpaceModel>> getAllSpaces({
+    bool forceRefresh = false,
+    bool includePrivate = false, // Default to not including private spaces
+    bool includeJoined = true, // Default to showing joined spaces
+  }) async {
     try {
       if (_spaceCache.isNotEmpty && !forceRefresh) {
-        return _spaceCache.values.toList();
+        final cachedSpaces = _spaceCache.values.toList();
+        
+        // Apply filters to cached spaces
+        return _filterSpaces(cachedSpaces, includePrivate, includeJoined);
       }
 
       _spaceCache.clear();
@@ -84,15 +92,55 @@ class SpacesFirestoreDataSource {
       }
 
       debugPrint('✅ Loaded ${allSpaces.length} total spaces');
-      return allSpaces;
+      
+      // Apply filters to fetched spaces
+      return _filterSpaces(allSpaces, includePrivate, includeJoined);
     } catch (e) {
       debugPrint('❌ Error getting all spaces: $e');
       throw Exception('Failed to get all spaces: $e');
     }
   }
 
-  /// Get a space by ID
-  Future<SpaceModel?> getSpaceById(String id) async {
+  /// Helper method to filter spaces based on privacy and joined status
+  Future<List<SpaceModel>> _filterSpaces(
+    List<SpaceModel> spaces, 
+    bool includePrivate, 
+    bool includeJoined
+  ) async {
+    // Get current user
+    final currentUser = FirebaseAuth.instance.currentUser;
+    List<String> joinedSpaceIds = [];
+    
+    // Get joined space IDs if needed
+    if (!includeJoined && currentUser != null) {
+      final userDoc = await _usersCollection.doc(currentUser.uid).get();
+      
+      if (userDoc.exists) {
+        final userData = userDoc.data() as Map<String, dynamic>?;
+        
+        if (userData != null && userData['followedSpaces'] is List) {
+          joinedSpaceIds = List<String>.from(userData['followedSpaces']);
+        }
+      }
+    }
+    
+    return spaces.where((space) {
+      // Filter private spaces
+      if (space.isPrivate && !includePrivate) {
+        return false;
+      }
+      
+      // Filter joined spaces if needed
+      if (!includeJoined && joinedSpaceIds.contains(space.id)) {
+        return false;
+      }
+      
+      return true;
+    }).toList();
+  }
+
+  /// Get a space by ID with optional space type
+  Future<SpaceModel?> getSpaceById(String id, {String? spaceType}) async {
     // Check memory cache first
     if (_spaceCache.containsKey(id)) {
       debugPrint('Space found in memory cache: $id');
@@ -100,9 +148,27 @@ class SpacesFirestoreDataSource {
     }
 
     try {
-      debugPrint('Searching for space $id in multiple locations...');
+      debugPrint('Searching for space $id${spaceType != null ? " in $spaceType" : ""}...');
       
-      // Define all possible space type collections
+      // If space type is provided, check that specific collection first
+      if (spaceType != null) {
+        final typeCollectionPath = 'spaces/$spaceType/spaces';
+        debugPrint('Checking specific path: $typeCollectionPath');
+        
+        final docRef = FirebaseFirestore.instance.collection(typeCollectionPath).doc(id);
+        final docSnapshot = await docRef.get();
+        
+        if (docSnapshot.exists) {
+          debugPrint('Found space $id in $spaceType collection');
+          final space = SpaceModel.fromFirestore(docSnapshot);
+          
+          // Update cache
+          _spaceCache[id] = space;
+          return space;
+        }
+      }
+      
+      // If not found in specific type or no type provided, try all collections
       final spaceTypes = [
         'student_organizations',
         'university_organizations',
@@ -113,6 +179,9 @@ class SpacesFirestoreDataSource {
       
       // Try to find space in each type collection
       for (final type in spaceTypes) {
+        // Skip if we already checked this type
+        if (type == spaceType) continue;
+        
         try {
           final typeCollectionPath = 'spaces/$type/spaces';
           debugPrint('Checking path: $typeCollectionPath');
@@ -134,7 +203,7 @@ class SpacesFirestoreDataSource {
         }
       }
       
-      // Try direct path in spaces collection
+      // Try direct path in spaces collection as fallback
       final directDocSnapshot = await _spacesCollection.doc(id).get();
       if (directDocSnapshot.exists) {
         debugPrint('Found space $id in root spaces collection');
@@ -145,31 +214,10 @@ class SpacesFirestoreDataSource {
         return space;
       }
       
-      // Try using collectionGroup to find the space across all subcollections
-      try {
-        debugPrint('Trying collectionGroup query for space $id');
-        final collectionGroupQuery = await FirebaseFirestore.instance
-            .collectionGroup('spaces')
-            .where('id', isEqualTo: id)
-            .limit(1)
-            .get();
-            
-        if (collectionGroupQuery.docs.isNotEmpty) {
-          debugPrint('Found space $id using collectionGroup query: ${collectionGroupQuery.docs.first.reference.path}');
-          final space = SpaceModel.fromFirestore(collectionGroupQuery.docs.first);
-          
-          // Update cache
-          _spaceCache[id] = space;
-          return space;
-        }
-      } catch (e) {
-        debugPrint('Error in collectionGroup query for space $id: $e');
-      }
-
       debugPrint('Space $id not found in any collection');
       return null;
     } catch (e) {
-      debugPrint('Error fetching space by ID: $e');
+      debugPrint('Error getting space by ID: $e');
       return null;
     }
   }
@@ -231,8 +279,8 @@ class SpacesFirestoreDataSource {
   /// Get recommended spaces for the current user
   Future<List<SpaceModel>> getRecommendedSpaces() async {
     try {
-      // Get all spaces
-      final allSpaces = await getAllSpaces();
+      // Get all public spaces (no private spaces)
+      final allSpaces = await getAllSpaces(includePrivate: false);
 
       // Get joined spaces
       final joinedSpaces = await getJoinedSpaces();
@@ -564,6 +612,18 @@ class SpacesFirestoreDataSource {
     }
   }
 
+  /// Invalidate the cache to force a refresh on next fetch
+  Future<void> invalidateCache() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(_spacesPrefsKey);
+      await prefs.remove(_lastFetchTimestampKey);
+      debugPrint('✅ Cache invalidated successfully');
+    } catch (e) {
+      debugPrint('❌ Error invalidating cache: $e');
+    }
+  }
+
   /// Check if a space name already exists
   Future<bool> isSpaceNameTaken(String name) async {
     try {
@@ -725,5 +785,118 @@ class SpacesFirestoreDataSource {
       debugPrint('Error creating space: $e');
       throw Exception('Failed to create space: $e');
     }
+  }
+
+  /// Helper method to safely convert Firestore timestamp to DateTime
+  DateTime? _safeTimestampToDateTime(dynamic value) {
+    if (value == null) return null;
+    if (value is Timestamp) return value.toDate();
+    if (value is DateTime) return value;
+    return null;
+  }
+
+  /// Get events associated with a space
+  Future<List<Event>> getSpaceEvents(String spaceId) async {
+    try {
+      debugPrint('🔍 Fetching events for space: $spaceId');
+      
+      // First, find which collection the space is in
+      final spaceTypes = [
+        'student_organizations',
+        'university',
+        'campus_living',
+        'greek_life',
+        'hive_exclusive',
+        'other'
+      ];
+
+      List<Event> events = [];
+      
+      // Try to find and fetch events from each possible space type collection
+      for (final spaceType in spaceTypes) {
+        try {
+          debugPrint('👉 Checking $spaceType collection for space $spaceId');
+          
+          final spacePath = FirebaseFirestore.instance
+              .collection('spaces')
+              .doc(spaceType)
+              .collection('spaces')
+              .doc(spaceId);
+              
+          // First verify if the space exists in this collection
+          final spaceDoc = await spacePath.get();
+          if (!spaceDoc.exists) {
+            debugPrint('Space not found in $spaceType collection');
+            continue;
+          }
+          
+          debugPrint('✅ Found space in $spaceType collection, fetching events...');
+          
+          final eventsSnapshot = await spacePath
+              .collection('events')
+              .orderBy('startDate', descending: false)
+              .get();
+
+          debugPrint('📊 Found ${eventsSnapshot.docs.length} events in $spaceType collection');
+
+          // Process each event document
+          for (final eventDoc in eventsSnapshot.docs) {
+            try {
+              final data = eventDoc.data();
+              final event = Event(
+                id: eventDoc.id,
+                title: data['title'] ?? '',
+                description: data['description'] ?? '',
+                startDate: _safeTimestampToDateTime(data['startDate']) ?? DateTime.now(),
+                endDate: _safeTimestampToDateTime(data['endDate']) ?? DateTime.now(),
+                location: data['location'] ?? '',
+                organizerEmail: data['organizerEmail'] ?? '',
+                organizerName: data['organizerName'] ?? '',
+                category: data['category'] ?? '',
+                status: data['status'] ?? '',
+                link: data['link'] ?? '',
+                imageUrl: data['imageUrl'] ?? '',
+                source: _parseEventSource(data['source']),
+                createdBy: data['createdBy'] ?? '',
+                lastModified: _safeTimestampToDateTime(data['lastModified']) ?? DateTime.now(),
+                visibility: data['visibility'] ?? 'public',
+                attendees: List<String>.from(data['attendees'] ?? []),
+                spaceId: spaceId,
+              );
+              events.add(event);
+            } catch (e) {
+              debugPrint('Error processing event document: $e');
+              continue;
+            }
+          }
+
+          // If we found events in this collection, no need to check others
+          if (events.isNotEmpty) {
+            debugPrint('✅ Successfully found and processed ${events.length} events');
+            break;
+          }
+        } catch (e) {
+          debugPrint('Error checking $spaceType collection: $e');
+          continue;
+        }
+      }
+
+      // Sort events by start date
+      events.sort((a, b) => a.startDate.compareTo(b.startDate));
+      return events;
+
+    } catch (e) {
+      debugPrint('Error fetching space events: $e');
+      return [];
+    }
+  }
+
+  /// Helper method to parse event source
+  EventSource _parseEventSource(dynamic source) {
+    if (source == null) return EventSource.external;
+    final sourceStr = source.toString().toLowerCase();
+    if (sourceStr == 'user') return EventSource.user;
+    if (sourceStr == 'club') return EventSource.club;
+    return EventSource.external;
   }
 }

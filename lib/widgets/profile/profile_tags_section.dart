@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/foundation.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:hive_ui/theme/app_colors.dart';
 import 'package:hive_ui/theme/huge_icons.dart';
@@ -36,7 +37,12 @@ class ProfileTagsSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final hasInterests = interests != null && interests!.isNotEmpty;
+    // Debug interests data
+    _debugInterests();
+    
+    // Ensure interests is not null and safely handle empty lists
+    final safeInterests = interests ?? [];
+    final hasInterests = safeInterests.isNotEmpty;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -82,10 +88,10 @@ class ProfileTagsSection extends StatelessWidget {
             // Show residence tag
             _buildTag(residence, Icons.home),
 
-            // Show interest tags
+            // Show interest tags - ensure we're not accessing null interests
             if (hasInterests)
-              ...interests!
-                  .take(isCompact ? 5 : interests!.length)
+              ...safeInterests
+                  .take(isCompact ? 5 : safeInterests.length)
                   .map((interest) => GestureDetector(
                         onTap: isCurrentUser
                             ? () => _showInterestsSearch(context)
@@ -94,8 +100,8 @@ class ProfileTagsSection extends StatelessWidget {
                       )),
 
             // If compact mode and we have more interests than shown, add a +X more tag
-            if (isCompact && hasInterests && interests!.length > 5)
-              _buildMoreTag(interests!.length - 5),
+            if (isCompact && hasInterests && safeInterests.length > 5)
+              _buildMoreTag(safeInterests.length - 5),
 
             // Show add button if no interests and user can edit (and we're supposed to show it)
             if (!hasInterests && isCurrentUser && showAddButton)
@@ -117,8 +123,8 @@ class ProfileTagsSection extends StatelessWidget {
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(
-                        Icons.add,
+                      HugeIcon(
+                        icon: HugeIcons.add,
                         color: AppColors.gold,
                         size: isCompact ? 14 : 16,
                       ),
@@ -141,7 +147,29 @@ class ProfileTagsSection extends StatelessWidget {
     );
   }
 
+  // Debug method to help diagnose interest display issues
+  void _debugInterests() {
+    // Only log in debug mode and reduce verbosity
+    if (kDebugMode && false) { // Set to 'true' only when actively debugging interest issues
+      if (interests != null) {
+        debugPrint('ProfileTagsSection: interests count = ${interests!.length}, type = ${interests.runtimeType}');
+      } else {
+        debugPrint('ProfileTagsSection: interests is null');
+      }
+    }
+  }
+
   Widget _buildTag(String text, IconData icon) {
+    // Map standard icons to HugeIcons
+    IconData hugeIcon;
+    if (icon == Icons.home) {
+      hugeIcon = HugeIcons.home;
+    } else if (icon == Icons.star) {
+      hugeIcon = HugeIcons.star; // Now using proper star icon
+    } else {
+      hugeIcon = HugeIcons.interest;
+    }
+    
     return Container(
       padding: EdgeInsets.symmetric(
         horizontal: isCompact ? 8 : 12,
@@ -155,13 +183,24 @@ class ProfileTagsSection extends StatelessWidget {
           width: 1,
         ),
       ),
-      child: Text(
-        text,
-        style: GoogleFonts.inter(
-          color: Colors.white,
-          fontSize: isCompact ? 10 : 12,
-          fontWeight: FontWeight.w500,
-        ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          HugeIcon(
+            icon: hugeIcon,
+            color: AppColors.gold,
+            size: isCompact ? 12 : 14,
+          ),
+          SizedBox(width: isCompact ? 4 : 6),
+          Text(
+            text,
+            style: GoogleFonts.inter(
+              color: Colors.white,
+              fontSize: isCompact ? 10 : 12,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -196,6 +235,14 @@ class ProfileTagsSection extends StatelessWidget {
   void _showInterestsSearch(BuildContext context) {
     if (onAddTagTapped != null) {
       HapticFeedback.mediumImpact();
+      
+      // Call the onAddTagTapped callback to show the interests dialog
+      // This will be connected to _showTagsDialog in profile_page.dart
+      // which handles updating Firestore directly with:
+      // FirebaseFirestore.instance.collection('users').doc(userId).update({
+      //   'interests': cleanInterests,
+      //   'updatedAt': FieldValue.serverTimestamp(),
+      // });
       onAddTagTapped!();
     }
   }

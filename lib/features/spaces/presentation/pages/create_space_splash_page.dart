@@ -5,7 +5,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:hive_ui/theme/app_colors.dart';
-import 'package:hive_ui/theme/glassmorphism_guide.dart';
 import 'package:hive_ui/extensions/glassmorphism_extension.dart';
 import 'package:hive_ui/theme/huge_icons.dart';
 
@@ -65,7 +64,7 @@ class _CreateSpaceSplashPageState extends ConsumerState<CreateSpaceSplashPage>
       if (status == AnimationStatus.completed) {
         Future.delayed(const Duration(milliseconds: 200), () {
           if (mounted) {
-            GoRouter.of(context).replace('/spaces/create-direct');
+            context.go('/spaces/create-direct');
           }
         });
       }
@@ -155,7 +154,7 @@ class _CreateSpaceSplashPageState extends ConsumerState<CreateSpaceSplashPage>
                         Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Icon(
+                            const Icon(
                               HugeIcons.strokeRoundedUserGroup03,
                               color: AppColors.gold,
                               size: 24,

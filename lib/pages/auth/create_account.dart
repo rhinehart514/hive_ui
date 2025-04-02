@@ -296,16 +296,71 @@ class _CreateAccountPageState extends ConsumerState<CreateAccountPage> {
         setState(() {
           _isLoading = false;
         });
+
+        String errorMessage;
+        bool isRecoverable = true;
+
+        if (e is FirebaseAuthException) {
+          switch (e.code) {
+            case 'email-already-in-use':
+              errorMessage = 'An account already exists with this email';
+              break;
+            case 'weak-password':
+              errorMessage = 'Password is too weak. Use at least 6 characters';
+              break;
+            case 'invalid-email':
+              errorMessage = 'Invalid email format';
+              break;
+            case 'network-request-failed':
+              errorMessage = 'Network error. Please check your connection and try again';
+              break;
+            default:
+              errorMessage = e.message ?? 'Authentication failed';
+          }
+        } else if (e.toString().contains('Failed to create user profile')) {
+          errorMessage = 'Account created but profile setup failed. Please try logging in.';
+          isRecoverable = true;
+        } else {
+          errorMessage = 'An unexpected error occurred. Please try again.';
+        }
+
+        // Show error message to user
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(
-              'Error creating account: ${e.toString()}',
-              style: GoogleFonts.inter(
-                color: AppColors.white,
-                fontWeight: FontWeight.w500,
-              ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  errorMessage,
+                  style: GoogleFonts.inter(
+                    color: AppColors.white,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                if (isRecoverable) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    'You can try logging in with your credentials',
+                    style: GoogleFonts.inter(
+                      color: AppColors.white.withOpacity(0.7),
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ],
             ),
             backgroundColor: AppColors.error,
+            duration: const Duration(seconds: 5),
+            action: isRecoverable
+                ? SnackBarAction(
+                    label: 'Login',
+                    textColor: AppColors.white,
+                    onPressed: () {
+                      context.go('/login');
+                    },
+                  )
+                : null,
           ),
         );
       }

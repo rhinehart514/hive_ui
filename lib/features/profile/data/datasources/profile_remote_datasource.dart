@@ -35,7 +35,33 @@ class ProfileRemoteDataSource {
         return null;
       }
 
-      final data = docSnapshot.data()!;
+      final dynamic rawData = docSnapshot.data();
+      
+      // Check if we received a valid map
+      if (rawData == null) {
+        debugPrint('ProfileRemoteDataSource: Null data received for user $userId');
+        return null;
+      }
+      
+      if (rawData is! Map<String, dynamic>) {
+        debugPrint('ProfileRemoteDataSource: Invalid data type received for user $userId. Expected Map<String, dynamic> but got ${rawData.runtimeType}');
+        // Try to recover by creating a minimal profile
+        return UserProfile(
+          id: userId,
+          username: 'user_$userId',
+          displayName: 'User',
+          year: '',
+          major: '',
+          residence: '',
+          eventCount: 0,
+          clubCount: 0,
+          friendCount: 0,
+          createdAt: DateTime.now(),
+          updatedAt: DateTime.now(),
+        );
+      }
+      
+      final data = rawData as Map<String, dynamic>;
       data['id'] = docSnapshot.id; // Ensure ID is set
       return UserProfile.fromJson(data);
     } catch (e) {
@@ -148,9 +174,40 @@ class ProfileRemoteDataSource {
         .map((snapshot) {
       if (!snapshot.exists) return null;
 
-      final data = snapshot.data()!;
-      data['id'] = snapshot.id;
-      return UserProfile.fromJson(data);
+      try {
+        final dynamic rawData = snapshot.data();
+        
+        // Check if we received valid data
+        if (rawData == null) {
+          debugPrint('ProfileRemoteDataSource: Null data received in stream for user $userId');
+          return null;
+        }
+        
+        if (rawData is! Map<String, dynamic>) {
+          debugPrint('ProfileRemoteDataSource: Invalid data type received in stream for user $userId. Expected Map<String, dynamic> but got ${rawData.runtimeType}');
+          // Try to recover by creating a minimal profile
+          return UserProfile(
+            id: userId,
+            username: 'user_$userId',
+            displayName: 'User',
+            year: '',
+            major: '',
+            residence: '',
+            eventCount: 0,
+            clubCount: 0,
+            friendCount: 0,
+            createdAt: DateTime.now(),
+            updatedAt: DateTime.now(),
+          );
+        }
+        
+        final data = rawData as Map<String, dynamic>;
+        data['id'] = snapshot.id;
+        return UserProfile.fromJson(data);
+      } catch (e) {
+        debugPrint('ProfileRemoteDataSource: Error processing profile stream data: $e');
+        return null;
+      }
     });
   }
 

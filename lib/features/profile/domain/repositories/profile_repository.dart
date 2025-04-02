@@ -20,4 +20,8 @@ abstract class ProfileRepository {
 
   /// Stream to watch profile updates in real-time
   Stream<UserProfile?> watchProfile(String userId);
+
+  /// Update only the interests field for a user
+  /// This is optimized for updating just the interests array
+  Future<void> updateUserInterests(String userId, List<String> interests);
 }

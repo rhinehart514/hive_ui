@@ -38,7 +38,7 @@ extension NeumorphicExtension on Widget {
     final yOffset = lightSource.y * depth * elevation;
     
     // Pure black background requires a slightly visible surface
-    final adjustedBackgroundColor = const Color(0xFF0A0A0A);
+    const adjustedBackgroundColor = Color(0xFF0A0A0A);
     
     // Create lighter and darker colors for the shadow effect (more dramatic contrast)
     final lighterColor = Color.lerp(
@@ -488,7 +488,7 @@ extension NeumorphicExtension on Widget {
           ),
         ),
         padding: EdgeInsets.all(padding),
-        child: Container(
+        child: SizedBox(
           width: size - (padding * 2),
           height: size - (padding * 2),
           child: QrImageView(

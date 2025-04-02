@@ -32,6 +32,62 @@ final userFriendsProvider = FutureProvider.autoDispose<List<Friend>>((ref) async
   return await friendService.getFriends(currentUser.uid);
 });
 
+/// Get mock friends data for demo purposes
+List<Friend> _getMockFriends() {
+  return [
+    Friend(
+      id: '1',
+      name: 'Emma Johnson',
+      major: 'Computer Science',
+      year: 'Junior',
+      imageUrl: 'https://i.pravatar.cc/150?img=1',
+      isOnline: true,
+      lastActive: DateTime.now(),
+      createdAt: DateTime.now().subtract(const Duration(days: 30)),
+    ),
+    Friend(
+      id: '2',
+      name: 'Marcus Chen',
+      major: 'Engineering',
+      year: 'Senior',
+      imageUrl: 'https://i.pravatar.cc/150?img=3',
+      isOnline: false,
+      lastActive: DateTime.now().subtract(const Duration(hours: 2)),
+      createdAt: DateTime.now().subtract(const Duration(days: 60)),
+    ),
+    Friend(
+      id: '3',
+      name: 'Sophia Rodriguez',
+      major: 'Psychology',
+      year: 'Sophomore',
+      imageUrl: 'https://i.pravatar.cc/150?img=5',
+      isOnline: true,
+      lastActive: DateTime.now(),
+      createdAt: DateTime.now().subtract(const Duration(days: 45)),
+    ),
+    Friend(
+      id: '4',
+      name: 'James Wilson',
+      major: 'Business',
+      year: 'Freshman',
+      imageUrl: 'https://i.pravatar.cc/150?img=8',
+      isOnline: false,
+      lastActive: DateTime.now().subtract(const Duration(days: 1)),
+      createdAt: DateTime.now().subtract(const Duration(days: 20)),
+    ),
+    Friend(
+      id: '5',
+      name: 'Olivia Parker',
+      major: 'Art & Design',
+      year: 'Junior',
+      imageUrl: 'https://i.pravatar.cc/150?img=9',
+      isOnline: true,
+      lastActive: DateTime.now(),
+      createdAt: DateTime.now().subtract(const Duration(days: 15)),
+    ),
+  ];
+}
+
 /// Provider for pending friend requests
 final pendingFriendRequestsProvider = FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
   final friendService = ref.watch(friendServiceProvider);

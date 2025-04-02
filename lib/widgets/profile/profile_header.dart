@@ -2,13 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:hive_ui/models/user_profile.dart';
 import 'package:hive_ui/theme/app_colors.dart';
+import 'package:hive_ui/theme/huge_icons.dart';
 import 'package:hive_ui/widgets/profile/profile_image_picker.dart';
 import 'package:hive_ui/widgets/profile/profile_tags_section.dart';
 import 'package:hive_ui/widgets/profile/profile_interaction_buttons.dart';
 import 'package:hive_ui/widgets/profile/profile_info_overlay.dart'
     as info_overlay;
 import 'dart:io';
-import 'package:image_picker/image_picker.dart';
 import 'package:flutter/services.dart'; // For haptic feedback
 import 'package:hive_ui/features/profile/presentation/widgets/profile_photo_sheet.dart';
 
@@ -92,44 +92,120 @@ class ProfileHeader extends StatelessWidget {
               // Profile image
               Hero(
                 tag: 'profile_image_${profile.id}',
-                child: ClipRRect(
-                  borderRadius: const BorderRadius.only(
-                    bottomLeft: Radius.circular(16),
-                    bottomRight: Radius.circular(16),
-                  ),
-                  child: Semantics(
-                    label: 'Profile image of ${profile.username}',
-                    image: true,
-                    child: ProfileImagePicker(
-                      imageUrl: profile.profileImageUrl,
+                child: DragTarget<String>(
+                  onWillAccept: (data) {
+                    if (data == null) return false;
+                    
+                    // Verify file exists and is an image
+                    try {
+                      final file = File(data);
+                      if (!file.existsSync()) return false;
+                      
+                      final extension = data.toLowerCase();
+                      return extension.endsWith('.jpg') ||
+                             extension.endsWith('.jpeg') ||
+                             extension.endsWith('.png') ||
+                             extension.endsWith('.gif');
+                    } catch (e) {
+                      debugPrint('Error checking file: $e');
+                      return false;
+                    }
+                  },
+                  onAccept: (data) async {
+                    try {
+                      final file = File(data);
+                      if (await file.exists()) {
+                        HapticFeedback.mediumImpact();
+                        onImageFromGallery(file.path);
+                        // Show positioning dialog after accepting the drop
+                        Future.delayed(const Duration(milliseconds: 500), () {
+                          if (context.mounted) {
+                            _showImagePositioningDialog(context, file.path);
+                          }
+                        });
+                      }
+                    } catch (e) {
+                      debugPrint('Error accepting file: $e');
+                    }
+                  },
+                  builder: (context, candidateData, rejectedData) {
+                    return Container(
+                      width: double.infinity,
                       height: imageHeight,
-                      profile: profile,
-                      onImageFromCamera: (imagePath) {
-                        onImageFromCamera(imagePath);
-                        // Wait for the image to process, then show positioning dialog
-                        Future.delayed(const Duration(milliseconds: 500), () {
-                          if (context.mounted) {
-                            // Use the showDialog from the parent widget to position the image
-                            _showImagePositioningDialog(context, imagePath);
-                          }
-                        });
-                      },
-                      onImageFromGallery: (imagePath) {
-                        onImageFromGallery(imagePath);
-                        // Wait for the image to process, then show positioning dialog
-                        Future.delayed(const Duration(milliseconds: 500), () {
-                          if (context.mounted) {
-                            // Use the showDialog from the parent widget to position the image
-                            _showImagePositioningDialog(context, imagePath);
-                          }
-                        });
-                      },
-                      onImageRemoved: onImageRemoved,
-                      onImageTap: onImageTap,
-                      onVerifiedPlusTap: isCurrentUser ? onVerifiedPlusTap : null,
-                      fit: BoxFit.cover,
-                    ),
-                  ),
+                      child: ClipRRect(
+                        borderRadius: const BorderRadius.only(
+                          bottomLeft: Radius.circular(16),
+                          bottomRight: Radius.circular(16),
+                        ),
+                        child: Stack(
+                          fit: StackFit.expand,
+                          children: [
+                            Semantics(
+                              label: 'Profile image of ${profile.username}',
+                              image: true,
+                              child: ProfileImagePicker(
+                                imageUrl: profile.profileImageUrl,
+                                height: imageHeight,
+                                profile: profile,
+                                onImageFromCamera: (imagePath) {
+                                  onImageFromCamera(imagePath);
+                                  Future.delayed(const Duration(milliseconds: 500), () {
+                                    if (context.mounted) {
+                                      _showImagePositioningDialog(context, imagePath);
+                                    }
+                                  });
+                                },
+                                onImageFromGallery: (imagePath) {
+                                  onImageFromGallery(imagePath);
+                                  Future.delayed(const Duration(milliseconds: 500), () {
+                                    if (context.mounted) {
+                                      _showImagePositioningDialog(context, imagePath);
+                                    }
+                                  });
+                                },
+                                onImageRemoved: onImageRemoved,
+                                onImageTap: onImageTap,
+                                onVerifiedPlusTap: isCurrentUser ? onVerifiedPlusTap : null,
+                                fit: BoxFit.cover,
+                              ),
+                            ),
+                            // Show drag overlay when file is being dragged
+                            if (candidateData.isNotEmpty && isCurrentUser)
+                              Container(
+                                decoration: BoxDecoration(
+                                  color: AppColors.gold.withOpacity(0.3),
+                                  borderRadius: const BorderRadius.only(
+                                    bottomLeft: Radius.circular(16),
+                                    bottomRight: Radius.circular(16),
+                                  ),
+                                ),
+                                child: Center(
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      const Icon(
+                                        Icons.file_upload,
+                                        color: Colors.white,
+                                        size: 48,
+                                      ),
+                                      const SizedBox(height: 12),
+                                      Text(
+                                        'Drop to Upload',
+                                        style: GoogleFonts.outfit(
+                                          color: Colors.white,
+                                          fontSize: 20,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
                 ),
               ),
 
@@ -164,7 +240,7 @@ class ProfileHeader extends StatelessWidget {
                         child: Container(
                           padding: const EdgeInsets.all(12), // Larger touch target
                           child: const Icon(
-                            Icons.add_a_photo,
+                            HugeIcons.add,
                             color: AppColors.gold,
                             size: 24,
                           ),
@@ -213,7 +289,7 @@ class ProfileHeader extends StatelessWidget {
               ),
               SizedBox(height: isSmallScreen ? 12 : 16),
 
-              // Tags content with "+" icon for adding tags inline
+              // Second row with tags and add interest button
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -407,7 +483,7 @@ class ProfileHeader extends StatelessWidget {
 
   /// Shows the image options bottom sheet with camera, gallery, and positioning options
   void _showImageOptionsBottomSheet(BuildContext context) {
-    // Use the new profile photo sheet
+    // Use the profile photo sheet, which will handle system UI mode
     showProfilePhotoSheet(
       context,
       onImageSelected: (imagePath) {
@@ -420,8 +496,14 @@ class ProfileHeader extends StatelessWidget {
           }
           
           // Show positioning dialog after a short delay
+          // and ensure navigation UI is properly restored first
           Future.delayed(const Duration(milliseconds: 500), () {
             if (context.mounted) {
+              // Ensure navigation bar is visible before showing dialog
+              SystemChrome.setEnabledSystemUIMode(
+                SystemUiMode.edgeToEdge,
+                overlays: [SystemUiOverlay.top, SystemUiOverlay.bottom],
+              );
               _showImagePositioningDialog(context, imagePath);
             }
           });
@@ -441,19 +523,27 @@ class ProfileHeader extends StatelessWidget {
       child: Hero(
         tag: 'profile_image_${profile.id}',
         child: Container(
-          width: 120,
-          height: 120,
+          width: 160,
+          height: 160,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
             border: Border.all(
-              color: AppColors.gold.withOpacity(0.5),
-              width: 2,
+              color: AppColors.gold,
+              width: 2.5,
             ),
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.gold.withOpacity(0.3),
+                blurRadius: 8,
+                spreadRadius: 1,
+              ),
+            ],
           ),
           child: ClipOval(
             child: Image(
               image: NetworkImage(_normalizeImageUrl(profile.profileImageUrl!)),
               fit: BoxFit.cover,
+              filterQuality: FilterQuality.high,
               errorBuilder: (context, error, stackTrace) {
                 debugPrint('Error loading profile image: $error');
                 return _buildDefaultProfileImage();
@@ -507,15 +597,22 @@ class ProfileHeader extends StatelessWidget {
 
   Widget _buildDefaultProfileImage() {
     return Container(
-      width: 120,
-      height: 120,
+      width: 160,
+      height: 160,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
         color: AppColors.black,
         border: Border.all(
-          color: AppColors.gold.withOpacity(0.5),
-          width: 2,
+          color: AppColors.gold,
+          width: 2.5,
         ),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.gold.withOpacity(0.3),
+            blurRadius: 8,
+            spreadRadius: 1,
+          ),
+        ],
       ),
       child: Center(
         child: Text(
@@ -524,7 +621,7 @@ class ProfileHeader extends StatelessWidget {
               : '?',
           style: GoogleFonts.outfit(
             color: Colors.white,
-            fontSize: 36,
+            fontSize: 42,
             fontWeight: FontWeight.w600,
           ),
         ),

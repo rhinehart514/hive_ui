@@ -4,7 +4,6 @@ import 'package:hive_ui/features/spaces/presentation/providers/space_providers.d
 import 'package:hive_ui/features/spaces/presentation/providers/user_spaces_providers.dart' as user_spaces;
 import 'package:hive_ui/models/space.dart';
 import 'package:hive_ui/models/event.dart';
-import 'package:hive_ui/services/space_service.dart';
 import 'package:hive_ui/services/analytics_service.dart';
 import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';

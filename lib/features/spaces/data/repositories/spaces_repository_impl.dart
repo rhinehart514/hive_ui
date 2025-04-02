@@ -1,6 +1,8 @@
 import 'package:hive_ui/features/spaces/data/datasources/spaces_firestore_datasource.dart';
 import 'package:hive_ui/features/spaces/domain/entities/space_entity.dart';
 import 'package:hive_ui/features/spaces/domain/repositories/spaces_repository.dart';
+import 'package:flutter/foundation.dart';
+import 'package:hive_ui/models/event.dart';
 
 /// Implementation of the SpacesRepository interface
 class SpacesRepositoryImpl implements SpacesRepository {
@@ -10,15 +12,28 @@ class SpacesRepositoryImpl implements SpacesRepository {
   SpacesRepositoryImpl(this._dataSource);
 
   @override
-  Future<List<SpaceEntity>> getAllSpaces({bool forceRefresh = false}) async {
-    final spaces = await _dataSource.getAllSpaces(forceRefresh: forceRefresh);
+  Future<List<SpaceEntity>> getAllSpaces({
+    bool forceRefresh = false,
+    bool includePrivate = false,
+    bool includeJoined = true,
+  }) async {
+    final spaces = await _dataSource.getAllSpaces(
+      forceRefresh: forceRefresh,
+      includePrivate: includePrivate,
+      includeJoined: includeJoined,
+    );
     return spaces.map((model) => model.toEntity()).toList();
   }
 
   @override
-  Future<SpaceEntity?> getSpaceById(String id) async {
-    final space = await _dataSource.getSpaceById(id);
-    return space?.toEntity();
+  Future<SpaceEntity?> getSpaceById(String id, {String? spaceType}) async {
+    try {
+      final space = await _dataSource.getSpaceById(id, spaceType: spaceType);
+      return space?.toEntity();
+    } catch (e) {
+      debugPrint('Error getting space by ID: $e');
+      return null;
+    }
   }
 
   @override
@@ -100,5 +115,16 @@ class SpacesRepositoryImpl implements SpacesRepository {
   @override
   Future<bool> isSpaceNameTaken(String name) {
     return _dataSource.isSpaceNameTaken(name);
+  }
+
+  @override
+  Future<List<Event>> getSpaceEvents(String spaceId) async {
+    try {
+      final events = await _dataSource.getSpaceEvents(spaceId);
+      return events;
+    } catch (e) {
+      debugPrint('Error getting space events: $e');
+      return [];
+    }
   }
 }

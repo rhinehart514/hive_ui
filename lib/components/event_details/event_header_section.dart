@@ -46,19 +46,8 @@ class EventHeaderSection extends StatelessWidget {
                 scale: 1 + (scrollOffset * 0.0005),
                 child: OptimizedImage(
                   imageUrl: event.safeImageUrl,
-                  fallbackUrl:
-                      'https://images.unsplash.com/photo-1501281668745-f7f57925c3b4?w=800&h=600&auto=format&fit=crop',
                   fit: BoxFit.cover,
-                  loadingWidget: Container(
-                    color: AppColors.cardBackground,
-                    child: const Center(
-                      child: CircularProgressIndicator(
-                        valueColor:
-                            AlwaysStoppedAnimation<Color>(AppColors.white),
-                        strokeWidth: 2,
-                      ),
-                    ),
-                  ),
+                  backgroundColor: AppColors.cardBackground,
                 ),
               ),
             ),

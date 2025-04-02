@@ -33,4 +33,22 @@ class RecommendedSpace {
       customPitch: customPitch ?? this.customPitch,
     );
   }
+
+  /// Create a RecommendedSpace from JSON data
+  factory RecommendedSpace.fromJson(Map<String, dynamic> json) {
+    return RecommendedSpace(
+      space: Space.fromJson(json['space'] as Map<String, dynamic>),
+      recommendationReason: json['recommendationReason'] as String?,
+      customPitch: json['customPitch'] as String?,
+    );
+  }
+
+  /// Convert this object to JSON
+  Map<String, dynamic> toJson() {
+    return {
+      'space': space.toJson(),
+      'recommendationReason': recommendationReason,
+      'customPitch': customPitch,
+    };
+  }
 } 

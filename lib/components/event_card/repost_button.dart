@@ -97,7 +97,7 @@ class _RepostButtonState extends State<RepostButton> with SingleTickerProviderSt
     
     // Calculate maximum height to avoid overflow
     final maxExpandedHeight = screenSize.height * 0.3; // Max 30% of screen height
-    final expandedHeight = 130.0;
+    const expandedHeight = 130.0;
     final actualHeight = _isExpanded ? 
         (expandedHeight > maxExpandedHeight ? maxExpandedHeight : expandedHeight) 
         : widget.size;
@@ -167,7 +167,7 @@ class _RepostButtonState extends State<RepostButton> with SingleTickerProviderSt
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Flexible(
+                const Flexible(
                   child: Text(
                     'Repost Event',
                     style: TextStyle(
@@ -180,8 +180,8 @@ class _RepostButtonState extends State<RepostButton> with SingleTickerProviderSt
                 ),
                 IconButton(
                   onPressed: _handleTap,
-                  icon: Icon(Icons.close, color: Colors.white, size: 18),
-                  constraints: BoxConstraints(maxHeight: 30, maxWidth: 30),
+                  icon: const Icon(Icons.close, color: Colors.white, size: 18),
+                  constraints: const BoxConstraints(maxHeight: 30, maxWidth: 30),
                   padding: EdgeInsets.zero,
                 ),
               ],
@@ -197,7 +197,7 @@ class _RepostButtonState extends State<RepostButton> with SingleTickerProviderSt
                 maxLines: 2,
                 decoration: InputDecoration(
                   hintText: 'Add your thoughts...',
-                  hintStyle: TextStyle(color: Colors.white70, fontSize: 12),
+                  hintStyle: const TextStyle(color: Colors.white70, fontSize: 12),
                   filled: true,
                   fillColor: Colors.black.withOpacity(0.3),
                   border: OutlineInputBorder(
@@ -222,7 +222,7 @@ class _RepostButtonState extends State<RepostButton> with SingleTickerProviderSt
                     borderRadius: BorderRadius.circular(10),
                   ),
                 ),
-                child: Text(
+                child: const Text(
                   'Repost',
                   style: TextStyle(
                     fontWeight: FontWeight.bold,

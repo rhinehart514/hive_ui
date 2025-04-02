@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:hive_ui/models/user_profile.dart';
+import 'package:hive_ui/models/event.dart';
 import 'package:hive_ui/theme/app_colors.dart';
 import 'package:flutter_staggered_animations/flutter_staggered_animations.dart';
 import 'package:hive_ui/widgets/profile/profile_image_picker.dart';
 import 'package:hive_ui/widgets/profile/pulsing_verified_badge.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:hive_ui/providers/profile_provider.dart';
 
 /// Widget for displaying the user's header information
 class ProfileHeaderSection extends StatelessWidget {
@@ -146,18 +149,18 @@ class ProfileStatsSection extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.start,
         children: [
           _buildStatItem(
-            count: profile.eventCount,
             label: 'Events',
+            value: profile.eventCount.toString(),
           ),
           const SizedBox(width: 24),
           _buildStatItem(
-            count: profile.clubCount,
             label: 'Spaces',
+            value: profile.clubCount.toString(),
           ),
           const SizedBox(width: 24),
           _buildStatItem(
-            count: profile.friendCount,
             label: 'Friends',
+            value: profile.friendCount.toString(),
           ),
         ],
       ),
@@ -165,13 +168,13 @@ class ProfileStatsSection extends StatelessWidget {
   }
 
   Widget _buildStatItem({
-    required int count,
     required String label,
+    required String value,
   }) {
     return Column(
       children: [
         Text(
-          count.toString(),
+          value,
           style: GoogleFonts.outfit(
             color: Colors.white,
             fontSize: 18,
@@ -430,7 +433,7 @@ class ProfileActionSection extends StatelessWidget {
 }
 
 /// Tab content for displaying user's events
-class EventsGridTab extends StatelessWidget {
+class EventsGridTab extends ConsumerWidget {
   final UserProfile profile;
 
   const EventsGridTab({
@@ -439,60 +442,51 @@ class EventsGridTab extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
-    // Mock data - in a real app, this would come from a repository
-    final List<Map<String, dynamic>> events = [
-      {
-        'id': '1',
-        'title': 'Campus Hackathon',
-        'date': 'Mar 15',
-        'imageUrl': null,
-      },
-      {
-        'id': '2',
-        'title': 'AI Workshop',
-        'date': 'Apr 2',
-        'imageUrl': null,
-      },
-      {
-        'id': '3',
-        'title': 'Career Fair',
-        'date': 'Apr 10',
-        'imageUrl': null,
-      },
-    ];
+  Widget build(BuildContext context, WidgetRef ref) {
+    // Use real data from provider instead of mock data
+    final eventsAsync = ref.watch(userEventsProvider);
+    
+    return eventsAsync.when(
+      data: (events) {
+        if (events.isEmpty) {
+          return _buildEmptyState('No events yet');
+        }
 
-    if (events.isEmpty) {
-      return _buildEmptyState('No events yet');
-    }
-
-    return AnimationLimiter(
-      child: GridView.builder(
-        padding: const EdgeInsets.all(16),
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 2,
-          childAspectRatio: 0.8,
-          crossAxisSpacing: 16,
-          mainAxisSpacing: 16,
-        ),
-        itemCount: events.length,
-        itemBuilder: (context, index) {
-          return AnimationConfiguration.staggeredGrid(
-            position: index,
-            duration: const Duration(milliseconds: 375),
-            columnCount: 2,
-            child: ScaleAnimation(
-              child: FadeInAnimation(
-                child: _buildEventCard(events[index]),
-              ),
+        return AnimationLimiter(
+          child: GridView.builder(
+            padding: const EdgeInsets.all(16),
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 2,
+              childAspectRatio: 0.8,
+              crossAxisSpacing: 16,
+              mainAxisSpacing: 16,
             ),
-          );
-        },
+            itemCount: events.length,
+            itemBuilder: (context, index) {
+              return AnimationConfiguration.staggeredGrid(
+                position: index,
+                duration: const Duration(milliseconds: 375),
+                columnCount: 2,
+                child: ScaleAnimation(
+                  child: FadeInAnimation(
+                    child: _buildEventCard(events[index]),
+                  ),
+                ),
+              );
+            },
+          ),
+        );
+      },
+      loading: () => const Center(
+        child: CircularProgressIndicator(
+          valueColor: AlwaysStoppedAnimation<Color>(AppColors.gold),
+        ),
       ),
+      error: (error, stack) => _buildErrorState(context, error.toString()),
     );
   }
 
-  Widget _buildEventCard(Map<String, dynamic> event) {
+  Widget _buildEventCard(Event event) {
     return Container(
       decoration: BoxDecoration(
         color: Colors.grey[900],
@@ -517,14 +511,14 @@ class EventsGridTab extends StatelessWidget {
                   topLeft: Radius.circular(16),
                   topRight: Radius.circular(16),
                 ),
-                image: event['imageUrl'] != null
+                image: event.imageUrl != null
                     ? DecorationImage(
-                        image: NetworkImage(event['imageUrl']),
+                        image: NetworkImage(event.imageUrl!),
                         fit: BoxFit.cover,
                       )
                     : null,
               ),
-              child: event['imageUrl'] == null
+              child: event.imageUrl == null
                   ? const Center(
                       child: Icon(
                         Icons.event,
@@ -542,7 +536,7 @@ class EventsGridTab extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  event['title'],
+                  event.title,
                   style: GoogleFonts.outfit(
                     color: Colors.white,
                     fontSize: 16,
@@ -553,7 +547,7 @@ class EventsGridTab extends StatelessWidget {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  event['date'],
+                  _formatEventDate(event.startDate),
                   style: GoogleFonts.inter(
                     color: Colors.white60,
                     fontSize: 12,
@@ -563,6 +557,42 @@ class EventsGridTab extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildErrorState(BuildContext context, String errorMessage) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(
+              Icons.error_outline,
+              color: Colors.redAccent,
+              size: 48,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Error loading events',
+              style: GoogleFonts.outfit(
+                color: Colors.white,
+                fontSize: 18,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              errorMessage,
+              textAlign: TextAlign.center,
+              style: GoogleFonts.inter(
+                color: Colors.white60,
+                fontSize: 14,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -588,6 +618,48 @@ class EventsGridTab extends StatelessWidget {
         ],
       ),
     );
+  }
+  
+  // Format event date for display
+  String _formatEventDate(DateTime date) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final eventDate = DateTime(date.year, date.month, date.day);
+
+    String formattedDate;
+    final difference = eventDate.difference(today).inDays;
+
+    if (difference == 0) {
+      // Today
+      final hour = date.hour > 12 ? date.hour - 12 : date.hour;
+      final period = date.hour >= 12 ? 'PM' : 'AM';
+      formattedDate = 'Today, ${hour == 0 ? 12 : hour}:${date.minute.toString().padLeft(2, '0')} $period';
+    } else if (difference == 1) {
+      // Tomorrow
+      formattedDate = 'Tomorrow';
+    } else if (difference > 1 && difference < 7) {
+      // This week
+      final weekday = _getWeekday(date.weekday);
+      formattedDate = weekday;
+    } else {
+      // Further in the future
+      formattedDate = '${date.month}/${date.day}/${date.year}';
+    }
+
+    return formattedDate;
+  }
+  
+  String _getWeekday(int weekday) {
+    switch (weekday) {
+      case 1: return 'Monday';
+      case 2: return 'Tuesday';
+      case 3: return 'Wednesday';
+      case 4: return 'Thursday';
+      case 5: return 'Friday';
+      case 6: return 'Saturday';
+      case 7: return 'Sunday';
+      default: return '';
+    }
   }
 }
 

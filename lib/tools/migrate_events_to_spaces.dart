@@ -28,7 +28,9 @@ void main(List<String> args) async {
 
   // Parse arguments - default to auto mode unless --interactive is specified
   final bool interactiveMode = args.contains('--interactive');
-  final bool autoMode = !interactiveMode;
+  // Define auto mode as opposite of interactive mode, but don't use it since we can just use !interactiveMode directly
+  // Using final instead of commenting out to make it clear it's intentionally not used
+  // final bool autoMode = !interactiveMode;
 
   print('==================================================');
   print('  HIVE UI - Event to Space Migration Tool');
@@ -391,6 +393,8 @@ String getCollectionNameForSpaceType(SpaceType spaceType) {
       return 'campus_living';
     case SpaceType.fraternityAndSorority:
       return 'fraternity_and_sorority';
+    case SpaceType.hiveExclusive:
+      return 'hive_exclusive';
     case SpaceType.other:
       return 'other_spaces';
   }
@@ -410,6 +414,11 @@ void updateStatsForSpaceType(MigrationStats stats, SpaceType spaceType) {
       break;
     case SpaceType.fraternityAndSorority:
       stats.fraternityAndSororityEvents++;
+      break;
+    case SpaceType.hiveExclusive:
+      // Count HIVE exclusive events in a separate field if available
+      // For now, just use other events as a fallback
+      stats.otherEvents++;
       break;
     case SpaceType.other:
       stats.otherEvents++;

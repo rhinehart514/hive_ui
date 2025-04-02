@@ -3,7 +3,6 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:hive_ui/features/spaces/domain/entities/space_entity.dart';
-import 'package:hive_ui/features/spaces/domain/entities/space_metrics_entity.dart';
 import 'package:hive_ui/features/spaces/presentation/controllers/spaces_controller.dart';
 import 'package:hive_ui/models/space.dart';
 import 'package:hive_ui/theme/app_colors.dart';
@@ -328,7 +327,7 @@ class UnifiedSpaceCard extends ConsumerWidget {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error opening space'),
+            content: const Text('Error opening space'),
             backgroundColor: Colors.red[700],
             duration: const Duration(seconds: 3),
           ),

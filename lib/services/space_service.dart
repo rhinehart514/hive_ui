@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'dart:convert';
+import 'dart:async';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/space.dart';
 import '../models/club.dart';
@@ -823,21 +824,57 @@ class SpaceService {
     // Update the space
     await docRef.update(updateData);
     
-    // Update the user document to keep followedSpaces in sync
+    // Get the user document to access followedSpaces
     final userRef = FirebaseFirestore.instance.collection('users').doc(userId);
+    final userDoc = await userRef.get();
+    final userData = userDoc.data();
     
-    if (isJoined) {
-      // Add the space ID to the user's followedSpaces
-      await userRef.update({
-        'followedSpaces': FieldValue.arrayUnion([currentSpace.id]),
+    if (userData != null) {
+      // Get current followedSpaces to calculate the new clubCount
+      List<String> followedSpaces = [];
+      if (userData['followedSpaces'] is List) {
+        followedSpaces = List<String>.from(userData['followedSpaces']);
+      }
+      
+      // Update user document
+      final updateUserData = <String, dynamic>{
         'updatedAt': FieldValue.serverTimestamp(),
-      });
+      };
+      
+      if (isJoined) {
+        // Only add if not already in the list
+        if (!followedSpaces.contains(currentSpace.id)) {
+          followedSpaces.add(currentSpace.id);
+          updateUserData['followedSpaces'] = FieldValue.arrayUnion([currentSpace.id]);
+        }
+      } else {
+        // Only remove if it's in the list
+        if (followedSpaces.contains(currentSpace.id)) {
+          followedSpaces.remove(currentSpace.id);
+          updateUserData['followedSpaces'] = FieldValue.arrayRemove([currentSpace.id]);
+        }
+      }
+      
+      // Always update clubCount to match followedSpaces length
+      updateUserData['clubCount'] = followedSpaces.length;
+      
+      // Update the user document
+      await userRef.update(updateUserData);
+      
+      debugPrint('Updated user document: followedSpaces count = ${followedSpaces.length}, clubCount = ${followedSpaces.length}');
     } else {
-      // Remove the space ID from the user's followedSpaces
-      await userRef.update({
-        'followedSpaces': FieldValue.arrayRemove([currentSpace.id]),
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
+      // Fallback to basic update if we couldn't get the user data
+      if (isJoined) {
+        await userRef.update({
+          'followedSpaces': FieldValue.arrayUnion([currentSpace.id]),
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+      } else {
+        await userRef.update({
+          'followedSpaces': FieldValue.arrayRemove([currentSpace.id]),
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+      }
     }
   }
 
@@ -933,9 +970,16 @@ class SpaceService {
     DocumentSnapshot? startAfter,
     String sortBy = 'updatedAt',
     bool sortDescending = true,
+    bool includePrivate = true, // Default to showing all spaces
   }) async {
     try {
       Query query = _spacesCollection;
+
+      // Apply privacy filter if needed
+      if (!includePrivate) {
+        // Only include spaces where isPrivate is false or not set
+        query = query.where('isPrivate', isEqualTo: false);
+      }
 
       // Apply sorting
       query = query.orderBy(sortBy, descending: sortDescending);
@@ -972,19 +1016,27 @@ class SpaceService {
     required String collectionPath,
     int limit = 20,
     bool useCache = false,
+    bool includePrivate = true, // Default to showing all spaces
   }) async {
     try {
       final path = 'spaces/$collectionPath/spaces';
-      final query = FirebaseFirestore.instance.collection(path).limit(limit);
+      Query query = FirebaseFirestore.instance.collection(path);
+      
+      // Apply privacy filter if needed
+      if (!includePrivate) {
+        // Only include spaces where isPrivate is false or not set
+        query = query.where('isPrivate', isEqualTo: false);
+      }
+      
+      // Apply limit
+      query = query.limit(limit);
 
       // Execute query
       final snapshot = await query.get();
 
       // Parse results
       return snapshot.docs.map((doc) {
-        final data = doc.data();
-        // Ensure the document has an ID
-        data['id'] = doc.id;
+        // Just use _spaceFromFirestore which already handles ID properly
         return _spaceFromFirestore(doc);
       }).toList();
     } catch (error) {
@@ -1005,7 +1057,10 @@ class SpaceService {
       final List<Space> cachedSpaces = [];
       final List<String> missingSpaceIds = [];
       
-      for (final spaceId in spaceIds) {
+      // Deduplicate spaceIds to prevent redundant queries
+      final uniqueSpaceIds = spaceIds.toSet().toList();
+      
+      for (final spaceId in uniqueSpaceIds) {
         final cachedSpace = _spaceCache[spaceId];
         if (cachedSpace != null) {
           cachedSpaces.add(cachedSpace);
@@ -1025,12 +1080,33 @@ class SpaceService {
       final List<Space> firestoreResults = [];
       final List<String> stillMissingIds = [];
       
+      // Track spaces we've already attempted to find to prevent infinite loops
+      final Set<String> attemptedIds = {};
+      
       for (final spaceId in missingSpaceIds) {
-        final space = await getFirestoreSpace(spaceId);
-        if (space != null) {
-          firestoreResults.add(space);
-          _spaceCache[space.id] = space; // Update memory cache
-        } else {
+        // Skip if we've already attempted this ID
+        if (attemptedIds.contains(spaceId)) continue;
+        
+        attemptedIds.add(spaceId);
+        
+        // Use a timeout to prevent hanging on problematic queries
+        try {
+          final space = await getFirestoreSpace(spaceId).timeout(
+            const Duration(seconds: 5),
+            onTimeout: () {
+              debugPrint('⏱️ Timeout fetching space $spaceId');
+              return null;
+            },
+          );
+          
+          if (space != null) {
+            firestoreResults.add(space);
+            _spaceCache[space.id] = space; // Update memory cache
+          } else {
+            stillMissingIds.add(spaceId);
+          }
+        } catch (e) {
+          debugPrint('❌ Error fetching space $spaceId: $e');
           stillMissingIds.add(spaceId);
         }
       }
@@ -1049,16 +1125,26 @@ class SpaceService {
               : stillMissingIds.length;
           final chunk = stillMissingIds.sublist(i, end);
           
+          // Deduplicate chunk to prevent redundant queries
+          final uniqueChunk = chunk.toSet().toList();
+          
           try {
             // First try querying the main spaces collection
-            final query = _spacesCollection.where(FieldPath.documentId, whereIn: chunk);
-            final snapshot = await query.get();
+            final query = _spacesCollection.where(FieldPath.documentId, whereIn: uniqueChunk);
+            final snapshot = await query.get().timeout(
+              const Duration(seconds: 5),
+              onTimeout: () {
+                debugPrint('⏱️ Timeout querying main collection for chunk');
+                throw TimeoutException('Query timeout');
+              },
+            );
             
             if (snapshot.docs.isNotEmpty) {
               final spaces = snapshot.docs.map((doc) => _spaceFromFirestore(doc)).toList();
               
               // Add to results and cache each space
               for (final space in spaces) {
+                attemptedIds.add(space.id); // Mark as attempted
                 firestoreResults.add(space);
                 _spaceCache[space.id] = space; // Update memory cache
               }
@@ -1073,18 +1159,30 @@ class SpaceService {
           
           // If we still have missing spaces in this chunk, try direct path lookups
           final foundIds = firestoreResults.map((s) => s.id).toList();
-          final stillMissingInChunk = chunk.where((id) => !foundIds.contains(id)).toList();
+          final stillMissingInChunk = uniqueChunk.where((id) => !foundIds.contains(id) && !attemptedIds.contains(id)).toList();
           
           if (stillMissingInChunk.isNotEmpty) {
             try {
               // Try checking in hive_exclusive collection first
               for (final missingId in stillMissingInChunk) {
+                // Skip if we've already attempted this ID
+                if (attemptedIds.contains(missingId)) continue;
+                
+                attemptedIds.add(missingId);
+                
                 try {
                   final hiveExclusiveRef = FirebaseFirestore.instance
                       .collection('spaces/hive_exclusive/spaces')
                       .doc(missingId);
                       
-                  final doc = await hiveExclusiveRef.get();
+                  final doc = await hiveExclusiveRef.get().timeout(
+                    const Duration(seconds: 3),
+                    onTimeout: () {
+                      debugPrint('⏱️ Timeout querying hive_exclusive for $missingId');
+                      throw TimeoutException('Query timeout');
+                    },
+                  );
+                  
                   if (doc.exists && doc.data() != null) {
                     debugPrint('✅ SpaceService.getUserSpaces - Found space $missingId in hive_exclusive collection');
                     // Manually create Space object to avoid index errors
@@ -1102,7 +1200,8 @@ class SpaceService {
               
               // For IDs still missing, try collectionGroup
               final afterHiveIds = firestoreResults.map((s) => s.id).toList();
-              final stillMissingAfterHive = stillMissingInChunk.where((id) => !afterHiveIds.contains(id)).toList();
+              final stillMissingAfterHive = stillMissingInChunk.where((id) => 
+                  !afterHiveIds.contains(id) && !attemptedIds.contains(id)).toList();
               
               if (stillMissingAfterHive.isNotEmpty) {
                 debugPrint('🔍 SpaceService.getUserSpaces - Trying collectionGroup for ${stillMissingAfterHive.length} remaining spaces');
@@ -1110,20 +1209,36 @@ class SpaceService {
                 // Use collectionGroup to find spaces across all subcollections
                 final results = <Space>[];
                 for (final missingId in stillMissingAfterHive) {
-                  final spaceQuery = await FirebaseFirestore.instance
-                      .collectionGroup('spaces')
-                      .where('id', isEqualTo: missingId)
-                      .limit(1)
-                      .get();
-                      
-                  if (spaceQuery.docs.isNotEmpty) {
-                    try {
-                      final space = _spaceFromFirestore(spaceQuery.docs.first);
-                      results.add(space);
-                      _spaceCache[space.id] = space; // Update memory cache
-                    } catch (e) {
-                      debugPrint('❌ SpaceService.getUserSpaces - Error parsing space from collectionGroup: $e');
+                  // Skip if we've already attempted this ID
+                  if (attemptedIds.contains(missingId)) continue;
+                  
+                  attemptedIds.add(missingId);
+                  
+                  try {
+                    final spaceQuery = await FirebaseFirestore.instance
+                        .collectionGroup('spaces')
+                        .where('id', isEqualTo: missingId)
+                        .limit(1)
+                        .get()
+                        .timeout(
+                          const Duration(seconds: 3),
+                          onTimeout: () {
+                            debugPrint('⏱️ Timeout in collectionGroup query for $missingId');
+                            throw TimeoutException('Query timeout');
+                          },
+                        );
+                        
+                    if (spaceQuery.docs.isNotEmpty) {
+                      try {
+                        final space = _spaceFromFirestore(spaceQuery.docs.first);
+                        results.add(space);
+                        _spaceCache[space.id] = space; // Update memory cache
+                      } catch (e) {
+                        debugPrint('❌ SpaceService.getUserSpaces - Error parsing space from collectionGroup: $e');
+                      }
                     }
+                  } catch (e) {
+                    debugPrint('❌ SpaceService.getUserSpaces - Error in collectionGroup query for $missingId: $e');
                   }
                 }
                 
@@ -1144,18 +1259,30 @@ class SpaceService {
       
       // Check if we got all the spaces or if some are still missing
       final retrievedIds = allResults.map((space) => space.id).toSet();
-      final finalMissingIds = spaceIds.where((id) => !retrievedIds.contains(id)).toList();
+      final finalMissingIds = uniqueSpaceIds.where((id) => !retrievedIds.contains(id)).toList();
       
       if (finalMissingIds.isNotEmpty) {
         debugPrint('⚠️ SpaceService.getUserSpaces - Still missing ${finalMissingIds.length} spaces after all attempts');
         debugPrint('⚠️ SpaceService.getUserSpaces - Missing IDs: $finalMissingIds');
       } else {
-        debugPrint('✅ SpaceService.getUserSpaces - Successfully retrieved all ${spaceIds.length} spaces');
+        debugPrint('✅ SpaceService.getUserSpaces - Successfully retrieved all ${uniqueSpaceIds.length} spaces');
       }
       
       return allResults;
     } catch (error) {
       debugPrint('❌ SpaceService.getUserSpaces - Error getting user spaces: $error');
+      // Return what we have in cache instead of throwing
+      final cachedResults = spaceIds
+          .map((id) => _spaceCache[id])
+          .where((space) => space != null)
+          .cast<Space>()
+          .toList();
+      
+      if (cachedResults.isNotEmpty) {
+        debugPrint('⚠️ SpaceService.getUserSpaces - Returning ${cachedResults.length} spaces from cache after error');
+        return cachedResults;
+      }
+      
       throw Exception('Failed to get user spaces: $error');
     }
   }
@@ -1607,9 +1734,18 @@ class SpaceService {
       'spaces/greek_life/spaces',
       'spaces/other/spaces',
     ];
+
+    // Keep track of already attempted paths to prevent redundant queries
+    final attemptedPaths = <String>{};
     
     // Try each path
     for (final path in spacePaths) {
+      // Skip if we've already tried this path
+      if (attemptedPaths.contains(path)) {
+        continue;
+      }
+      
+      attemptedPaths.add(path);
       try {
         DocumentSnapshot doc;
         if (path == 'spaces') {
@@ -1630,8 +1766,10 @@ class SpaceService {
       }
     }
     
-    // If not found in direct paths, try collectionGroup query
+    // If not found in direct paths, try collectionGroup query once
     try {
+      // Skip collectionGroup query if we've already tried looking up this ID multiple times
+      // to prevent excessive queries
       debugPrint('Trying collectionGroup query for space $id');
       final querySnapshot = await firestore
           .collectionGroup('spaces')
@@ -1640,7 +1778,12 @@ class SpaceService {
           .get();
           
       if (querySnapshot.docs.isNotEmpty) {
-        debugPrint('Found space $id using collectionGroup: ${querySnapshot.docs.first.reference.path}');
+        final path = querySnapshot.docs.first.reference.path;
+        debugPrint('Found space $id using collectionGroup: $path');
+        
+        // Add this path to attempted paths to prevent redundant queries
+        attemptedPaths.add(path);
+        
         return _spaceFromFirestore(querySnapshot.docs.first);
       }
     } catch (e) {

@@ -8,21 +8,253 @@ import 'package:hive_ui/models/space_type.dart';
 import 'package:hive_ui/models/space.dart';
 import 'package:hive_ui/models/space_metrics.dart';
 import 'package:hive_ui/models/user_profile.dart';
-import 'package:hive_ui/services/feed/feed_service.dart';
 import 'package:hive_ui/services/feed/feed_prioritizer.dart';
 import 'package:hive_ui/services/space_event_manager.dart';
-import 'package:hive_ui/services/analytics_service.dart';
 import '../../domain/repositories/feed_repository.dart';
+import 'package:hive_ui/services/event_service.dart';
+import 'package:hive_ui/models/reposted_event.dart';
+import 'package:hive_ui/models/repost_content_type.dart';
+import 'package:hive_ui/features/shared/infrastructure/platform_integration_manager.dart';
 
-/// Implementation of the feed repository that interacts with Firebase
+/// Implementation of the feed repository using existing services
+/// Acts as a bridge between the new architecture and existing services
 class FeedRepositoryImpl implements FeedRepository {
-  /// Firestore instance for database operations
+  /// Firestore instance
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-
-  /// Auth instance for current user
+  
+  /// Firebase auth instance
   final FirebaseAuth _auth = FirebaseAuth.instance;
+  
+  /// Platform integration manager
+  final PlatformIntegrationManager _integrationManager;
+  
+  /// In-memory cache for events
+  final Map<String, Event> _eventCache = {};
+  
+  /// In-memory RSVP status cache
+  final Map<String, bool> _rsvpStatusCache = {};
+  
+  /// In-memory timestamp for last full feed fetch
+  DateTime? _lastFeedFetchTime;
+  
+  /// Cache timeout
+  static const Duration _cacheTimeout = Duration(minutes: 15);
+  
+  /// Constructor
+  FeedRepositoryImpl({
+    PlatformIntegrationManager? integrationManager,
+  }) : _integrationManager = integrationManager ?? PlatformIntegrationManager();
+  
+  @override
+  Future<List<Event>> getEvents({
+    bool forceRefresh = false,
+    int limit = 20,
+    Event? lastEvent,
+  }) async {
+    try {
+      // If cache is valid and not forcing refresh, use it
+      if (!forceRefresh && 
+          _eventCache.isNotEmpty && 
+          _lastFeedFetchTime != null &&
+          DateTime.now().difference(_lastFeedFetchTime!) < _cacheTimeout) {
+        
+        final cachedEvents = _eventCache.values.toList();
+        cachedEvents.sort((a, b) => a.startDate.compareTo(b.startDate));
+        
+        // Apply pagination if last event is provided
+        if (lastEvent != null) {
+          final lastIndex = cachedEvents.indexWhere((e) => e.id == lastEvent.id);
+          if (lastIndex != -1 && lastIndex + 1 < cachedEvents.length) {
+            return cachedEvents.sublist(lastIndex + 1, 
+                (lastIndex + 1 + limit) < cachedEvents.length 
+                  ? lastIndex + 1 + limit 
+                  : cachedEvents.length);
+          }
+        }
+        
+        // Return first page if no last event or not found
+        return cachedEvents.take(limit).toList();
+      }
+      
+      // Use the existing service to get events
+      final events = await EventService.getEvents(forceRefresh: forceRefresh);
+      
+      // Update cache
+      for (final event in events) {
+        _eventCache[event.id] = event;
+      }
+      
+      // Update timestamp
+      _lastFeedFetchTime = DateTime.now();
+      
+      // Sort and paginate
+      events.sort((a, b) => a.startDate.compareTo(b.startDate));
+      
+      // Apply pagination if last event is provided
+      if (lastEvent != null) {
+        final lastIndex = events.indexWhere((e) => e.id == lastEvent.id);
+        if (lastIndex != -1 && lastIndex + 1 < events.length) {
+          return events.sublist(lastIndex + 1, 
+              (lastIndex + 1 + limit) < events.length 
+                ? lastIndex + 1 + limit 
+                : events.length);
+        }
+      }
+      
+      // Return first page if no last event or not found
+      return events.take(limit).toList();
+    } catch (e) {
+      debugPrint('Error in FeedRepository.getEvents: $e');
+      rethrow;
+    }
+  }
+  
+  @override
+  Future<List<Event>> getRecommendedEvents({
+    int limit = 10,
+  }) async {
+    try {
+      // For now, reuse the regular events with a recommendation algorithm
+      final events = await getEvents();
+      
+      // Simple recommendation - sort by date and filter upcoming
+      final now = DateTime.now();
+      final upcoming = events.where((e) => e.startDate.isAfter(now)).toList();
+      
+      // Sort by start date
+      upcoming.sort((a, b) => a.startDate.compareTo(b.startDate));
+      
+      // Return a subset
+      return upcoming.take(limit).toList();
+    } catch (e) {
+      debugPrint('Error in FeedRepository.getRecommendedEvents: $e');
+      return [];
+    }
+  }
+  
+  @override
+  Future<bool> getEventRsvpStatus(String eventId) async {
+    try {
+      // Check cache first
+      if (_rsvpStatusCache.containsKey(eventId)) {
+        return _rsvpStatusCache[eventId]!;
+      }
+      
+      // Use existing service
+      final status = await EventService.getEventRsvpStatus(eventId);
+      
+      // Update cache
+      _rsvpStatusCache[eventId] = status;
+      
+      return status;
+    } catch (e) {
+      debugPrint('Error in FeedRepository.getEventRsvpStatus: $e');
+      return false;
+    }
+  }
+  
+  @override
+  Future<bool> rsvpToEvent(String eventId, bool attending) async {
+    try {
+      // Use the platform integration manager for RSVP
+      final success = await _integrationManager.processEventRsvp(
+        eventId: eventId,
+        attending: attending,
+      );
+      
+      // Update cache if successful
+      if (success) {
+        _rsvpStatusCache[eventId] = attending;
+        
+        // Also update the event in the cache if it exists
+        if (_eventCache.containsKey(eventId)) {
+          debugPrint('Event cache update skipped: isRsvped field assumed missing or copyWith needs adjustment.');
+        }
+      }
+      
+      return success;
+    } catch (e) {
+      debugPrint('Error in FeedRepository.rsvpToEvent: $e');
+      return false;
+    }
+  }
+  
+  @override
+  Future<RepostedEvent?> repostEvent({
+    required String eventId,
+    String? comment,
+    String? userId,
+  }) async {
+    try {
+      // Ensure we have a user ID
+      userId ??= _auth.currentUser?.uid;
+      if (userId == null) {
+        return null;
+      }
+      
+      // Get the event if not in cache
+      Event? event = _eventCache[eventId];
+      if (event == null) {
+        // Try to fetch it - simplified approach
+        final events = await EventService.getEvents();
+        
+        // Corrected: Use try-catch to find the event or handle not found
+        try {
+          event = events.firstWhere((e) => e.id == eventId);
+        } on StateError {
+          debugPrint('Event with ID $eventId not found for reposting.');
+          return null; // Event not found
+        }
+        
+        _eventCache[eventId] = event; // Add fetched event to cache
+      }
 
-  /// Fetch events for the feed with optional filtering and pagination
+      // Fetch user profile for repostedBy
+      UserProfile? reposterProfile;
+      try {
+        final userDoc = await _firestore.collection('users').doc(userId).get();
+        if (userDoc.exists) {
+          reposterProfile = UserProfile.fromJson(userDoc.data()!);
+        }
+      } catch (e) {
+        debugPrint('Error fetching reposter profile: $e');
+        return null; // Cannot create repost without profile
+      }
+
+      if (reposterProfile == null) {
+        debugPrint('Reposter profile not found for ID: $userId');
+        return null;
+      }
+      
+      // Create the repost document in Firestore
+      final repostRef = _firestore.collection('reposts').doc();
+      
+      // Provide all required parameters for RepostedEvent
+      final repost = RepostedEvent.create(
+        event: event,
+        repostedBy: reposterProfile,
+        comment: comment,
+        repostType: RepostContentType.standard.name, // Default type for this bridge implementation
+      );
+      
+      // Save to Firestore using correct field names from RepostedEvent.toJson
+      await repostRef.set(repost.toJson());
+      
+      return repost;
+    } catch (e) {
+      debugPrint('Error in FeedRepository.repostEvent: $e');
+      return null;
+    }
+  }
+  
+  @override
+  Future<void> clearCache() async {
+    _eventCache.clear();
+    _rsvpStatusCache.clear();
+    _lastFeedFetchTime = null;
+  }
+
+  // Implement fetchFeedEvents using the correct EventFilters class
   @override
   Future<Map<String, dynamic>> fetchFeedEvents({
     bool forceRefresh = false,
@@ -31,48 +263,26 @@ class FeedRepositoryImpl implements FeedRepository {
     EventFilters? filters,
     bool userInitiated = false,
   }) async {
+    debugPrint('fetchFeedEvents called on bridge implementation');
     try {
-      // Track the start time for performance monitoring
-      final startTime = DateTime.now();
-
-      // First try to fetch directly from Firebase
-      try {
-        final events = await _fetchEventsFromFirebase(
-            page: page, pageSize: pageSize, filters: filters);
-
-        // Track performance
-        final duration = DateTime.now().difference(startTime).inMilliseconds;
-        AnalyticsService.logEvent('feed_firebase_fetch_success', parameters: {
-          'duration_ms': duration,
-          'event_count': events.length,
-          'filter_applied': filters?.hasActiveFilters ?? false,
-        });
-
-        // Return successful response
-        return {
-          'events': events,
-          'hasMore': events.length >= pageSize,
-          'fromCache': false,
-        };
-      } catch (firestoreError) {
-        debugPrint('Error fetching events from Firestore: $firestoreError');
-
-        // Fall back to feed service if Firebase direct query fails
-        final result = await FeedService.fetchFeedEvents(
-          forceRefresh: forceRefresh,
-          page: page,
-          pageSize: pageSize,
-          filters: filters,
-          userInitiated: userInitiated,
-        );
-
-        // Add error info to the result
-        result['firebaseError'] = firestoreError.toString();
-
-        return result;
+      // Get events from our getEvents method
+      final events = await getEvents(
+        forceRefresh: forceRefresh, 
+        limit: pageSize,
+      );
+      
+      // Apply filters if provided
+      List<Event> filteredEvents = events;
+      if (filters != null && filters.hasActiveFilters) {
+        filteredEvents = events.where((event) => filters.matches(event)).toList();
       }
+      
+      return {
+        'events': filteredEvents,
+        'hasMore': events.length >= pageSize,
+      };
     } catch (e) {
-      debugPrint('Error in FeedRepositoryImpl.fetchFeedEvents: $e');
+      debugPrint('Error in fetchFeedEvents: $e');
       return {
         'events': <Event>[],
         'hasMore': false,
@@ -81,190 +291,60 @@ class FeedRepositoryImpl implements FeedRepository {
     }
   }
 
-  /// Fetch events directly from Firebase
-  Future<List<Event>> _fetchEventsFromFirebase({
-    required int page,
-    required int pageSize,
-    EventFilters? filters,
-  }) async {
-    // Start with the events collection
-    Query query = _firestore.collection('events');
-
-    // Apply date filters if specified
-    final dateRangeFilter = filters?.dateRange; // Get potential dateRange
-    if (dateRangeFilter != null) {
-      // Now we know dateRangeFilter is definitely not null
-      query = query.where('startDate',
-          isGreaterThanOrEqualTo: dateRangeFilter.start.toIso8601String());
-    
-      query = query.where('startDate',
-          isLessThanOrEqualTo: dateRangeFilter.end.toIso8601String());
-    } else {
-      // Default to showing future events
-      query = query.where('startDate',
-          isGreaterThanOrEqualTo: DateTime.now().toIso8601String());
-    }
-
-    // Apply category filters
-    if (filters?.categories.isNotEmpty == true) {
-      // For multiple categories, we need to use 'in' operator
-      if (filters!.categories.length > 1) {
-        query = query.where('category', whereIn: filters.categories);
-      } else {
-        // For a single category, we can use '=='
-        query = query.where('category', isEqualTo: filters.categories.first);
-      }
-    }
-
-    // Apply source filters
-    if (filters?.sources.isNotEmpty == true &&
-        filters!.sources.length < EventSource.values.length) {
-      // Convert enum values to strings for Firestore query
-      final sourceStrings = filters.sources
-          .map((source) => source.toString().split('.').last)
-          .toList();
-
-      query = query.where('source', whereIn: sourceStrings);
-    }
-
-    // Apply search query if provided
-    if (filters?.searchQuery != null && filters!.searchQuery!.isNotEmpty) {
-      final searchLower = filters.searchQuery!.toLowerCase();
-
-      // Note: Full-text search would require a different approach
-      // This is a basic implementation that checks if the title contains the query
-      query = query
-          .where('titleLowercase', isGreaterThanOrEqualTo: searchLower)
-          .where('titleLowercase', isLessThan: '${searchLower}z');
-    }
-
-    // Order by start date
-    query = query.orderBy('startDate', descending: false);
-
-    // Apply pagination - Firebase doesn't have offset, but we can implement
-    // pagination using limit and startAfter
-    query = query.limit(pageSize);
-
-    // If we need a specific page (not the first one)
-    if (page > 1) {
-      // Get a document to start after
-      final lastDocQuery = query.limit((page - 1) * pageSize);
-      final snapshot = await lastDocQuery.get();
-
-      if (snapshot.docs.isNotEmpty) {
-        // Get the last document from previous page
-        final lastVisibleDoc = snapshot.docs.last;
-
-        // Start after this document for the next page
-        query = query.startAfter([lastVisibleDoc]);
-      }
-    }
-
-    // Execute query
-    final snapshot = await query.get();
-
-    // Map results to Event objects
-    return snapshot.docs.map((doc) {
-      final data = doc.data() as Map<String, dynamic>;
-      data['id'] = doc.id; // Ensure ID is included
-      return Event.fromJson(data);
-    }).toList();
-  }
-
   /// Fetch events directly from spaces
   @override
   Future<List<Event>> fetchEventsFromSpaces({int limit = 20}) async {
     try {
       // Get current user for joined spaces
       final user = _auth.currentUser;
-      List<String> joinedSpaceIds = [];
-      
-      // Get user's joined spaces if authenticated
-      if (user != null) {
-        try {
-          final userSnapshot = await _firestore.collection('users').doc(user.uid).get();
-          
-          if (userSnapshot.exists) {
-            final userData = userSnapshot.data() as Map<String, dynamic>;
-            joinedSpaceIds = List<String>.from(userData['joinedSpaces'] ?? []);
-          }
-        } catch (e) {
-          debugPrint('Error fetching user joined spaces: $e');
-        }
-      }
-
-      // OPTIMIZED APPROACH: Directly query events collection for upcoming events
-      final now = DateTime.now();
-      final isoNow = now.toIso8601String();
-      final List<Event> allEvents = [];
-      
-      // First try to get events from joined spaces (if any)
-      if (joinedSpaceIds.isNotEmpty) {
-        // We can only use "in" queries on non-array fields with up to 10 values
-        // so we may need to do multiple queries if user has joined >10 spaces
-        const batchSize = 10;
-        
-        for (var i = 0; i < joinedSpaceIds.length; i += batchSize) {
-          // Query events where organizerName matches the space name
-          // Note: We could add a spaceId field to events for better querying
-          try {
-            final snapshot = await _firestore
-                .collection('events')
-                .where('startDate', isGreaterThanOrEqualTo: isoNow)
-                .orderBy('startDate')
-                .limit(limit)
-                .get();
-                
-            final events = snapshot.docs
-                .map((doc) {
-                  final data = doc.data();
-                  data['id'] = doc.id;
-                  return Event.fromJson(data);
-                })
-                .toList();
-                
-            allEvents.addAll(events);
-          } catch (e) {
-            debugPrint('Error querying events for joined spaces batch: $e');
-          }
-        }
+      if (user == null) {
+        debugPrint('FeedRepositoryImpl: No authenticated user for fetching space events');
+        // Fall back to global events for non-authenticated users
+        return _fetchGlobalEvents(limit: limit);
       }
       
-      // If we don't have enough events from joined spaces, get recent events
-      if (allEvents.length < limit) {
-        try {
-          final snapshot = await _firestore
-              .collection('events')
-              .where('startDate', isGreaterThanOrEqualTo: isoNow)
-              .orderBy('startDate')
-              .limit(limit)
-              .get();
-              
-          final events = snapshot.docs
-              .map((doc) {
-                final data = doc.data();
-                data['id'] = doc.id;
-                return Event.fromJson(data);
-              })
-              .where((event) => !allEvents.any((e) => e.id == event.id)) // Avoid duplicates
-              .take(limit - allEvents.length)
-              .toList();
-              
-          allEvents.addAll(events);
-        } catch (e) {
-          debugPrint('Error querying global events: $e');
-        }
-      }
-      
-      // Sort events by start date
-      allEvents.sort((a, b) => a.startDate.compareTo(b.startDate));
-      
-      // Return only up to the requested limit
-      return allEvents.take(limit).toList();
+      // Use the Platform Integration Manager to get events from spaces the user follows
+      // This implements the "Feed ↔ Spaces Integration" described in the platform overview
+      return await _integrationManager.getEventsFromFollowedSpaces(
+        userId: user.uid,
+        limit: limit,
+        startDate: DateTime.now(),
+      );
     } catch (e) {
       debugPrint('Error in FeedRepositoryImpl.fetchEventsFromSpaces: $e');
       
       // Fall back to the existing method if the optimized approach fails
+      return _fetchGlobalEvents(limit: limit);
+    }
+  }
+  
+  /// Fallback method to fetch global events
+  Future<List<Event>> _fetchGlobalEvents({int limit = 20}) async {
+    try {
+      final now = DateTime.now();
+      final isoNow = now.toIso8601String();
+      
+      final snapshot = await _firestore
+          .collection('events')
+          .where('startDate', isGreaterThanOrEqualTo: isoNow)
+          .orderBy('startDate')
+          .limit(limit)
+          .get();
+          
+      final events = snapshot.docs
+          .map((doc) {
+            final data = doc.data();
+            data['id'] = doc.id;
+            return Event.fromJson(data);
+          })
+          .toList();
+      
+      // Sort events by start date
+      events.sort((a, b) => a.startDate.compareTo(b.startDate));
+      
+      return events;
+    } catch (e) {
+      debugPrint('Error in FeedRepositoryImpl._fetchGlobalEvents: $e');
       return SpaceEventManager.getAllEvents(
         limit: limit,
         startDate: DateTime.now(),
@@ -348,17 +428,11 @@ class FeedRepositoryImpl implements FeedRepository {
           .toList();
 
       // Transform spaces to recommended spaces
-      return spaces.map((space) {
-        // Calculate relevance score based on interest overlap - Removed as unused
-        // final interestOverlap =
-        //     space.tags.where((tag) => userInterests.contains(tag)).length;
-
-        return RecommendedSpace(
-          space: space,
-          customPitch: 'Based on your interests',
-          recommendationReason: 'Matches your interests',
-        );
-      }).toList();
+      return spaces.map((space) => RecommendedSpace(
+        space: space,
+        customPitch: 'Based on your interests',
+        recommendationReason: 'Matches your interests',
+      )).toList();
     } catch (e) {
       debugPrint('Error getting personalized recommendations: $e');
       return [];
@@ -423,6 +497,22 @@ class FeedRepositoryImpl implements FeedRepository {
       if (user != null && (userInterests == null || joinedSpaceIds == null)) {
         // Get user data from Firestore
         final userData = await _getUserPreferences(user.uid);
+        
+        // Also get space engagement scores to improve prioritization
+        final spaceEngagementScores = await _integrationManager.getSpaceEngagementScores(user.uid);
+        
+        // Convert space engagement scores to organizer scores for the prioritizer
+        final derivedOrganizerScores = <String, int>{};
+        for (final entry in spaceEngagementScores.entries) {
+          // Convert double score to int range (0-10)
+          derivedOrganizerScores[entry.key] = (entry.value * 2).round().clamp(0, 10);
+        }
+        
+        // Merge with any existing organizer scores, prioritizing explicit ones
+        organizerScores = {
+          ...derivedOrganizerScores,
+          ...(organizerScores ?? {}),
+        };
 
         // Use provided values or fall back to retrieved ones
         userInterests ??= userData['interests'] as List<String>?;
@@ -460,7 +550,8 @@ class FeedRepositoryImpl implements FeedRepository {
           await _firestore.collection('users').doc(userId).get();
 
       if (docSnapshot.exists) {
-        return docSnapshot.data() ?? {};
+        final data = docSnapshot.data();
+        return data ?? {};
       }
 
       return {};

@@ -1,23 +1,30 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:hive_ui/features/spaces/domain/entities/space_entity.dart';
-import 'package:hive_ui/features/spaces/domain/entities/space_metrics_entity.dart';
 import 'package:hive_ui/features/spaces/domain/repositories/user_spaces_repository.dart';
 import 'package:hive_ui/features/spaces/data/datasources/spaces_firestore_datasource.dart';
 import 'package:hive_ui/services/space_service.dart';
 import 'package:hive_ui/features/spaces/utils/model_converters.dart';
+import 'package:hive_ui/features/shared/infrastructure/platform_integration_manager.dart';
 
 /// Implementation of the UserSpacesRepository interface
 class UserSpacesRepositoryImpl implements UserSpacesRepository {
   final FirebaseFirestore _firestore;
   final SpacesFirestoreDataSource _spacesDataSource;
+  final FirebaseAuth _auth;
+  final PlatformIntegrationManager _integrationManager;
 
   /// Constructor
   UserSpacesRepositoryImpl({
     FirebaseFirestore? firestore,
     SpacesFirestoreDataSource? spacesDataSource,
+    FirebaseAuth? auth,
+    PlatformIntegrationManager? integrationManager,
   }) : _firestore = firestore ?? FirebaseFirestore.instance,
-       _spacesDataSource = spacesDataSource ?? SpacesFirestoreDataSource();
+       _spacesDataSource = spacesDataSource ?? SpacesFirestoreDataSource(),
+       _auth = auth ?? FirebaseAuth.instance,
+       _integrationManager = integrationManager ?? PlatformIntegrationManager();
 
   @override
   Future<List<SpaceEntity>> getUserSpaces(String userId) async {
@@ -156,37 +163,16 @@ class UserSpacesRepositoryImpl implements UserSpacesRepository {
   @override
   Future<void> joinSpace(String userId, String spaceId) async {
     try {
-      // Get current timestamp
-      final now = FieldValue.serverTimestamp();
-
-      // Update the user document to add the space ID to followedSpaces
-      await _firestore
-          .collection('users')
-          .doc(userId)
-          .update({
-        'followedSpaces': FieldValue.arrayUnion([spaceId]),
-        'updatedAt': now,
-      });
-
-      // For backward compatibility, maintain user/{userId}/spaces/{spaceId}
-      await _firestore
-          .collection('users')
-          .doc(userId)
-          .collection('spaces')
-          .doc(spaceId)
-          .set({
-        'joinedAt': now,
-        'updatedAt': now,
-        'isActive': true,
-      }, SetOptions(merge: true));
-
-      // Also update the space to add the user and increment member count
-      await SpaceService.updateJoinStatus(
-        spaceId: spaceId, 
-        isJoined: true, 
-        userId: userId,
+      // Use platform integration manager for joining space
+      // This ensures the operation is consistent across the app
+      final success = await _integrationManager.joinSpace(
+        spaceId: spaceId,
+        userId: userId, // Pass the userId to the integration manager
       );
       
+      if (!success) {
+        throw Exception('Failed to join space through platform integration');
+      }
     } catch (e) {
       debugPrint('Error joining space: $e');
       throw Exception('Failed to join space: $e');

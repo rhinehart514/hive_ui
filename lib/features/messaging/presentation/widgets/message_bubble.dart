@@ -1,11 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:timeago/timeago.dart' as timeago;
 import 'package:hive_ui/features/messaging/domain/entities/message.dart';
+import 'package:hive_ui/features/messaging/application/providers/messaging_providers.dart';
 import 'package:hive_ui/features/messaging/presentation/widgets/message_delivery_indicator.dart';
+import 'package:hive_ui/features/messaging/presentation/widgets/message_reactions.dart';
+import 'package:hive_ui/features/messaging/presentation/widgets/user_avatar.dart';
 import 'package:hive_ui/theme/app_colors.dart';
-import 'package:intl/intl.dart';
 
-class MessageBubble extends StatefulWidget {
+/// Displays a message bubble in the chat
+class MessageBubble extends ConsumerStatefulWidget {
   final Message message;
   final bool isCurrentUser;
   final VoidCallback? onTap;
@@ -23,7 +28,7 @@ class MessageBubble extends StatefulWidget {
   final bool showSender;
 
   const MessageBubble({
-    super.key,
+    Key? key,
     required this.message,
     required this.isCurrentUser,
     this.onTap,
@@ -39,15 +44,16 @@ class MessageBubble extends StatefulWidget {
     this.senderName,
     this.replyMessage,
     this.showSender = false,
-  });
+  }) : super(key: key);
 
   @override
-  State<MessageBubble> createState() => _MessageBubbleState();
+  ConsumerState<MessageBubble> createState() => _MessageBubbleState();
 }
 
-class _MessageBubbleState extends State<MessageBubble> {
+class _MessageBubbleState extends ConsumerState<MessageBubble> {
   double _swipeOffset = 0;
   bool _showQuickReactions = false;
+  bool _showActions = false;
 
   BorderRadius _getBubbleBorderRadius() {
     const double radius = 20.0;
@@ -96,23 +102,39 @@ class _MessageBubbleState extends State<MessageBubble> {
 
   @override
   Widget build(BuildContext context) {
-    final hasAttachment = widget.message.attachmentUrl != null;
-    final isVoiceMessage = widget.message.attachmentType == 'audio';
-    final hasReactions = widget.message.reactions != null &&
-        widget.message.reactions!.isNotEmpty;
+    final message = widget.message;
+    final isCurrentUser = widget.isCurrentUser;
+    final hasAttachment = message.attachmentUrl != null;
+    final isVoiceMessage = message.attachmentType == 'audio';
+    final hasReactions = message.reactions != null && message.reactions!.isNotEmpty;
 
+    // Determine bubble alignment and colors
+    final alignment = isCurrentUser 
+      ? CrossAxisAlignment.end 
+      : CrossAxisAlignment.start;
+    
+    final bubbleColor = isCurrentUser 
+      ? AppColors.gold.withOpacity(0.2) 
+      : Colors.grey.shade800;
+    
+    final textColor = isCurrentUser 
+      ? Colors.white 
+      : Colors.white;
+      
+    final borderColor = isCurrentUser 
+      ? AppColors.gold 
+      : Colors.grey.shade700;
+    
     return Padding(
       padding: EdgeInsets.only(
-        left: widget.isCurrentUser ? 60.0 : 12.0,
-        right: widget.isCurrentUser ? 12.0 : 60.0,
+        left: isCurrentUser ? 60.0 : 12.0,
+        right: isCurrentUser ? 12.0 : 60.0,
         bottom: 8.0,
       ),
       child: Column(
-        crossAxisAlignment: widget.isCurrentUser
-            ? CrossAxisAlignment.end
-            : CrossAxisAlignment.start,
+        crossAxisAlignment: alignment,
         children: [
-          if (!widget.isCurrentUser &&
+          if (!isCurrentUser &&
               widget.isGroupChat &&
               widget.showSenderInfo)
             Padding(
@@ -133,8 +155,8 @@ class _MessageBubbleState extends State<MessageBubble> {
                 Positioned(
                   top: 0,
                   bottom: 0,
-                  left: widget.isCurrentUser ? null : 0,
-                  right: widget.isCurrentUser ? 0 : null,
+                  left: isCurrentUser ? null : 0,
+                  right: isCurrentUser ? 0 : null,
                   child: Center(
                     child: Container(
                       padding: const EdgeInsets.symmetric(
@@ -167,7 +189,12 @@ class _MessageBubbleState extends State<MessageBubble> {
                 onTap: widget.onTap,
                 onLongPress: () {
                   HapticFeedback.mediumImpact();
-                  widget.onLongPress?.call();
+                  if (widget.onLongPress != null) {
+                    widget.onLongPress!();
+                  }
+                  setState(() {
+                    _showActions = !_showActions;
+                  });
                 },
                 child: Transform.translate(
                   offset: Offset(_swipeOffset, 0),
@@ -183,18 +210,16 @@ class _MessageBubbleState extends State<MessageBubble> {
                           Container(
                             padding: EdgeInsets.symmetric(
                               horizontal:
-                                  widget.message.type == MessageType.text
+                                  message.type == MessageType.text
                                       ? 16.0
                                       : 12.0,
-                              vertical: widget.message.type == MessageType.text
+                              vertical: message.type == MessageType.text
                                   ? 12.0
                                   : 8.0,
                             ),
                             decoration: BoxDecoration(
                               borderRadius: _getBubbleBorderRadius(),
-                              color: widget.isCurrentUser
-                                  ? AppColors.gold.withOpacity(0.15)
-                                  : Colors.grey[800]!.withOpacity(0.5),
+                              color: bubbleColor,
                               boxShadow: [
                                 BoxShadow(
                                   color: Colors.black.withOpacity(0.2),
@@ -202,14 +227,18 @@ class _MessageBubbleState extends State<MessageBubble> {
                                   offset: const Offset(0, 2),
                                 ),
                               ],
+                              border: Border.all(
+                                color: borderColor,
+                                width: 1,
+                              ),
                             ),
                             child: _buildMessageContent(),
                           ),
                           if (hasReactions)
                             Positioned(
                               bottom: -10,
-                              right: widget.isCurrentUser ? null : -10,
-                              left: widget.isCurrentUser ? -10 : null,
+                              right: isCurrentUser ? null : -10,
+                              left: isCurrentUser ? -10 : null,
                               child: _buildReactions(),
                             ),
                         ],
@@ -222,7 +251,7 @@ class _MessageBubbleState extends State<MessageBubble> {
           ),
           Row(
             mainAxisSize: MainAxisSize.min,
-            mainAxisAlignment: widget.isCurrentUser 
+            mainAxisAlignment: isCurrentUser 
                 ? MainAxisAlignment.end 
                 : MainAxisAlignment.start,
             children: [
@@ -241,18 +270,20 @@ class _MessageBubbleState extends State<MessageBubble> {
                     ),
                   ),
                 ),
-              if (widget.isCurrentUser && widget.message.id.isNotEmpty) 
+              if (isCurrentUser && message.id.isNotEmpty) 
                 Padding(
                   padding: const EdgeInsets.only(top: 4, left: 8),
                   child: MessageDeliveryIndicator(
-                    messageId: widget.message.id,
-                    recipientId: widget.message.chatId,
+                    messageId: message.id,
+                    recipientId: message.chatId,
                     size: 12,
                     showLabel: false,
                   ),
                 ),
             ],
           ),
+          if (_showActions)
+            _buildMessageActions(),
         ],
       ),
     );
@@ -398,6 +429,169 @@ class _MessageBubbleState extends State<MessageBubble> {
             ),
           );
         }).toList(),
+      ),
+    );
+  }
+
+  Widget _buildMessageActions() {
+    return Container(
+      margin: const EdgeInsets.only(top: 4),
+      padding: const EdgeInsets.symmetric(
+        horizontal: 8,
+        vertical: 4,
+      ),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade900,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: Colors.grey.shade800,
+          width: 1,
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _buildActionButton(
+            icon: Icons.emoji_emotions_outlined,
+            label: 'React',
+            onTap: _showReactionsBottomSheet,
+          ),
+          _buildActionButton(
+            icon: Icons.reply,
+            label: 'Reply',
+            onTap: () {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Reply feature coming soon'),
+                ),
+              );
+            },
+          ),
+          if (widget.isCurrentUser)
+            _buildActionButton(
+              icon: Icons.delete_outline,
+              label: 'Delete',
+              onTap: () {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Delete feature coming soon'),
+                  ),
+                );
+                setState(() {
+                  _showActions = false;
+                });
+              },
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildActionButton({
+    required IconData icon,
+    required String label,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(
+          horizontal: 12,
+          vertical: 6,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              icon,
+              size: 16,
+              color: Colors.white70,
+            ),
+            const SizedBox(height: 4),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 10,
+                color: Colors.white70,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showReactionsBottomSheet() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.grey.shade900,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(
+          top: Radius.circular(16),
+        ),
+      ),
+      builder: (context) {
+        return Container(
+          height: 300,
+          padding: EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Add Reaction',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
+              ),
+              SizedBox(height: 16),
+              Wrap(
+                spacing: 12,
+                runSpacing: 12,
+                children: [
+                  _buildQuickReaction('👍'),
+                  _buildQuickReaction('❤️'),
+                  _buildQuickReaction('😂'),
+                  _buildQuickReaction('😮'),
+                  _buildQuickReaction('😢'),
+                  _buildQuickReaction('🙏'),
+                  _buildQuickReaction('🔥'),
+                  _buildQuickReaction('👏'),
+                ],
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildQuickReaction(String emoji) {
+    return InkWell(
+      onTap: () {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Reaction system coming soon'),
+          ),
+        );
+      },
+      borderRadius: BorderRadius.circular(30),
+      child: Container(
+        width: 50,
+        height: 50,
+        decoration: BoxDecoration(
+          color: Colors.grey.shade800,
+          shape: BoxShape.circle,
+        ),
+        child: Center(
+          child: Text(
+            emoji,
+            style: TextStyle(fontSize: 24),
+          ),
+        ),
       ),
     );
   }

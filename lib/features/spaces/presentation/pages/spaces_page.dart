@@ -1,15 +1,16 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+import 'package:flutter/services.dart'; // Add this import for HapticFeedback
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:auto_route/auto_route.dart';
 import 'package:hive_ui/features/spaces/presentation/providers/space_providers.dart';
 import 'package:hive_ui/features/spaces/presentation/providers/spaces_controller.dart';
 import 'package:hive_ui/features/spaces/presentation/providers/user_spaces_providers.dart' as user_providers;
+import 'package:hive_ui/features/spaces/presentation/providers/spaces_async_providers.dart';
+import 'package:hive_ui/features/spaces/domain/entities/space_entity.dart' as entities;
 import 'package:hive_ui/models/space.dart';
 import 'package:hive_ui/models/space_type.dart';
-import 'package:hive_ui/models/event.dart';
-import 'package:hive_ui/models/event_creation_request.dart';
+import 'package:hive_ui/models/space_metrics.dart';
 import 'package:hive_ui/theme/app_colors.dart';
 import 'package:hive_ui/theme/huge_icons.dart';
 import 'package:hive_ui/services/analytics_service.dart';
@@ -28,6 +29,62 @@ import 'package:hive_ui/features/spaces/presentation/providers/space_search_prov
 import 'package:hive_ui/extensions/glassmorphism_extension.dart';
 import 'package:hive_ui/theme/glassmorphism_guide.dart';
 import 'package:hive_ui/features/events/presentation/pages/create_event_page.dart';
+import 'package:hive_ui/features/profile/presentation/providers/profile_providers.dart'; // Import for profileProvider
+import 'package:hive_ui/features/spaces/data/datasources/spaces_firestore_datasource.dart';
+import 'package:hive_ui/features/spaces/presentation/providers/space_navigation_provider.dart';
+import 'package:hive_ui/core/navigation/navigation_service.dart';
+
+// Extension to convert SpaceEntity to Space
+extension SpaceEntityExt on entities.SpaceEntity {
+  Space toSpace() {
+    // Convert domain SpaceType to model SpaceType
+    SpaceType convertSpaceType() {
+      switch (spaceType) {
+        case entities.SpaceType.studentOrg:
+          return SpaceType.studentOrg;
+        case entities.SpaceType.universityOrg:
+          return SpaceType.universityOrg;
+        case entities.SpaceType.campusLiving:
+          return SpaceType.campusLiving;
+        case entities.SpaceType.fraternityAndSorority:
+          return SpaceType.fraternityAndSorority;
+        case entities.SpaceType.hiveExclusive:
+          return SpaceType.hiveExclusive;
+        case entities.SpaceType.other:
+        default:
+          return SpaceType.other;
+      }
+    }
+
+    return Space(
+      id: id,
+      name: name,
+      description: description,
+      icon: IconData(iconCodePoint, fontFamily: 'MaterialIcons'),
+      imageUrl: imageUrl,
+      bannerUrl: bannerUrl,
+      metrics: SpaceMetrics.fromJson({
+        'memberCount': metrics.memberCount,
+        'engagementScore': metrics.engagementScore,
+        'isTrending': metrics.isTrending,
+        'spaceId': id,
+      }),
+      tags: tags,
+      isJoined: isJoined,
+      isPrivate: isPrivate,
+      moderators: moderators,
+      admins: admins,
+      quickActions: quickActions,
+      relatedSpaceIds: relatedSpaceIds,
+      createdAt: createdAt,
+      updatedAt: updatedAt,
+      spaceType: convertSpaceType(),
+      eventIds: eventIds,
+      hiveExclusive: hiveExclusive,
+      customData: customData,
+    );
+  }
+}
 
 // Custom FloatingActionButtonLocation that positions the FAB higher than the standard location
 class _CustomFloatingActionButtonLocation extends FloatingActionButtonLocation {
@@ -71,7 +128,7 @@ class _SpacesPageState extends ConsumerState<SpacesPage>
   TabController? _tabController;
 
   String _activeCategory = 'All';
-  bool _isRefreshing = false;
+  final bool _isRefreshing = false;
   bool _isLoadingMore = false;
   int _currentPage = 1;
   final int _spacesPerPage = 20;
@@ -144,7 +201,8 @@ class _SpacesPageState extends ConsumerState<SpacesPage>
                           GestureDetector(
                             onTap: () {
                               HapticFeedback.mediumImpact();
-                              GoRouter.of(context).go(AppRoutes.messaging);
+                              // Use NavigationService for consistent navigation
+                              NavigationService.goToMessaging(context);
                             },
                             child: Container(
                               width: 44,
@@ -154,7 +212,7 @@ class _SpacesPageState extends ConsumerState<SpacesPage>
                                 color: Colors.transparent,
                                 borderRadius: BorderRadius.circular(22),
                               ),
-                              child: Icon(
+                              child: const Icon(
                                 HugeIcons.message,
                                 color: Colors.white,
                                 size: 28,
@@ -462,335 +520,67 @@ class _SpacesPageState extends ConsumerState<SpacesPage>
     }
   }
 
-  // Handle space joining
+  // Handle space joining - REFACORTED to use Controller
   Future<void> _handleJoinSpace(Space space) async {
     if (_isJoiningSpace) return; // Prevent multiple simultaneous joins
 
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('You need to sign in to join spaces'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+      return;
+    }
+
+    setState(() {
+      _isJoiningSpace = true;
+    });
+
     try {
-      setState(() {
-        _isJoiningSpace = true;
-      });
+      // Delegate joining logic to the controller
+      await ref.read(spacesControllerProvider.notifier).joinSpace(space);
 
-      // Get current user
-      final user = FirebaseAuth.instance.currentUser;
-      if (user == null) {
-        // Show sign-in message
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('You need to sign in to join spaces'),
-              duration: Duration(seconds: 2),
-            ),
-          );
-        }
-        return;
-      }
-
-      // DIRECT APPROACH: Update Firebase directly
-      debugPrint('DIRECT JOIN: Attempting to add space ${space.id} to user ${user.uid}');
-      
-      // 1. Update user document in Firestore
-      try {
-        await FirebaseFirestore.instance.collection('users').doc(user.uid).update({
-          'followedSpaces': FieldValue.arrayUnion([space.id]),
-          // Remove joinedClubs since that's obsolete and we only look at followedSpaces 
-          'updatedAt': FieldValue.serverTimestamp(),
-        });
-        debugPrint('✅ Successfully updated user document with space ${space.id}');
-      } catch (e) {
-        debugPrint('❌ Failed to update user document: $e');
-        throw e; // Re-throw to be caught by the outer try-catch
-      }
-      
-      // 2. Update space document to increment member count
-      try {
-        // The Space object already has its type info through spaceType enum
-        String? spacePath;
-        String? spaceType;
-        
-        // Map SpaceType enum to the collection path name (same mapping as in _handleTapSpace)
-        switch (space.spaceType) {
-          case SpaceType.fraternityAndSorority:
-            spaceType = 'fraternity_and_sorority';
-            break;
-          case SpaceType.universityOrg:
-            spaceType = 'university_organizations';
-            break;
-          case SpaceType.campusLiving:
-            spaceType = 'campus_living';
-            break;
-          case SpaceType.studentOrg:
-            spaceType = 'student_organizations';
-            break;
-          case SpaceType.other:
-            spaceType = 'other';
-            // Try to determine from the Space's customData
-            if (space.customData.containsKey('collectionType')) {
-              spaceType = space.customData['collectionType'] as String;
-            }
-            break;
-        }
-        
-        debugPrint('Space type from enum: ${space.spaceType}, mapped to: $spaceType');
-        
-        bool updated = false;
-        
-        // If we have the type, try updating with it
-        if (spaceType != null) {
-          try {
-            await FirebaseFirestore.instance
-                .collection('spaces')
-                .doc(spaceType)
-                .collection('spaces')  // Changed from 'space' to 'spaces' (plural)
-                .doc(space.id)
-                .update({
-                  'memberCount': FieldValue.increment(1),
-                  'updatedAt': FieldValue.serverTimestamp(),
-                });
-            updated = true;
-            debugPrint('Updated space at path: spaces/$spaceType/spaces/${space.id}');
-          } catch (e) {
-            debugPrint('Failed to update space using type $spaceType: $e');
-          }
-        }
-        
-        // If we couldn't update using direct info, try each space type
-        if (!updated) {
-          final spaceTypes = [
-            'campus_living',
-            'fraternity_and_sorority',
-            'student_organizations',
-            'university_organizations',
-            'other',
-          ];
-          
-          for (final type in spaceTypes) {
-            try {
-              await FirebaseFirestore.instance
-                  .collection('spaces')
-                  .doc(type)
-                  .collection('spaces')  // Changed from 'space' to 'spaces' (plural)
-                  .doc(space.id)
-                  .update({
-                    'memberCount': FieldValue.increment(1),
-                    'updatedAt': FieldValue.serverTimestamp(),
-                  });
-              updated = true;
-              debugPrint('Updated space at path: spaces/$type/spaces/${space.id}');
-              // Save this for the member addition
-              spaceType = type;
-              break;
-            } catch (e) {
-              // Continue to next type
-            }
-          }
-        }
-        
-        // Use collection group as last resort
-        if (!updated) {
-          debugPrint('Trying collection group query as last resort');
-          final spaceQuery = await FirebaseFirestore.instance
-              .collectionGroup('spaces')  // Changed from 'space' to 'spaces' (plural)
-              .where('id', isEqualTo: space.id)
-              .limit(1)
-              .get();
-              
-          if (spaceQuery.docs.isNotEmpty) {
-            await spaceQuery.docs.first.reference.update({
-              'memberCount': FieldValue.increment(1),
-              'updatedAt': FieldValue.serverTimestamp(),
-            });
-            updated = true;
-            spacePath = spaceQuery.docs.first.reference.path;
-            debugPrint('Updated space using collection group: $spacePath');
-          }
-        }
-        
-        if (!updated) {
-          debugPrint('Failed to update space ${space.id} after all attempts');
-        }
-      
-        // 3. Add user to space members collection
-        bool memberAdded = false;
-        
-        // Use the path or type we found earlier
-        if (spacePath != null) {
-          try {
-            final docRef = FirebaseFirestore.instance.doc(spacePath);
-            await docRef.collection('members').doc(user.uid).set({
-              'userId': user.uid,
-              'joinedAt': FieldValue.serverTimestamp(),
-              'status': 'active',
-            });
-            memberAdded = true;
-            debugPrint('Added user to members at path: $spacePath/members');
-          } catch (e) {
-            debugPrint('Failed to add member using direct path: $e');
-          }
-        } else if (spaceType != null) {
-          try {
-            await FirebaseFirestore.instance
-                .collection('spaces')
-                .doc(spaceType)
-                .collection('spaces')
-                .doc(space.id)
-                .collection('members')
-                .doc(user.uid)
-                .set({
-                  'userId': user.uid,
-                  'joinedAt': FieldValue.serverTimestamp(),
-                  'status': 'active',
-                });
-            memberAdded = true;
-            debugPrint('Added user to members at path: spaces/$spaceType/spaces/${space.id}/members');
-          } catch (e) {
-            debugPrint('Failed to add member using space type: $e');
-          }
-        }
-        
-        if (!memberAdded) {
-          debugPrint('⚠️ Warning: Failed to add user to space members collection after all attempts');
-        }
-
-        // 4. Update the local user provider state to show this space as joined immediately
-        final userData = ref.read(userProvider);
-        if (userData != null) {
-          // Use the joinClub method to update joinedClubs array
-          ref.read(userProvider.notifier).state = userData.joinClub(space.id);
-          debugPrint('✅ Updated local user provider with space ${space.id}');
-          debugPrint('User now has ${userData.joinClub(space.id).joinedClubs.length} joined clubs: ${userData.joinClub(space.id).joinedClubs}');
-        }
-
-        // 5. Force refresh of spaces providers to update UI
-        ref.invalidate(userSpacesProvider);
-        ref.invalidate(hierarchicalSpacesProvider);
-        if (_tabController?.index == 1) {
-          // If already on My Spaces tab, save this timestamp
-          _lastMySpacesRefreshTime = DateTime.now().millisecondsSinceEpoch;
-        }
-
-        // Success! Show a confirmation
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('You\'ve joined ${space.name}'),
-              duration: const Duration(seconds: 2),
-            ),
-          );
-        }
-        
-        // Check the userProvider state after a short delay 
-        Future.delayed(const Duration(milliseconds: 500), () {
-          final updatedUserData = ref.read(userProvider);
-          debugPrint('After join operation: User has ${updatedUserData?.joinedClubs.length ?? 0} joined clubs: ${updatedUserData?.joinedClubs}');
-          
-          // Also check if the space appears in userSpacesProvider
-          final spacesAsync = ref.read(userSpacesProvider);
-          spacesAsync.whenData((spaces) {
-            debugPrint('After join: UserSpacesProvider has ${spaces.length} spaces: ${spaces.map((s) => s.id).toList()}');
-            final isSpaceFound = spaces.any((s) => s.id == space.id);
-            debugPrint('Is joined space (${space.id}) found in userSpacesProvider? $isSpaceFound');
-            
-            // If not found, trigger the sync provider
-            if (!isSpaceFound) {
-              debugPrint('Space not found in userSpacesProvider. Triggering sync...');
-              final syncUserSpaces = ref.read(user_providers.syncUserSpacesProvider);
-              syncUserSpaces().then((_) {
-                debugPrint('Sync completed. Checking again...');
-                // Invalidate providers to force refresh
-                ref.invalidate(userSpacesProvider);
-                
-                // Check again after sync
-                Future.delayed(const Duration(milliseconds: 500), () {
-                  final reloadedSpaces = ref.read(userSpacesProvider);
-                  reloadedSpaces.whenData((spaces) {
-                    final isSpaceFoundAfterSync = spaces.any((s) => s.id == space.id);
-                    debugPrint('After sync: Is space (${space.id}) found in userSpacesProvider? $isSpaceFoundAfterSync');
-                    if (!isSpaceFoundAfterSync) {
-                      debugPrint('⚠️ WARNING: Space still not found after sync. Manual Firestore update might be needed.');
-                    }
-                  });
-                });
-              });
-            }
-          });
-        });
-      } catch (e) {
-        debugPrint('Error updating space: $e');
-        // Try collection group as final fallback
-        try {
-          final spaceQuery = await FirebaseFirestore.instance
-              .collectionGroup('space')
-              .where('id', isEqualTo: space.id)
-              .limit(1)
-              .get();
-              
-          if (spaceQuery.docs.isNotEmpty) {
-            await spaceQuery.docs.first.reference.update({
-              'memberCount': FieldValue.increment(1),
-              'updatedAt': FieldValue.serverTimestamp(),
-            });
-            debugPrint('Updated space using collection group query: ${spaceQuery.docs.first.reference.path}');
-          }
-        } catch (fallbackError) {
-          debugPrint('Collection group query also failed: $fallbackError');
-        }
-      }
-      
-      debugPrint('DIRECT JOIN: Successfully updated Firestore');
-      
-      // Update the local user data for immediate reflection
+      // OPTIONAL: Optimistic UI update (already happens in previous code, keep it)
       final userData = ref.read(userProvider);
       if (userData != null) {
-        debugPrint('DIRECT JOIN: Updating local user data');
-        // Use the existing joinClub method which works with joinedClubs
-        ref.read(userProvider.notifier).state = userData.joinClub(space.id);
+          ref.read(userProvider.notifier).state = userData.joinClub(space.id);
+          debugPrint('UI: Updated local user provider state for join');
       }
-      
-      // Force providers to refresh
-      ref.invalidate(userSpacesProvider);
-      ref.invalidate(userProvider);
-      
-      // Wait a moment for state to update
-      await Future.delayed(const Duration(milliseconds: 500));
 
-      // Show success message
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Successfully joined ${space.name}'),
+            content: Text('You\'ve joined ${space.name}'),
             duration: const Duration(seconds: 2),
           ),
         );
       }
+       // Let the controller handle provider invalidation/refresh if possible.
+       // If not, uncomment the line below:
+       // ref.invalidate(userSpacesProvider); 
 
-      // Switch to My Spaces tab to show the newly joined space
-      if (_tabController != null && mounted) {
-        _tabController!.animateTo(1); // My Spaces tab
-        
-        // Force an additional refresh after tab switch
-        Future.delayed(const Duration(milliseconds: 200), () {
-          if (mounted) {
-            ref.invalidate(userSpacesProvider);
-            debugPrint('DIRECT JOIN: Forced refresh after tab switch');
-          }
-        });
-      }
     } catch (e) {
-      debugPrint('Error joining space: $e');
-      // Show error message
+      debugPrint('Error joining space via controller: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Failed to join space: ${e.toString().split('\n').first}'),
+            content: Text('Failed to join ${space.name}: ${e.toString()}'),
+            backgroundColor: Colors.red,
             duration: const Duration(seconds: 3),
           ),
         );
       }
     } finally {
-      setState(() {
-        _isJoiningSpace = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isJoiningSpace = false;
+        });
+      }
     }
   }
 
@@ -901,76 +691,30 @@ class _SpacesPageState extends ConsumerState<SpacesPage>
 
   // Handle space tapping
   void _handleTapSpace(Space space) {
-    HapticFeedback.mediumImpact();
-    try {
-      // Format the club ID correctly to match the fallback format and ensure proper permissions
-      // The path should match what's allowed in the security rules
-      // ignore: unnecessary_null_comparison
-      String spaceType;
-      // Use the correct collection path format based on space type
-      switch (space.spaceType) {
-        case SpaceType.fraternityAndSorority:
-          spaceType = 'fraternity_and_sorority';
-          break;
-        case SpaceType.universityOrg:
-          spaceType = 'university_organizations';
-          break;
-        case SpaceType.campusLiving:
-          spaceType = 'campus_living';
-          break;
-        case SpaceType.studentOrg:
-          spaceType = 'student_organizations';
-          break;
-        case SpaceType.other:
-          spaceType = 'other';
-          break;
-      }
+    final navigator = ref.read(spaceNavigationProvider);
+    navigator.navigateToSpace(
+      context,
+      spaceId: space.id,
+      spaceType: _getSpaceTypeString(space.spaceType),
+      space: space,
+    );
+  }
 
-      final String clubId = space.id.contains('space_')
-          ? space.id
-          : 'space_${space.name.toLowerCase().replaceAll(' ', '_')}';
-
-      debugPrint(
-          'Navigating to club space with ID: $clubId (type: $spaceType)');
-
-      // Navigate to club space using GoRouter with the formatted ID
-      GoRouter.of(context).push('/spaces/club?id=$clubId&type=$spaceType');
-
-      // Log analytics
-      AnalyticsService.logEvent(
-        'view_space',
-        parameters: {
-          'space_id': space.id,
-          'space_name': space.name,
-          'space_type': space.spaceType.toString(),
-        },
-      );
-    } catch (e) {
-      debugPrint('Error navigating to space: $e');
-      // Show error snackbar
-      if (mounted) {
-        String errorMessage = 'Error opening space';
-
-        // Check if this is a permission error and provide a more helpful message
-        if (e.toString().contains('permission-denied') ||
-            e.toString().contains('PERMISSION_DENIED')) {
-          errorMessage =
-              'Permission denied. Please try again later or contact support.';
-        }
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(errorMessage),
-            backgroundColor: Colors.red[700],
-            duration: const Duration(seconds: 3),
-            action: SnackBarAction(
-              label: 'OK',
-              textColor: Colors.white,
-              onPressed: () {},
-            ),
-          ),
-        );
-      }
+  String _getSpaceTypeString(SpaceType type) {
+    switch (type) {
+      case SpaceType.studentOrg:
+        return 'student_organizations';
+      case SpaceType.universityOrg:
+        return 'university_organizations';
+      case SpaceType.campusLiving:
+        return 'campus_living';
+      case SpaceType.fraternityAndSorority:
+        return 'fraternity_and_sorority';
+      case SpaceType.hiveExclusive:
+        return 'hive_exclusive';
+      case SpaceType.other:
+      default:
+        return 'other';
     }
   }
 
@@ -985,7 +729,7 @@ class _SpacesPageState extends ConsumerState<SpacesPage>
   @override
   Widget build(BuildContext context) {
     // Watch necessary providers
-    final spacesAsyncValue = ref.watch(spacesProvider);
+    final spacesAsyncValue = ref.watch(spacesAsyncProvider);
     final userSpacesAsyncValue = ref.watch(user_providers.userSpacesProvider);
     
     // Read the search state instead of setting it directly in build
@@ -1019,7 +763,7 @@ class _SpacesPageState extends ConsumerState<SpacesPage>
           
           // Overlay the search results when search is active
           if (_isSearchExpanded)
-            Positioned(
+            const Positioned(
               top: 0,
               left: 0,
               right: 0,
@@ -1030,12 +774,11 @@ class _SpacesPageState extends ConsumerState<SpacesPage>
       ),
       // Always create the FAB, but make it invisible if not in My Spaces tab
       floatingActionButton: FloatingActionButton(
+        heroTag: 'spaces_page_fab',
         backgroundColor: AppColors.gold,
         foregroundColor: Colors.black,
-        onPressed: () {
-          HapticFeedback.mediumImpact();
-          _showCreateOptionsDialog(context);
-        },
+        onPressed: () => _showCreateSpaceDialog(context),
+        elevation: 4,
         child: const Icon(Icons.add),
       ),
       floatingActionButtonLocation: _CustomFloatingActionButtonLocation.endFloat,
@@ -1156,12 +899,15 @@ class _SpacesPageState extends ConsumerState<SpacesPage>
     if (joinedSpaceIds.isNotEmpty && userSpaces is AsyncError) {
       debugPrint('UserSpacesProvider error, falling back to direct space lookup for ${joinedSpaceIds.length} spaces');
       // We'll try to load spaces directly from spacesProvider
-      final allSpacesAsync = ref.watch(spacesProvider);
+      final allSpacesAsync = ref.watch(spacesAsyncProvider);
       
       return allSpacesAsync.when(
         data: (allSpaces) {
           // Filter to only show user's joined spaces
-          final mySpaces = allSpaces.where((space) => joinedSpaceIds.contains(space.id)).toList();
+          final mySpaces = allSpaces.values
+              .where((space) => joinedSpaceIds.contains(space.id))
+              .map((entity) => entity.toSpace())
+              .toList();
           debugPrint('Fallback method found ${mySpaces.length} spaces from user joinedClubs');
           
           if (mySpaces.isEmpty) {
@@ -1308,13 +1054,14 @@ class _SpacesPageState extends ConsumerState<SpacesPage>
     // Fetch all spaces to find those where user is an admin but hasn't joined
     if (currentUserId != null) {
       // Using a direct reference to read all spaces instead of Consumer
-      final allSpacesAsync = ref.watch(spacesProvider);
+      final allSpacesAsync = ref.watch(spacesAsyncProvider);
       
       return allSpacesAsync.when(
         data: (allSpaces) {
           // Find spaces where the user is an admin (leader)
-          final adminSpaces = allSpaces
+          final adminSpaces = allSpaces.values
               .where((space) => space.admins.contains(currentUserId) && !spaces.any((s) => s.id == space.id))
+              .map((entity) => entity.toSpace())
               .toList();
           
           // Combine user's joined spaces with spaces they lead
@@ -2457,9 +2204,9 @@ class _SpacesPageState extends ConsumerState<SpacesPage>
                 debugPrint('📂 Collection: $key, Spaces count: ${value.length}');
                 
                 // Check each space's hiveExclusive property
-                value.forEach((space) {
+                for (var space in value) {
                   debugPrint('🔍 Space: ${space.name}, hiveExclusive: ${space.hiveExclusive}');
-                });
+                }
                 
                 // Only add spaces that have the hiveExclusive flag set to true
                 final filteredSpaces = value.where((space) => space.hiveExclusive == true).toList();
@@ -2944,13 +2691,13 @@ class _SpacesPageState extends ConsumerState<SpacesPage>
                               color: isActive ? AppColors.gold : Colors.white70,
                             )
                           else if (category == 'Academics')
-                            Icon(
+                            const Icon(
                               HugeIcons.strokeRoundedBook02,
                               color: Colors.white30,
                               size: 20,
                             )
                           else if (category == 'Circles')
-                            Icon(
+                            const Icon(
                               HugeIcons.strokeRoundedUserGroup03,
                               color: Colors.white30,
                               size: 20,
@@ -3173,7 +2920,7 @@ class _SpacesPageState extends ConsumerState<SpacesPage>
                                     ),
                                     child: Row(
                                       children: [
-                                        Icon(
+                                        const Icon(
                                           HugeIcons.strokeRoundedUserGroup03, 
                                           color: AppColors.gold,
                                           size: 24,
@@ -3202,7 +2949,7 @@ class _SpacesPageState extends ConsumerState<SpacesPage>
                                             ],
                                           ),
                                         ),
-                                        Icon(
+                                        const Icon(
                                           Icons.arrow_forward_ios,
                                           color: AppColors.textSecondary,
                                           size: 16,
@@ -3239,7 +2986,7 @@ class _SpacesPageState extends ConsumerState<SpacesPage>
                                     ),
                                     child: Row(
                                       children: [
-                                        Icon(
+                                        const Icon(
                                           HugeIcons.calendar, 
                                           color: AppColors.gold,
                                           size: 24,
@@ -3259,7 +3006,7 @@ class _SpacesPageState extends ConsumerState<SpacesPage>
                                               ),
                                               const SizedBox(height: 4),
                                               Text(
-                                                'Schedule an event in your space',
+                                                'Schedule an event in spaces you admin',
                                                 style: GoogleFonts.inter(
                                                   fontSize: 14,
                                                   color: AppColors.textSecondary,
@@ -3268,7 +3015,7 @@ class _SpacesPageState extends ConsumerState<SpacesPage>
                                             ],
                                           ),
                                         ),
-                                        Icon(
+                                        const Icon(
                                           Icons.arrow_forward_ios,
                                           color: AppColors.textSecondary,
                                           size: 16,
@@ -3305,14 +3052,33 @@ class _SpacesPageState extends ConsumerState<SpacesPage>
   void _showCreateEventDialog(BuildContext context) {
     // Check if the user has any spaces to create events in
     final userSpacesAsync = ref.read(userSpacesProvider);
+    final currentUserId = FirebaseAuth.instance.currentUser?.uid;
+    
+    if (currentUserId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('You must be signed in to create an event'),
+          backgroundColor: Colors.black.withOpacity(0.8),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
+        ),
+      );
+      return;
+    }
     
     userSpacesAsync.when(
       data: (userSpaces) {
-        if (userSpaces.isEmpty) {
-          // Show a message that user needs to create or join a space first
+        // Filter spaces where the user is an admin
+        final adminSpaces = userSpaces.where((space) => 
+          space.admins.contains(currentUserId)).toList();
+        
+        if (adminSpaces.isEmpty) {
+          // Show a message that user needs to be an admin of a space
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: const Text('Join or create a space first to create an event'),
+              content: const Text('You must be an admin of a space to create events'),
               backgroundColor: Colors.black.withOpacity(0.8),
               behavior: SnackBarBehavior.floating,
               shape: RoundedRectangleBorder(
@@ -3328,7 +3094,7 @@ class _SpacesPageState extends ConsumerState<SpacesPage>
           return;
         }
 
-        // If there are spaces, show the space selection dialog
+        // If there are spaces where user is admin, show the space selection dialog
         showDialog(
           context: context,
           barrierDismissible: true,
@@ -3403,7 +3169,7 @@ class _SpacesPageState extends ConsumerState<SpacesPage>
                                 ),
                                 const SizedBox(height: 8),
                                 Text(
-                                  'Choose a space to create your event in:',
+                                  'Choose a space you admin to create your event in:',
                                   style: GoogleFonts.inter(
                                     fontSize: 16,
                                     color: AppColors.textSecondary,
@@ -3411,16 +3177,16 @@ class _SpacesPageState extends ConsumerState<SpacesPage>
                                 ),
                                 const SizedBox(height: 16),
                                 
-                                // List of spaces
+                                // List of spaces where user is admin
                                 ConstrainedBox(
                                   constraints: BoxConstraints(
                                     maxHeight: MediaQuery.of(context).size.height * 0.4,
                                   ),
                                   child: ListView.builder(
                                     shrinkWrap: true,
-                                    itemCount: userSpaces.length,
+                                    itemCount: adminSpaces.length,
                                     itemBuilder: (context, index) {
-                                      final space = userSpaces[index];
+                                      final space = adminSpaces[index];
                                       return Padding(
                                         padding: const EdgeInsets.only(bottom: 12),
                                         child: InkWell(
@@ -3546,6 +3312,55 @@ class _SpacesPageState extends ConsumerState<SpacesPage>
       },
     );
   }
+
+  Widget _buildMySpacesGrid(List<Space> spaces) {
+    // Implementation replaced
+    if (spaces.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32.0),
+          child: Text(
+            'You haven\'t joined any spaces yet!\nExplore and find your communities.',
+            style: GoogleFonts.outfit(
+              color: AppColors.textSecondary,
+              fontSize: 16,
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ),
+      );
+    }
+
+    return AnimationLimiter(
+      child: GridView.builder(
+        controller: _mySpacesScrollController,
+        padding: const EdgeInsets.all(16.0),
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 3,
+          crossAxisSpacing: 12.0,
+          mainAxisSpacing: 12.0,
+          childAspectRatio: 0.85, // Might need adjustment after removing separate text row
+        ),
+        itemCount: spaces.length,
+        itemBuilder: (context, index) {
+          final space = spaces[index];
+          return AnimationConfiguration.staggeredGrid(
+            position: index,
+            duration: const Duration(milliseconds: 375),
+            columnCount: 3,
+            child: ScaleAnimation(
+              child: FadeInAnimation(
+                child: SpaceGridItem(
+                  space: space,
+                  onTap: () => _handleTapSpace(space),
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
 }
 
 // Keeping _SliverCategorySelectorDelegate for category selector
@@ -3555,7 +3370,7 @@ class _SliverCategorySelectorDelegate extends SliverPersistentHeaderDelegate {
 
   _SliverCategorySelectorDelegate({
     required this.child,
-    this.visible = true,
+    this.visible = true, // Initialize with a default value of true
   });
 
   @override
@@ -3666,4 +3481,107 @@ class _TemporaryTextState extends State<TemporaryText> {
     );
   }
 }
+
+/// Optimized Grid Item for displaying spaces in My Spaces tab
+class SpaceGridItem extends StatelessWidget {
+  final Space space;
+  final VoidCallback onTap;
+
+  const SpaceGridItem({
+    super.key,
+    required this.space,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.start, // Align content top
+        children: [
+          Expanded( // Use Expanded to fill the grid cell vertically
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(16.0),
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  CachedNetworkImage(
+                    imageUrl: space.imageUrl ?? space.bannerUrl ?? '',
+                    fit: BoxFit.cover,
+                    memCacheHeight: 200,
+                    memCacheWidth: 200,
+                    maxWidthDiskCache: 200,
+                    maxHeightDiskCache: 200,
+                    placeholder: (context, url) => Container(
+                      color: Colors.grey.shade800.withOpacity(0.5),
+                      child: const Center(
+                        child: SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor: AlwaysStoppedAnimation<Color>(AppColors.gold),
+                          ),
+                        ),
+                      ),
+                    ),
+                    errorWidget: (context, url, error) => Container(
+                      color: Colors.grey.shade800.withOpacity(0.5),
+                      child: const Icon(
+                        Icons.error_outline,
+                        color: AppColors.textSecondary,
+                        size: 30,
+                      ),
+                    ),
+                  ),
+                  // Gradient Overlay for text readability instead of glassmorphism
+                  DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          Colors.transparent,
+                          Colors.black.withOpacity(0.1),
+                          Colors.black.withOpacity(0.6),
+                        ],
+                        stops: const [0.5, 0.7, 1.0], // Adjust stops for gradient
+                      ),
+                    ),
+                  ),
+                  Positioned(
+                    bottom: 8,
+                    left: 8,
+                    right: 8,
+                    child: Text(
+                      space.name,
+                      style: GoogleFonts.outfit(
+                        color: Colors.white,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        shadows: [
+                          Shadow(
+                            blurRadius: 2.0,
+                            color: Colors.black.withOpacity(0.8),
+                            offset: const Offset(1.0, 1.0),
+                          ),
+                        ],
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ... rest of spaces_page.dart ...
 

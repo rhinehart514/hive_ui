@@ -1,11 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart'; // For kDebugMode
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+// For kDebugMode
 import 'package:hive_ui/features/feed/presentation/widgets/feed_suggested_friend_card.dart';
 import 'package:hive_ui/features/friends/domain/entities/suggested_friend.dart';
-import 'package:hive_ui/features/friends/domain/providers/suggested_friends_provider.dart';
-import 'package:hive_ui/theme/app_colors.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'feed_section_header.dart';
 
 /// A widget that displays a horizontal list of suggested friends in the feed

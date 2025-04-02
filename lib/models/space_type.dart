@@ -6,6 +6,7 @@ enum SpaceType {
   universityOrg,
   campusLiving,
   fraternityAndSorority,
+  hiveExclusive,
   other,
 }
 
@@ -22,6 +23,8 @@ extension SpaceTypeExtension on SpaceType {
         return 'Campus Living';
       case SpaceType.fraternityAndSorority:
         return 'Fraternity & Sorority';
+      case SpaceType.hiveExclusive:
+        return 'HIVE Exclusive';
       case SpaceType.other:
         return 'Other';
     }
@@ -38,6 +41,8 @@ extension SpaceTypeExtension on SpaceType {
         return Icons.home;
       case SpaceType.fraternityAndSorority:
         return Icons.groups;
+      case SpaceType.hiveExclusive:
+        return Icons.verified;
       case SpaceType.other:
         return Icons.category;
     }
@@ -61,6 +66,8 @@ extension SpaceTypeExtension on SpaceType {
         return SpaceType.campusLiving;
       case 'fraternityAndSorority':
         return SpaceType.fraternityAndSorority;
+      case 'hiveExclusive':
+        return SpaceType.hiveExclusive;
       default:
         return SpaceType.other;
     }

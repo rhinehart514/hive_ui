@@ -1,8 +1,12 @@
+import 'dart:math';
 import 'package:hive_ui/models/event.dart';
 import 'package:hive_ui/models/feed_state.dart';
 import 'package:hive_ui/models/feed_inspirational_message.dart';
 import 'package:hive_ui/features/friends/domain/entities/suggested_friend.dart';
 import 'package:hive_ui/models/recommended_space.dart';
+import 'package:hive_ui/models/user_profile.dart';
+import 'package:flutter/material.dart';
+import 'package:hive_ui/models/repost_content_type.dart';
 
 /// Service for prioritizing and distributing feed items
 class FeedPrioritizer {
@@ -436,262 +440,167 @@ class FeedPrioritizer {
     final currentTime = now ?? DateTime.now();
     final scoredEvents = <MapEntry<Event, double>>[];
 
-    // First, filter out past events that aren't relevant anymore
+    // First, strictly filter out all past events
     final filteredEvents = events.where((event) {
-      // Keep events that are happening today or in the future
-      final endTimeHasPassed = event.endDate.isBefore(currentTime);
-      
-      // Only keep past events if they ended less than 3 hours ago (for immediate follow-up)
-      if (endTimeHasPassed) {
-        final hoursSinceEnd = currentTime.difference(event.endDate).inHours;
-        return hoursSinceEnd < 3;
-      }
-      
-      return true;
+      // Only keep events that haven't ended yet
+      return event.endDate.isAfter(currentTime);
     }).toList();
 
     if (filteredEvents.isEmpty) return [];
 
+    // Score each event based on various factors to generate a personalized order
     for (final event in filteredEvents) {
       double score = 0;
-      final Map<String, double> scoreBreakdown = {};
-
-      // ---- TIME RELEVANCE (0-20 points) - increased priority for upcoming events ----
-      final daysUntil = event.startDate.difference(currentTime).inDays;
-      final hoursUntil = event.startDate.difference(currentTime).inHours;
-      double timeScore = 0;
-
-      // Events happening within the next 3 hours get highest priority
-      if (hoursUntil >= 0 && hoursUntil <= 3) {
-        timeScore = 20.0;
-      }
-      // Events happening within the next 6 hours get very high priority
-      else if (hoursUntil > 3 && hoursUntil <= 6) {
-        timeScore = 18.0;
-      }
-      // Events today get high priority
-      else if (daysUntil == 0) {
-        timeScore = 15.0;
-      }
-      // Events tomorrow get good priority
-      else if (daysUntil == 1) {
-        timeScore = 12.0;
-      }
-      // Events in next 3 days get moderate priority
-      else if (daysUntil > 1 && daysUntil <= 3) {
-        timeScore = 10.0 - ((daysUntil - 1) * 1.0);
-      }
-      // Events in next 7 days get diminishing scores
-      else if (daysUntil > 3 && daysUntil <= 7) {
-        timeScore = 8.0 - ((daysUntil - 3) * 1.0);
-      }
-      // Events beyond 7 days get much lower scores
-      else if (daysUntil > 7) {
-        timeScore = 3.0 - (daysUntil / 30.0).clamp(0.0, 3.0);
-      }
-      // Events that just ended (within 3 hours) get minimal scores
-      else {
-        timeScore = 1.0;
+      
+      // TIME RELEVANCE SCORE (0-10 points) - Highest priority factor
+      // Events happening very soon get highest priority
+      final daysUntilStart = event.startDate.difference(currentTime).inHours / 24;
+      
+      if (daysUntilStart < 0) {
+        // Event has started but not ended
+        // Events currently happening get highest priority
+        score += 10;
+      } else if (daysUntilStart < 1) {
+        // Event is today (less than 24 hours away)
+        score += 9;
+      } else if (daysUntilStart < 2) {
+        // Event is tomorrow
+        score += 8;
+      } else if (daysUntilStart < 3) {
+        // Event is in 2 days
+        score += 7;
+      } else if (daysUntilStart < 5) {
+        // Event is in 3-4 days
+        score += 6;
+      } else if (daysUntilStart < 7) {
+        // Event is in 5-6 days
+        score += 5;
+      } else if (daysUntilStart < 14) {
+        // Event is in the next week
+        score += 4;
+      } else if (daysUntilStart < 21) {
+        // Event is in the next 2 weeks
+        score += 3;
+      } else if (daysUntilStart < 30) {
+        // Event is in the next month
+        score += 2;
+      } else {
+        // Event is more than a month away
+        score += 1;
       }
 
-      score += timeScore;
-      scoreBreakdown['time'] = timeScore;
-
-      // ---- POPULARITY (0-5 points) ----
-      final popularityScore = (event.attendees.length / 10.0).clamp(0.0, 5.0);
-      score += popularityScore;
-      scoreBreakdown['popularity'] = popularityScore;
-
-      // ---- CATEGORY/INTEREST MATCH (0-8 points) ----
-      double interestScore = 0;
-
-      // From historical category interactions
-      if (categoryScores != null &&
-          categoryScores.containsKey(event.category)) {
-        interestScore += categoryScores[event.category]! * 0.5;
+      // POPULARITY SCORE (0-5 points)
+      final attendeeCount = event.attendees.length;
+      if (attendeeCount > 100) {
+        score += 5;
+      } else if (attendeeCount > 50) {
+        score += 4;
+      } else if (attendeeCount > 20) {
+        score += 3;
+      } else if (attendeeCount > 10) {
+        score += 2;
+      } else if (attendeeCount > 0) {
+        score += 1;
       }
 
-      // Explicit user interests
+      // INTEREST MATCH SCORE (0-8 points)
       if (userInterests != null && userInterests.isNotEmpty) {
-        // Direct category match
-        if (userInterests.any((interest) =>
+        // Category match (0-5 points)
+        if (userInterests.any((interest) => 
             interest.toLowerCase() == event.category.toLowerCase())) {
-          interestScore += 5.0;
+          score += 5;
         }
-
-        // Tag matches
-        int matchingTags = 0;
+        
+        // Tag match (0-3 points)
+        int tagMatchCount = 0;
         for (final tag in event.tags) {
-          if (userInterests
-              .any((interest) => interest.toLowerCase() == tag.toLowerCase())) {
-            matchingTags++;
+          if (userInterests.any((interest) => 
+              interest.toLowerCase() == tag.toLowerCase() ||
+              tag.toLowerCase().contains(interest.toLowerCase()))) {
+            tagMatchCount++;
           }
         }
-
-        if (matchingTags > 0) {
-          interestScore += matchingTags.toDouble().clamp(0.0, 3.0);
-        }
+        
+        score += min(3, tagMatchCount);
       }
-
-      score += interestScore;
-      scoreBreakdown['interests'] = interestScore;
-
-      // ---- ORGANIZER/SPACE MATCH (0-6 points) ----
-      double organizerScore = 0;
-
-      // From historical organizer interactions
-      if (organizerScores != null &&
-          organizerScores.containsKey(event.organizerName)) {
-        organizerScore += organizerScores[event.organizerName]! * 0.5;
+      
+      // Historical category preference
+      if (categoryScores != null && categoryScores.containsKey(event.category)) {
+        final catScore = categoryScores[event.category] ?? 0;
+        score += min(3, catScore / 2); // Max 3 points from category history
       }
-
-      // User is member of the organizing space
+      
+      // ORGANIZER/SPACE MATCH SCORE (0-6 points)
       if (joinedSpaceIds != null && joinedSpaceIds.isNotEmpty) {
         // Check if event is from a space the user has joined
-        // We assume event.organizerId or a similar field would match spaceId
-        // If not exact match, try to find partial match or use organizer name
-        final normalizedOrgName =
-            event.organizerName.toLowerCase().replaceAll(' ', '_');
-        final isFromJoinedSpace = joinedSpaceIds.any((spaceId) =>
-            spaceId.contains(normalizedOrgName) ||
-            normalizedOrgName.contains(spaceId.toLowerCase()));
-
-        if (isFromJoinedSpace) {
-          organizerScore += 6.0;
+        if (joinedSpaceIds.contains(event.organizerName)) {
+          score += 6;
         }
       }
-
-      score += organizerScore;
-      scoreBreakdown['organizer'] = organizerScore;
-
-      // ---- EDUCATIONAL RELEVANCE (0-4 points) ----
-      double educationalScore = 0;
-
-      if (userMajor != null && userMajor.isNotEmpty) {
-        // Look for major-related keywords in the event
-        final majorKeywords = userMajor.toLowerCase().split(' ');
-
-        bool hasMajorRelevance = false;
-        for (final keyword in majorKeywords) {
-          if (keyword.length < 3) {
-            continue; // Skip short words like "of", "and", etc.
-          }
-
-          if (event.title.toLowerCase().contains(keyword) ||
-              event.description.toLowerCase().contains(keyword) ||
-              event.tags.any((tag) => tag.toLowerCase().contains(keyword))) {
-            hasMajorRelevance = true;
-            break;
-          }
-        }
-
-        if (hasMajorRelevance) {
-          educationalScore += 2.0;
-        }
+      
+      // Historical organizer preference
+      if (organizerScores != null && organizerScores.containsKey(event.organizerName)) {
+        final orgScore = organizerScores[event.organizerName] ?? 0;
+        score += min(4, orgScore / 2); // Max 4 points from organizer history
       }
-
-      // Year relevance (freshman events for freshmen, etc.)
-      if (userYear != null && userYear > 0) {
-        final yearKeywords = [
-          if (userYear == 1) ['freshman', 'first-year', 'new student'],
-          if (userYear == 2) ['sophomore', 'second-year'],
-          if (userYear == 3) ['junior', 'third-year'],
-          if (userYear == 4) ['senior', 'fourth-year', 'graduating'],
-          if (userYear >= 5) ['graduate', 'grad student', 'phd', 'masters'],
-        ].expand((i) => i).toList();
-
-        bool hasYearRelevance = false;
-        for (final keyword in yearKeywords) {
-          if (event.title.toLowerCase().contains(keyword) ||
-              event.description.toLowerCase().contains(keyword) ||
-              event.tags.any((tag) => tag.toLowerCase().contains(keyword))) {
-            hasYearRelevance = true;
-            break;
-          }
-        }
-
-        if (hasYearRelevance) {
-          educationalScore += 2.0;
-        }
+      
+      // EDUCATIONAL RELEVANCE SCORE (0-4 points)
+      if (userMajor != null && userMajor.isNotEmpty && 
+          (event.description.toLowerCase().contains(userMajor.toLowerCase()) ||
+           event.tags.any((tag) => tag.toLowerCase().contains(userMajor.toLowerCase())))) {
+        score += 2; // Event is relevant to user's field of study
       }
-
-      score += educationalScore;
-      scoreBreakdown['educational'] = educationalScore;
-
-      // ---- LOCATION RELEVANCE (0-3 points) ----
-      double locationScore = 0;
-
-      if (userResidence != null && userResidence.isNotEmpty) {
-        final userLocationLower = userResidence.toLowerCase();
-        final eventLocationLower = event.location.toLowerCase();
-
-        // Direct location match (same building or nearby)
-        if (eventLocationLower.contains(userLocationLower) ||
-            userLocationLower.contains(eventLocationLower)) {
-          locationScore += 3.0;
-        }
-        // Same campus area
-        else if (_isInSameArea(userLocationLower, eventLocationLower)) {
-          locationScore += 1.5;
-        }
+      
+      if (userYear != null && 
+          (event.description.toLowerCase().contains('year $userYear') ||
+           event.description.toLowerCase().contains('${_getYearString(userYear)}') ||
+           event.title.toLowerCase().contains('year $userYear') ||
+           event.title.toLowerCase().contains('${_getYearString(userYear)}'))) {
+        score += 2; // Event is targeted at user's academic year
       }
-
-      score += locationScore;
-      scoreBreakdown['location'] = locationScore;
-
-      // ---- SOCIAL FACTORS (0-5 points) ----
-      double socialScore = 0;
-
-      // User has RSVPed to this event
+      
+      // LOCATION RELEVANCE SCORE (0-3 points)
+      if (userResidence != null && userResidence.isNotEmpty &&
+          event.location.toLowerCase().contains(userResidence.toLowerCase())) {
+        score += 3; // Event is in user's building/area
+      }
+      
+      // SOCIAL FACTORS SCORE (0-5 points)
       if (rsvpedEventIds != null && rsvpedEventIds.contains(event.id)) {
-        socialScore += 5.0; // High priority for events user has RSVPed to
+        score += 5; // User has RSVPed to this event
       }
-
-      // Friends attending this event
+      
+      // Friends attending
       if (friendIds != null && friendIds.isNotEmpty) {
         int friendsAttending = 0;
-
-        for (final attendeeId in event.attendees) {
-          if (friendIds.contains(attendeeId)) {
+        for (final attendee in event.attendees) {
+          if (friendIds.contains(attendee)) {
             friendsAttending++;
           }
         }
-
-        if (friendsAttending > 0) {
-          // Scale social score based on number of friends attending
-          socialScore += (friendsAttending * 0.75).toDouble().clamp(0.0, 3.0);
-        }
+        
+        // 0-3 points based on number of friends attending
+        score += min(3, friendsAttending);
       }
-
-      score += socialScore;
-      scoreBreakdown['social'] = socialScore;
-
-      // ---- BOOSTED STATUS (0-3 points) ----
-      double boostScore = 0;
-
+      
+      // BOOSTED STATUS SCORE (0-3 points)
       if (boostedEventIds != null && boostedEventIds.contains(event.id)) {
-        boostScore += 3.0; // Significant boost for promoted events
+        score += 3; // Event is officially promoted
       }
-
-      score += boostScore;
-      scoreBreakdown['boosted'] = boostScore;
-
-      // Add a small random factor to avoid identical events always showing in same order
-      final randomFactor = (event.id.hashCode % 100) / 1000;
-      score += randomFactor;
-
-      // Store the scored event with breakdown for debugging
-      final scoredEvent = MapEntry(event, score);
-      scoredEvents.add(scoredEvent);
-
-      // Uncomment for debugging
-      // print('Event: ${event.title} - Score: $score - Breakdown: $scoreBreakdown');
+      
+      scoredEvents.add(MapEntry(event, score));
     }
-
-    // Sort by score (descending)
-    scoredEvents.sort((a, b) => b.value.compareTo(a.value));
-
-    return scoredEvents.map((e) => e.key).toList();
+    
+    // Sort by score (highest to lowest)
+    scoredEvents.sort((a, b) {
+      final scoreCompare = b.value.compareTo(a.value);
+      if (scoreCompare != 0) return scoreCompare;
+      
+      // If scores are equal, sort by start date (soonest first)
+      return a.key.startDate.compareTo(b.key.startDate);
+    });
+    
+    return scoredEvents.map((entry) => entry.key).toList();
   }
 
   /// Helper method to determine if two locations are in the same area
@@ -779,30 +688,60 @@ class FeedPrioritizer {
         ),
       );
 
+      // Create a mock user profile for the reposter
+      final mockProfile = UserProfile(
+        id: 'user_${i + 1}',
+        displayName: reposterName,
+        username: 'user_${i + 1}',
+        email: 'user${i + 1}@example.com',
+        year: '',
+        major: '',
+        residence: '',
+        eventCount: 0,
+        clubCount: 0,
+        friendCount: 0,
+        profileImageUrl: null,
+        createdAt: now.subtract(const Duration(days: 30)),
+        updatedAt: now,
+      );
+
       reposts.add(
         RepostItem(
           event: event,
+          reposterProfile: mockProfile,
           comment: comment,
-          reposterName: reposterName,
           repostTime: repostTime,
-          reposterImageUrl: 'https://picsum.photos/200?random=${i + 100}',
+          contentType: comment.isNotEmpty ? RepostContentType.quote : RepostContentType.standard,
         ),
       );
     }
 
     return reposts;
   }
-}
 
-/// Helper function for min that works with generic types
-int min(int a, int b) => a < b ? a : b;
+  /// Helper method to convert numeric year to string representation
+  static String _getYearString(int year) {
+    switch (year) {
+      case 1:
+        return 'freshman';
+      case 2:
+        return 'sophomore';
+      case 3:
+        return 'junior';
+      case 4:
+        return 'senior';
+      default:
+        return 'graduate';
+    }
+  }
+}
 
 /// Extension for RepostItem to support content interleaving
 extension RepostItemExtension on RepostItem {
   bool get isQuote => comment != null && comment!.isNotEmpty;
   
   /// ID of the user who reposted the content
-  String get reposterId => reposterName.hashCode.toString(); // Fallback using name hash
+  String get reposterId => reposterProfile.id;
   
   /// Whether the repost is public (visible to everyone)
   /// Default is true - override with actual implementation if available

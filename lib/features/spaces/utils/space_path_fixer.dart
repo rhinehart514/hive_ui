@@ -86,7 +86,10 @@ class SpacePathFixer {
   }
 
   /// Get spaces from the specified type path
-  static Future<List<Space>> getSpacesWithPathDetection(String typePath) async {
+  static Future<List<Space>> getSpacesWithPathDetection(
+    String typePath, {
+    bool includePrivate = true, // Default to showing all spaces
+  }) async {
     final firestore = FirebaseFirestore.instance;
     final List<Space> spaces = [];
 
@@ -100,15 +103,22 @@ class SpacePathFixer {
 
       // First try the regular structure: spaces/[type]/spaces
       debugPrint('Checking regular path: spaces/$typePath/spaces');
-      final regularCollection = firestore
+      Query regularCollection = firestore
           .collection('spaces')
           .doc(typePath)
           .collection('spaces')
           .where(FieldPath.documentId,
               isNotEqualTo: 'spaces') // Filter out 'spaces' document
           .orderBy(FieldPath
-              .documentId) // Need to order by the same field used in where
-          .limit(50);
+              .documentId); // Need to order by the same field used in where
+              
+      // Filter private spaces if needed
+      if (!includePrivate) {
+        regularCollection = regularCollection.where('isPrivate', isEqualTo: false);
+      }
+      
+      // Apply limit
+      regularCollection = regularCollection.limit(50);
 
       final regularSnapshot = await regularCollection.get();
       debugPrint(
@@ -144,13 +154,20 @@ class SpacePathFixer {
 
         if (spacesDoc.exists) {
           // Query the nested structure
-          final nestedCollection = firestore
+          Query nestedCollection = firestore
               .collection('spaces')
               .doc(typePath)
               .collection('spaces')
               .doc('spaces')
-              .collection('spaces')
-              .limit(50);
+              .collection('spaces');
+              
+          // Filter private spaces if needed
+          if (!includePrivate) {
+            nestedCollection = nestedCollection.where('isPrivate', isEqualTo: false);
+          }
+          
+          // Apply limit
+          nestedCollection = nestedCollection.limit(50);
 
           final nestedSnapshot = await nestedCollection.get();
           debugPrint(
@@ -357,6 +374,8 @@ class SpacePathFixer {
         return SpaceType.campusLiving;
       case 'fraternity_and_sorority':
         return SpaceType.fraternityAndSorority;
+      case 'hive_exclusive':
+        return SpaceType.hiveExclusive;
       default:
         return SpaceType.other;
     }

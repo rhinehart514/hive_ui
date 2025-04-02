@@ -7,6 +7,7 @@ enum SpaceType {
   universityOrg,
   campusLiving,
   fraternityAndSorority,
+  hiveExclusive,
   other
 }
 

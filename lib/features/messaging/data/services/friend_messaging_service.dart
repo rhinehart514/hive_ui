@@ -44,7 +44,7 @@ class FriendMessagingService {
         
         final lastActive = userData['lastLogin'] != null
             ? (userData['lastLogin'] as Timestamp).toDate()
-            : null;
+            : DateTime.now();
         
         friends.add(ChatUser(
           id: friendId,

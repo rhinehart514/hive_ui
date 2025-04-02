@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_ui/features/messaging/application/providers/messaging_providers.dart';
-import 'package:hive_ui/theme/app_colors.dart';
 import 'package:timeago/timeago.dart' as timeago;
 
 /// A widget that displays a user's online status or last seen time

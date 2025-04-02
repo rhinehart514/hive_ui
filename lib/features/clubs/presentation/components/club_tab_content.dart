@@ -91,6 +91,7 @@ class ClubTabContent extends ConsumerWidget {
     }
 
     return FloatingActionButton(
+      heroTag: 'club_${club.id}_${tabType.toString()}_fab',
       onPressed: onActionPressed,
       backgroundColor: AppColors.gold,
       foregroundColor: Colors.black,

@@ -5,8 +5,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_ui/models/user_profile.dart';
 import 'package:hive_ui/theme/app_colors.dart';
 import 'package:hive_ui/theme/huge_icons.dart';
-import 'package:hive_ui/services/friend_service.dart';
-import 'package:hive_ui/providers/profile_provider.dart';
 import 'package:hive_ui/providers/friend_providers.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 

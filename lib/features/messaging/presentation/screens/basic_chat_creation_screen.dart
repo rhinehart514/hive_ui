@@ -216,53 +216,61 @@ class _BasicChatCreationScreenState
   // Sample data for demo purposes
   List<ChatUser> _generateSampleUsers() {
     return [
-      const ChatUser(
+      ChatUser(
         id: '1',
-        name: 'Alice Johnson',
+        name: 'John Doe',
+        avatarUrl: 'https://randomuser.me/api/portraits/men/1.jpg',
         isOnline: true,
-        avatarUrl: 'https://i.pravatar.cc/150?img=1',
+        lastActive: DateTime.now(),
       ),
-      const ChatUser(
+      ChatUser(
         id: '2',
-        name: 'Bob Smith',
+        name: 'Jane Smith',
+        avatarUrl: 'https://randomuser.me/api/portraits/women/2.jpg',
         isOnline: false,
-        avatarUrl: 'https://i.pravatar.cc/150?img=2',
+        lastActive: DateTime.now().subtract(const Duration(hours: 1)),
       ),
-      const ChatUser(
+      ChatUser(
         id: '3',
-        name: 'Charlie Brown',
+        name: 'Alex Johnson',
+        avatarUrl: 'https://randomuser.me/api/portraits/men/3.jpg',
         isOnline: true,
-        avatarUrl: 'https://i.pravatar.cc/150?img=3',
+        lastActive: DateTime.now(),
       ),
-      const ChatUser(
+      ChatUser(
         id: '4',
-        name: 'Diana Prince',
-        isOnline: true,
-        avatarUrl: 'https://i.pravatar.cc/150?img=4',
+        name: 'Emily Wilson',
+        avatarUrl: 'https://randomuser.me/api/portraits/women/4.jpg',
+        isOnline: false,
+        lastActive: DateTime.now().subtract(const Duration(days: 1)),
       ),
-      const ChatUser(
+      ChatUser(
         id: '5',
-        name: 'Edward Cullen',
-        isOnline: false,
-        avatarUrl: 'https://i.pravatar.cc/150?img=5',
+        name: 'Michael Brown',
+        avatarUrl: 'https://randomuser.me/api/portraits/men/5.jpg',
+        isOnline: true,
+        lastActive: DateTime.now(),
       ),
-      const ChatUser(
+      ChatUser(
         id: '6',
-        name: 'Fiona Apple',
-        isOnline: true,
-        avatarUrl: 'https://i.pravatar.cc/150?img=6',
-      ),
-      const ChatUser(
-        id: '7',
-        name: 'George Michael',
+        name: 'Sophia Martinez',
+        avatarUrl: 'https://randomuser.me/api/portraits/women/6.jpg',
         isOnline: false,
-        avatarUrl: 'https://i.pravatar.cc/150?img=7',
+        lastActive: DateTime.now().subtract(const Duration(hours: 3)),
       ),
-      const ChatUser(
-        id: '8',
-        name: 'Hannah Montana',
+      ChatUser(
+        id: '7',
+        name: 'David Taylor',
+        avatarUrl: 'https://randomuser.me/api/portraits/men/7.jpg',
         isOnline: true,
-        avatarUrl: 'https://i.pravatar.cc/150?img=8',
+        lastActive: DateTime.now(),
+      ),
+      ChatUser(
+        id: '8',
+        name: 'Olivia Anderson',
+        avatarUrl: 'https://randomuser.me/api/portraits/women/8.jpg',
+        isOnline: false,
+        lastActive: DateTime.now().subtract(const Duration(minutes: 45)),
       ),
     ];
   }

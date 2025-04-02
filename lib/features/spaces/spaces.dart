@@ -19,4 +19,4 @@ export 'application/providers.dart';
 
 // Presentation exports
 export 'presentation/controllers/spaces_controller.dart';
-export 'presentation/pages/spaces_page_revamp.dart';
+export 'presentation/pages/spaces_page.dart';

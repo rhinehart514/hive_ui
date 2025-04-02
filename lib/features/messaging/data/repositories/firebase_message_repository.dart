@@ -326,16 +326,10 @@ class FirebaseMessageRepository implements MessageRepository {
         }
 
         // Handle eventData safely
-        MessageEventData? eventData;
-        if (data['eventData'] != null) {
-          try {
-            eventData = MessageEventData.fromMap(
-                Map<String, dynamic>.from(data['eventData'] as Map));
-          } catch (e) {
-            // Handle gracefully on parsing error
-            print('Error parsing eventData: $e');
-          }
-        }
+        Map<String, dynamic>? eventDataMap = data['eventData'] as Map<String, dynamic>?;
+        MessageEventData? eventData = eventDataMap != null
+            ? MessageEventData.fromMap(eventDataMap)
+            : null;
 
         return Message(
           id: doc.id,
@@ -490,8 +484,7 @@ class FirebaseMessageRepository implements MessageRepository {
     try {
       // Get the message to get its chat ID
       final messageDoc = await _messagesCollection(messageId.split('/')[0])
-          .doc(messageId)
-          .get();
+          .doc(messageId).get();
       if (!messageDoc.exists) {
         throw Exception('Message not found');
       }
@@ -541,14 +534,13 @@ class FirebaseMessageRepository implements MessageRepository {
         'attachmentUrl': null, // Remove attachment if any
       });
     } catch (e) {
-      print('Error deleting message: $e');
+      debugPrint('Error deleting message: $e');
       throw Exception('Failed to delete message: $e');
     }
   }
 
   @override
-  Future<void> addReaction(
-      String chatId, String messageId, String userId, String emoji) async {
+  Future<void> addMessageReaction(String chatId, String messageId, String userId, String emoji) async {
     try {
       final messageRef = _messagesCollection(chatId).doc(messageId);
       final messageDoc = await messageRef.get();
@@ -557,31 +549,9 @@ class FirebaseMessageRepository implements MessageRepository {
         throw Exception('Message not found');
       }
 
-      // Get existing reactions or create empty list
-      final data = messageDoc.data() as Map<String, dynamic>;
-      final reactions = data['reactions'] != null
-          ? List<Map<String, dynamic>>.from(data['reactions'] as List)
-          : <Map<String, dynamic>>[];
-
-      // Check if user already reacted with this emoji
-      final existingReactionIndex = reactions
-          .indexWhere((r) => r['userId'] == userId && r['emoji'] == emoji);
-
-      if (existingReactionIndex >= 0) {
-        // Reaction already exists, do nothing
-        return;
-      }
-
-      // Add new reaction
-      reactions.add({
-        'userId': userId,
-        'emoji': emoji,
-        'timestamp': DateTime.now().toIso8601String(),
-      });
-
-      // Update message with new reactions
+      // Add reaction to the reactions map
       await messageRef.update({
-        'reactions': reactions,
+        'reactions.$userId': emoji,
       });
     } catch (e) {
       throw Exception('Failed to add reaction: $e');
@@ -589,8 +559,7 @@ class FirebaseMessageRepository implements MessageRepository {
   }
 
   @override
-  Future<void> removeReaction(
-      String chatId, String messageId, String userId, String emoji) async {
+  Future<void> removeMessageReaction(String chatId, String messageId, String userId, String emoji) async {
     try {
       final messageRef = _messagesCollection(chatId).doc(messageId);
       final messageDoc = await messageRef.get();
@@ -599,24 +568,24 @@ class FirebaseMessageRepository implements MessageRepository {
         throw Exception('Message not found');
       }
 
-      // Get existing reactions
-      final data = messageDoc.data() as Map<String, dynamic>;
-      final reactions = data['reactions'] != null
-          ? List<Map<String, dynamic>>.from(data['reactions'] as List)
-          : <Map<String, dynamic>>[];
-
-      // Filter out the reaction to remove
-      final updatedReactions = reactions
-          .where((r) => !(r['userId'] == userId && r['emoji'] == emoji))
-          .toList();
-
-      // Update message with new reactions
+      // Remove reaction from the reactions map
       await messageRef.update({
-        'reactions': updatedReactions,
+        'reactions.$userId': FieldValue.delete(),
       });
     } catch (e) {
       throw Exception('Failed to remove reaction: $e');
     }
+  }
+
+  // Legacy methods that delegate to the new implementations
+  @override
+  Future<void> addReaction(String chatId, String messageId, String userId, String emoji) async {
+    return addMessageReaction(chatId, messageId, userId, emoji);
+  }
+
+  @override
+  Future<void> removeReaction(String chatId, String messageId, String userId, String emoji) async {
+    return removeMessageReaction(chatId, messageId, userId, emoji);
   }
 
   @override
@@ -773,12 +742,6 @@ class FirebaseMessageRepository implements MessageRepository {
     });
   }
 
-  // Helper method to convert Maps to MessageEventData
-  MessageEventData? _convertEventData(Map<String, dynamic>? data) {
-    if (data == null) return null;
-    return MessageEventData.fromMap(data);
-  }
-
   @override
   Future<List<Message>> searchMessages(String chatId, String query,
       {int limit = 20}) async {
@@ -802,7 +765,9 @@ class FirebaseMessageRepository implements MessageRepository {
         // Convert event data if present
         Map<String, dynamic>? eventDataMap =
             data['eventData'] as Map<String, dynamic>?;
-        MessageEventData? eventData = _convertEventData(eventDataMap);
+        MessageEventData? eventData = eventDataMap != null
+            ? MessageEventData.fromMap(eventDataMap)
+            : null;
 
         return Message(
           id: doc.id,
@@ -954,7 +919,7 @@ class FirebaseMessageRepository implements MessageRepository {
           return <String, dynamic>{};
         }
         return snapshot.data() as Map<String, dynamic>;
-      }).switchToUiThread() as Stream<Map<String, dynamic>>;
+      }).switchToUiThread();
     } catch (e) {
       debugPrint('Failed to get chat details stream: $e');
       return Stream.value(<String, dynamic>{});
@@ -1050,35 +1015,6 @@ class FirebaseMessageRepository implements MessageRepository {
     }
   }
 
-  // Helper method to convert MessageEventData to Map
-  Map<String, dynamic> _messageEventDataToMap(MessageEventData eventData) {
-    return eventData.toMap();
-  }
-
-  // Helper method to get a preview of the message for the last message text
-  String _getLastMessagePreview(Message message) {
-    switch (_safeMessageType(message.type)) {
-      case MessageType.text:
-        return message.content.length > 100
-            ? '${message.content.substring(0, 97)}...'
-            : message.content;
-      case MessageType.image:
-        return '📷 Photo';
-      case MessageType.video:
-        return '🎥 Video';
-      case MessageType.audio:
-        return '🎵 Audio message';
-      case MessageType.file:
-        return '📎 File';
-      case MessageType.event:
-        return 'Event notification';
-      case MessageType.system:
-        return message.content;
-      default:
-        return 'New message';
-    }
-  }
-
   @override
   Future<void> markChatAsRead(String chatId, String userId) async {
     try {
@@ -1138,23 +1074,18 @@ class FirebaseMessageRepository implements MessageRepository {
   @override
   Stream<List<Message>> getChatMessagesStream(String chatId) {
     try {
-      // Get a reference to the messages subcollection
-      final messagesRef = _chatsCollection
-          .doc(chatId)
-          .collection('messages')
+      return _messagesCollection(chatId)
           .orderBy('timestamp', descending: true)
-          .limit(100);
-
-      // Map the query snapshot to a list of Message objects
-      return messagesRef.snapshots().map((snapshot) {
-        return snapshot.docs
-            .map((doc) => Message.fromMap(doc.data() as Map<String, dynamic>))
-            .toList();
-      }).switchToUiThread();
+          .limit(20) // Limit to 20 messages per fetch
+          .snapshots()
+          .map((snapshot) => snapshot.docs
+              .map((doc) {
+                final data = doc.data() as Map<String, dynamic>;
+                return Message.fromMap(data);
+              })
+              .toList());
     } catch (e) {
-      // Handle the error
-      debugPrint('Error getting chat messages stream: $e');
-      return Stream.value([]);
+      throw Exception('Failed to get chat messages: $e');
     }
   }
 
@@ -1248,53 +1179,6 @@ class FirebaseMessageRepository implements MessageRepository {
       }
     } catch (e) {
       throw Exception('Failed to mark message as seen: $e');
-    }
-  }
-
-  // Helper function to get MessageType from a string type name
-  MessageType _getMessageTypeFromString(String typeString) {
-    switch (typeString) {
-      case 'text':
-        return MessageType.text;
-      case 'image':
-        return MessageType.image;
-      case 'video':
-        return MessageType.video;
-      case 'audio':
-        return MessageType.audio;
-      case 'voice':
-        return MessageType
-            .audio; // Map 'voice' to audio for backward compatibility
-      case 'file':
-        return MessageType.file;
-      case 'event':
-        return MessageType.event;
-      case 'system':
-        return MessageType.system;
-      default:
-        return MessageType.text;
-    }
-  }
-
-  // Helper function to handle message type in switch statements
-  String _getMessageContentPreview(Message message) {
-    switch (_safeMessageType(message.type)) {
-      case MessageType.text:
-        return message.content;
-      case MessageType.image:
-        return '📷 Photo';
-      case MessageType.video:
-        return '🎥 Video';
-      case MessageType.audio:
-        return '🎵 Audio message';
-      case MessageType.file:
-        return '📎 File';
-      case MessageType.event:
-        return 'Event notification';
-      case MessageType.system:
-        return message.content;
-      default:
-        return 'New message';
     }
   }
 
@@ -1473,14 +1357,14 @@ class FirebaseMessageRepository implements MessageRepository {
           final userData = userDoc.data() as Map<String, dynamic>;
           participants.add(ChatUser(
             id: userDoc.id,
-            name: userData['displayName'] as String? ?? 'Unknown User',
+            name: userData['displayName'] ?? 'Unknown User',
             avatarUrl: userData['photoURL'] as String?,
             isOnline: userData['isOnline'] as bool? ?? false,
             lastActive: userData['lastActive'] != null
                 ? (userData['lastActive'] is Timestamp)
                     ? (userData['lastActive'] as Timestamp).toDate()
                     : DateTime.parse(userData['lastActive'] as String)
-                : null,
+                : DateTime.now(), // Add default value instead of null
             role: userData['role'] as String? ?? 'user',
             major: userData['major'] as String?,
             year: userData['year'] as String?,
@@ -1504,32 +1388,8 @@ class FirebaseMessageRepository implements MessageRepository {
     try {
       return MessageEventData.fromMap(data);
     } catch (e) {
-      print('Error parsing event data: $e');
+      debugPrint('Error parsing event data: $e');
       return null;
-    }
-  }
-
-  // Fix the case statement to handle audio instead of voice
-  String _getFormattedContentType(String? type) {
-    if (type == null) return "Text";
-
-    switch (type) {
-      case "text":
-        return "Message";
-      case "image":
-        return "Image";
-      case "video":
-        return "Video";
-      case "audio":
-        return "Audio";
-      case "file":
-        return "File";
-      case "event":
-        return "Event";
-      case "system":
-        return "System message";
-      default:
-        return "Message";
     }
   }
 
@@ -1599,8 +1459,47 @@ class FirebaseMessageRepository implements MessageRepository {
 
   @override
   Future<ChatUser> getUserProfile(String userId) async {
-    // TODO: Implement getUserProfile
-    return ChatUser(id: userId, name: 'User', isOnline: false);
+    try {
+      final userDoc = await _usersCollection.doc(userId).get();
+      
+      if (!userDoc.exists) {
+        throw Exception('User not found');
+      }
+      
+      final userData = userDoc.data() as Map<String, dynamic>;
+      
+      // Convert timestamps or handle null last active
+      DateTime lastActive;
+      if (userData['lastActive'] != null) {
+        if (userData['lastActive'] is Timestamp) {
+          lastActive = (userData['lastActive'] as Timestamp).toDate();
+        } else {
+          lastActive = DateTime.parse(userData['lastActive'] as String);
+        }
+      } else {
+        lastActive = DateTime.now(); // Default value if null
+      }
+      
+      return ChatUser(
+        id: userId,
+        name: userData['displayName'] ?? 'Unknown User',
+        email: userData['email'] ?? '',
+        photoUrl: userData['photoURL'],
+        avatarUrl: userData['photoURL'],
+        bio: userData['bio'] ?? '',
+        isOnline: false,
+        lastActive: lastActive, // Now using the non-nullable variable
+        role: userData['role'],
+        major: userData['major'],
+        year: userData['year'],
+        clubIds: userData['clubIds'] != null 
+          ? List<String>.from(userData['clubIds'])
+          : null,
+        isVerified: userData['isVerified'] ?? false,
+      );
+    } catch (e) {
+      throw Exception('Failed to get user profile: $e');
+    }
   }
 
   @override
@@ -1628,7 +1527,23 @@ class FirebaseMessageRepository implements MessageRepository {
   @override
   Future<void> updateChatDetails(String chatId,
       {String? title, String? imageUrl}) async {
-    // TODO: Implement updateChatDetails
+    try {
+      final updates = <String, dynamic>{};
+      
+      if (title != null) {
+        updates['title'] = title;
+      }
+      
+      if (imageUrl != null) {
+        updates['imageUrl'] = imageUrl;
+      }
+      
+      if (updates.isNotEmpty) {
+        await _chatsCollection.doc(chatId).update(updates);
+      }
+    } catch (e) {
+      throw Exception('Failed to update chat details: $e');
+    }
   }
 
   @override
@@ -1662,18 +1577,251 @@ class FirebaseMessageRepository implements MessageRepository {
     String? replyToMessageId,
     String? threadParentId,
   }) async {
-    // TODO: Implement sendImageMessage
-    return Message(
-      id: 'temp',
+    try {
+      // Upload image to storage
+      final fileExtension = path.extension(imageFile.path);
+      final fileName = '${_uuid.v4()}$fileExtension';
+      final storageRef = _storage.ref().child('chats/$chatId/images/$fileName');
+      
+      // Upload the file
+      final uploadTask = storageRef.putFile(
+        imageFile,
+        SettableMetadata(
+          contentType: 'image/jpeg', // Or derive from file extension
+        ),
+      );
+      
+      // Wait for upload to complete
+      final snapshot = await uploadTask;
+      
+      // Get download URL
+      final downloadUrl = await snapshot.ref.getDownloadURL();
+      
+      // Get sender information
+      final userDoc = await _usersCollection.doc(senderId).get();
+      final userData = userDoc.data() as Map<String, dynamic>;
+      
+      // Create message
+      final messageRef = _messagesCollection(chatId).doc();
+      final timestamp = DateTime.now().toIso8601String();
+      
+      final message = Message(
+        id: messageRef.id,
       chatId: chatId,
       senderId: senderId,
-      senderName: 'User',
-      content: caption ?? 'Image',
+        senderName: userData['displayName'] ?? 'Unknown',
+        senderAvatar: userData['photoURL'],
+        content: caption ?? 'Photo',
       timestamp: DateTime.now(),
       isRead: false,
       type: MessageType.image,
-      attachmentUrl: 'temp',
-    );
+        attachmentUrl: downloadUrl,
+        attachmentType: 'image',
+        replyToMessageId: replyToMessageId,
+        threadParentId: threadParentId,
+        seenBy: [senderId],
+      );
+      
+      // Save to Firestore
+      await messageRef.set(message.toMap());
+      
+      // Update chat's last message
+      await _chatsCollection.doc(chatId).update({
+        'lastMessageAt': timestamp,
+        'lastMessageText': caption ?? 'Photo',
+        'lastMessageSenderId': senderId,
+      });
+      
+      return message;
+    } catch (e) {
+      throw Exception('Failed to send image message: $e');
+    }
+  }
+
+  @override
+  Future<Message> sendMessageWithAttachment(
+    String chatId,
+    String senderId,
+    String attachmentUrl,
+    String fileName,
+    MessageType messageType, {
+    String? replyToMessageId,
+    String? threadParentId,
+  }) async {
+    try {
+      // Get sender information
+      final userDoc = await _usersCollection.doc(senderId).get();
+      final userData = userDoc.data() as Map<String, dynamic>;
+      
+      // Create message
+      final messageRef = _messagesCollection(chatId).doc();
+      final timestamp = DateTime.now().toIso8601String();
+      
+      String messageContent;
+      String attachmentType;
+      
+      switch (messageType) {
+        case MessageType.image:
+          messageContent = 'Photo';
+          attachmentType = 'image';
+          break;
+        case MessageType.video:
+          messageContent = 'Video';
+          attachmentType = 'video';
+          break;
+        case MessageType.audio:
+          messageContent = 'Audio';
+          attachmentType = 'audio';
+          break;
+        case MessageType.file:
+          messageContent = fileName;
+          attachmentType = 'file';
+          break;
+        default:
+          messageContent = fileName;
+          attachmentType = 'file';
+      }
+      
+      final message = Message(
+        id: messageRef.id,
+        chatId: chatId,
+        senderId: senderId,
+        senderName: userData['displayName'] ?? 'Unknown',
+        senderAvatar: userData['photoURL'],
+        content: messageContent,
+        timestamp: DateTime.now(),
+        isRead: false,
+        type: messageType,
+        attachmentUrl: attachmentUrl,
+        attachmentType: attachmentType,
+        replyToMessageId: replyToMessageId,
+        threadParentId: threadParentId,
+        seenBy: [senderId],
+      );
+      
+      // Save to Firestore
+      await messageRef.set(message.toMap());
+      
+      // Update chat's last message
+      await _chatsCollection.doc(chatId).update({
+        'lastMessageAt': timestamp,
+        'lastMessageText': messageContent,
+        'lastMessageSenderId': senderId,
+      });
+      
+      return message;
+    } catch (e) {
+      throw Exception('Failed to send message with attachment: $e');
+    }
+  }
+
+  @override
+  Future<List<Message>> getMessagesPaginated(String chatId, DateTime? lastMessageTimestamp, int limit) async {
+    try {
+      Query query = _messagesCollection(chatId)
+          .orderBy('timestamp', descending: true);
+      
+      // If we have a timestamp for pagination
+      if (lastMessageTimestamp != null) {
+        query = query.startAfter([Timestamp.fromDate(lastMessageTimestamp)]);
+      }
+      
+      // Apply the limit (defaulting to 20 if not specified)
+      query = query.limit(limit > 0 ? limit : 20);
+      
+      final snapshot = await query.get();
+      
+      return snapshot.docs
+          .map((doc) {
+            final data = doc.data() as Map<String, dynamic>;
+            return Message.fromMap(data);
+          })
+          .toList();
+    } catch (e) {
+      throw Exception('Failed to get paginated messages: $e');
+    }
+  }
+
+  @override
+  Future<void> updateMessageDeliveryStatus(String messageId, String chatId, bool isDelivered, {bool isRead = false}) async {
+    try {
+      final messageDoc = _messagesCollection(chatId).doc(messageId);
+      
+      final Map<String, dynamic> updateData = {
+        'isDelivered': isDelivered,
+      };
+      
+      if (isRead) {
+        updateData['isRead'] = true;
+        
+        // Get current user ID
+        final currentUserId = _auth.currentUser?.uid;
+        if (currentUserId != null) {
+          // Add user to seenBy array if not already present
+          updateData['seenBy'] = FieldValue.arrayUnion([currentUserId]);
+          
+          // Update unread count for current user
+          await _chatsCollection.doc(chatId).update({
+            'unreadCount.$currentUserId': 0
+          });
+        }
+      }
+      
+      await messageDoc.update(updateData);
+    } catch (e) {
+      throw Exception('Failed to update message delivery status: $e');
+    }
+  }
+
+  @override
+  Future<String> uploadAttachment(File file, String chatId, String senderId) async {
+    try {
+      final fileExtension = path.extension(file.path);
+      final fileName = '${_uuid.v4()}$fileExtension';
+      final storageRef = _storage.ref().child('chats/$chatId/$fileName');
+      
+      // Upload the file
+      final uploadTask = storageRef.putFile(
+        file,
+        SettableMetadata(
+          contentType: _getContentType(fileExtension),
+        ),
+      );
+      
+      // Wait for upload to complete
+      final snapshot = await uploadTask;
+      
+      // Get download URL
+      final downloadUrl = await snapshot.ref.getDownloadURL();
+      
+      return downloadUrl;
+    } catch (e) {
+      throw Exception('Failed to upload attachment: $e');
+    }
+  }
+  
+  // Helper to determine content type from file extension
+  String _getContentType(String extension) {
+    switch (extension.toLowerCase()) {
+      case '.jpg':
+      case '.jpeg':
+        return 'image/jpeg';
+      case '.png':
+        return 'image/png';
+      case '.gif':
+        return 'image/gif';
+      case '.mp4':
+        return 'video/mp4';
+      case '.mp3':
+        return 'audio/mpeg';
+      case '.pdf':
+        return 'application/pdf';
+      case '.doc':
+      case '.docx':
+        return 'application/msword';
+      default:
+        return 'application/octet-stream';
+    }
   }
 
   @override
@@ -1684,16 +1832,287 @@ class FirebaseMessageRepository implements MessageRepository {
     String? replyToMessageId,
     String? threadParentId,
   }) async {
-    // TODO: Implement sendTextMessage
-    return Message(
-      id: 'temp',
+    try {
+      // Get sender information
+      final userDoc = await _usersCollection.doc(senderId).get();
+      final userData = userDoc.data() as Map<String, dynamic>;
+      
+      // Create message
+      final messageRef = _messagesCollection(chatId).doc();
+      final timestamp = DateTime.now().toIso8601String();
+      
+      final message = Message(
+        id: messageRef.id,
       chatId: chatId,
       senderId: senderId,
-      senderName: 'User',
+        senderName: userData['displayName'] ?? 'Unknown',
+        senderAvatar: userData['photoURL'],
       content: content,
       timestamp: DateTime.now(),
       isRead: false,
       type: MessageType.text,
-    );
+        replyToMessageId: replyToMessageId,
+        threadParentId: threadParentId,
+        seenBy: [senderId],
+      );
+      
+      // Save to Firestore
+      await messageRef.set(message.toMap());
+      
+      // Update the unread count for all participants except the sender
+      final chatDoc = await _chatsCollection.doc(chatId).get();
+      final chatData = chatDoc.data() as Map<String, dynamic>;
+      final participantIds = List<String>.from(chatData['participantIds'] ?? []);
+      
+      final updateData = <String, dynamic>{
+        'lastMessageAt': timestamp,
+        'lastMessageText': content,
+        'lastMessageSenderId': senderId,
+      };
+      
+      // Increment unread count for each participant except sender
+      for (final participantId in participantIds) {
+        if (participantId != senderId) {
+          updateData['unreadCount.$participantId'] = FieldValue.increment(1);
+        }
+      }
+      
+      // Update chat document
+      await _chatsCollection.doc(chatId).update(updateData);
+      
+      return message;
+    } catch (e) {
+      throw Exception('Failed to send text message: $e');
+    }
+  }
+
+  @override
+  Future<Message?> getMessageById(String chatId, String messageId) async {
+    try {
+      final docSnapshot = await _messagesCollection(chatId).doc(messageId).get();
+      
+      if (!docSnapshot.exists) {
+        return null;
+      }
+      
+      final data = docSnapshot.data() as Map<String, dynamic>;
+      data['id'] = docSnapshot.id; // Add ID to the map
+      
+      return Message.fromMap(data);
+    } catch (e) {
+      throw Exception('Failed to get message by ID: $e');
+    }
+  }
+
+  @override
+  Stream<List<Message>> getThreadMessagesStream(String chatId, String threadParentId) {
+    try {
+      return _messagesCollection(chatId)
+          .where('threadParentId', isEqualTo: threadParentId)
+          .orderBy('timestamp')
+          .snapshots()
+          .map((snapshot) {
+            return snapshot.docs.map((doc) {
+              final data = doc.data() as Map<String, dynamic>;
+              data['id'] = doc.id; // Add ID to the map
+              return Message.fromMap(data);
+            }).toList();
+          });
+    } catch (e) {
+      throw Exception('Failed to get thread messages stream: $e');
+    }
+  }
+
+  @override
+  Stream<int> getUnreadMessageCountStream(String chatId, String userId) {
+    try {
+      return _chatsCollection
+          .doc(chatId)
+          .snapshots()
+          .map((snapshot) {
+            if (!snapshot.exists) {
+              return 0;
+            }
+            
+            final data = snapshot.data() as Map<String, dynamic>;
+            final unreadCounts = data['unreadCount'] as Map<String, dynamic>?;
+            
+            if (unreadCounts == null || !unreadCounts.containsKey(userId)) {
+              return 0;
+            }
+            
+            return unreadCounts[userId] as int;
+          });
+    } catch (e) {
+      throw Exception('Failed to get unread message count stream: $e');
+    }
+  }
+
+  @override
+  Future<List<Message>> getChatMessagesBefore(
+      String chatId, DateTime timestamp, {int limit = 20}) async {
+    try {
+      final querySnapshot = await _messagesCollection(chatId)
+          .where('timestamp', isLessThan: timestamp)
+          .orderBy('timestamp', descending: true)
+          .limit(limit)
+          .get();
+      
+      return querySnapshot.docs.map((doc) {
+        final data = doc.data() as Map<String, dynamic>;
+        data['id'] = doc.id; // Add ID to the map
+        return Message.fromMap(data);
+      }).toList();
+    } catch (e) {
+      throw Exception('Failed to get chat messages before timestamp: $e');
+    }
+  }
+
+  @override
+  Future<void> createMessageSearchIndex(String chatId) async {
+    try {
+      // For Firebase, we can use Cloud Firestore's built-in search capabilities
+      // through queries. However, for more complex search, Algolia or ElasticSearch
+      // would be preferred. This implementation is a placeholder.
+      
+      // Create a separate collection for search indices
+      await _firestore.collection('messageSearchIndices').doc(chatId).set({
+        'chatId': chatId,
+        'createdAt': FieldValue.serverTimestamp(),
+        'lastUpdatedAt': FieldValue.serverTimestamp(),
+        'isActive': true,
+      });
+      
+      // Get recent messages to index
+      final messages = await getChatMessages(chatId, limit: 100);
+      
+      // Update the search index with these messages
+      await updateMessageSearchIndex(chatId, messages);
+    } catch (e) {
+      throw Exception('Failed to create message search index: $e');
+    }
+  }
+
+  @override
+  Future<void> updateMessageSearchIndex(String chatId, List<Message> messages) async {
+    try {
+      final batch = _firestore.batch();
+      final indexCollection = _firestore.collection('messageSearchIndices')
+          .doc(chatId)
+          .collection('indexedMessages');
+      
+      // Update index metadata
+      batch.update(
+        _firestore.collection('messageSearchIndices').doc(chatId),
+        {'lastUpdatedAt': FieldValue.serverTimestamp()},
+      );
+      
+      // Index each message
+      for (final message in messages) {
+        // Skip certain message types that don't need indexing
+        if (message.type == MessageType.system || 
+            message.content.isEmpty) {
+          continue;
+        }
+        
+        // Create search tokens from the message content
+        final searchTokens = _generateSearchTokens(message.content);
+        
+        // Create a searchable representation of the message
+        final searchData = {
+          'messageId': message.id,
+          'content': message.content,
+          'senderId': message.senderId,
+          'senderName': message.senderName,
+          'timestamp': message.timestamp.toIso8601String(),
+          'type': message.type.toString().split('.').last,
+          'searchTokens': searchTokens,
+        };
+        
+        // Add to batch
+        batch.set(indexCollection.doc(message.id), searchData);
+      }
+      
+      // Commit the batch
+      await batch.commit();
+    } catch (e) {
+      throw Exception('Failed to update message search index: $e');
+    }
+  }
+  
+  // Helper method to generate search tokens for message content
+  List<String> _generateSearchTokens(String content) {
+    // Normalize content: lowercase and remove special characters
+    final normalizedContent = content.toLowerCase()
+        .replaceAll(RegExp(r'[^\w\s]'), '')
+        .trim();
+    
+    // Split into words
+    final words = normalizedContent.split(RegExp(r'\s+'));
+    
+    // Create tokens (including n-grams for partial matching)
+    final Set<String> tokens = {};
+    
+    // Add full words
+    tokens.addAll(words.where((word) => word.isNotEmpty));
+    
+    // Add n-grams for words longer than 4 characters
+    for (final word in words) {
+      if (word.length > 4) {
+        // Add trigrams
+        for (int i = 0; i <= word.length - 3; i++) {
+          tokens.add(word.substring(i, i + 3));
+        }
+      }
+    }
+    
+    return tokens.toList();
+  }
+
+  @override
+  Future<Message> sendTextMessageReply(
+    String chatId,
+    String senderId,
+    String content,
+    String threadParentId,
+  ) async {
+    try {
+      // First check if the parent message exists
+      final parentMessage = await getMessageById(chatId, threadParentId);
+      if (parentMessage == null) {
+        throw Exception('Parent message not found');
+      }
+      
+      // Fetch user profile to get sender name
+      final userProfile = await getUserProfile(senderId);
+      final senderName = userProfile.displayName;
+      
+      // Create reply message with current timestamp
+      final now = DateTime.now();
+      final message = Message.text(
+        id: '', // Will be filled after document creation
+        chatId: chatId,
+        senderId: senderId,
+        senderName: senderName,
+        content: content,
+        timestamp: now,
+        threadParentId: threadParentId,
+      );
+      
+      // Save the message to Firestore
+      final docRef = await _messagesCollection(chatId).add(message.toMap());
+      
+      // Update the message with the ID
+      final messageWithId = message.copyWith(id: docRef.id);
+      
+      // Update thread count on parent message
+      await _messagesCollection(chatId).doc(threadParentId).update({
+        'threadRepliesCount': FieldValue.increment(1),
+      });
+      
+      return messageWithId;
+    } catch (e) {
+      throw Exception('Failed to send text message reply: $e');
+    }
   }
 }

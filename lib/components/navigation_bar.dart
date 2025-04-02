@@ -3,8 +3,6 @@ import 'package:flutter/services.dart';
 import 'dart:ui';
 import 'package:hive_ui/theme/app_colors.dart';
 import 'package:hive_ui/theme/app_theme.dart';
-import 'package:hive_ui/theme/glassmorphism_guide.dart';
-import 'package:hive_ui/theme/huge_icons.dart';
 
 /// Types of navigation bar styles available in HIVE UI
 enum HiveNavigationBarStyle {

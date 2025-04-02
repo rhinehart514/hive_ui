@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -14,6 +15,12 @@ import 'package:hive_ui/features/messaging/domain/entities/chat_user.dart';
 import 'package:hive_ui/features/messaging/domain/entities/message.dart';
 import 'package:hive_ui/features/messaging/domain/repositories/message_repository.dart';
 import 'package:uuid/uuid.dart';
+import 'package:logging/logging.dart';
+
+// Logger provider for centralized logging
+final loggerProvider = Provider<Logger>((ref) {
+  return Logger('MessagingModule');
+});
 
 // Repository provider
 final messageRepositoryProvider = Provider<MessageRepository>((ref) {
@@ -217,6 +224,59 @@ final messageDeliveryStatusProvider = StreamProvider.family<Map<String, MessageD
   return useCase.getMessageDeliveryStatus(messageId);
 });
 
+// Provider to get a specific message by ID
+final messageFutureProvider = FutureProvider.family<Message?, ({String chatId, String messageId})>((ref, params) async {
+  final repository = ref.watch(messageRepositoryProvider);
+  try {
+    return await repository.getMessageById(params.chatId, params.messageId);
+  } catch (e) {
+    ref.read(loggerProvider).warning('Error fetching message: $e');
+    return null;
+  }
+});
+
+// Provider for thread messages
+final threadMessagesStreamProvider = StreamProvider.family<List<Message>, ({String chatId, String threadParentId})>((ref, params) {
+  final repository = ref.watch(messageRepositoryProvider);
+  return repository.getThreadMessagesStream(params.chatId, params.threadParentId);
+});
+
+// Provider to get unread message count for a chat
+final unreadMessageCountProvider = StreamProvider.family<int, String>((ref, chatId) {
+  final repository = ref.watch(messageRepositoryProvider);
+  final userId = ref.watch(currentUserIdProvider);
+  
+  if (userId == null) return Stream.value(0);
+  
+  return repository.getUnreadMessageCountStream(chatId, userId);
+});
+
+// Provider to load more messages (used for pagination/refresh)
+final loadMoreMessagesProvider = FutureProvider.family<void, String>((ref, chatId) async {
+  final repository = ref.watch(messageRepositoryProvider);
+  final currentMessages = await repository.getChatMessages(chatId, limit: 20);
+  
+  if (currentMessages.isEmpty) return;
+  
+  final oldestMessageTimestamp = currentMessages.last.timestamp;
+  
+  // Load messages older than the oldest message we have
+  await repository.getChatMessagesBefore(
+    chatId, 
+    oldestMessageTimestamp,
+    limit: 20,
+  );
+});
+
+// Provider for searching messages in a chat
+final searchMessagesProvider = FutureProvider.family<List<Message>, ({String chatId, String query})>((ref, params) async {
+  if (params.query.trim().length < 3) return [];
+  
+  final repository = ref.watch(messageRepositoryProvider);
+  // Search for messages with the given query
+  return repository.searchMessages(params.chatId, params.query);
+});
+
 // Action provider to update typing status
 final updateTypingStatusProvider = Provider.family<Future<void> Function(bool), String>((ref, chatId) {
   final useCase = ref.watch(messageUseCaseProvider);
@@ -237,4 +297,4 @@ final updateOnlineStatusProvider = Provider<Future<void> Function(bool)>((ref) {
     if (userId == null) return;
     await useCase.updateUserOnlineStatus(userId, isOnline);
   };
-}); 
+});

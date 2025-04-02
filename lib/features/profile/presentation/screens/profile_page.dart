@@ -135,6 +135,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
       // Add a floating action button for current user to create content
       floatingActionButton: isCurrentUser
           ? FloatingActionButton(
+              heroTag: 'profile_page_fab',
               backgroundColor: AppColors.gold,
               foregroundColor: Colors.black,
               onPressed: () {

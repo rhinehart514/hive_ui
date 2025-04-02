@@ -1,6 +1,5 @@
 import 'package:flutter/foundation.dart';
 import '../../../models/repost.dart';
-import '../../../models/repost_content_type.dart';
 
 enum RepostStatus {
   initial,

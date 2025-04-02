@@ -3,6 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_ui/features/spaces/application/analytics_service.dart';
 import 'package:hive_ui/features/spaces/application/providers.dart';
 import 'package:hive_ui/features/spaces/domain/entities/space_entity.dart';
+import 'package:hive_ui/features/spaces/presentation/providers/space_providers.dart';
+import 'package:hive_ui/features/spaces/presentation/providers/spaces_async_providers.dart' as async_providers;
+import 'package:hive_ui/features/spaces/presentation/providers/user_spaces_providers.dart' as user_providers;
 
 /// Controller for the Spaces feature to handle UI logic and user interactions
 class SpacesController extends StateNotifier<AsyncValue<List<SpaceEntity>>> {
@@ -51,6 +54,24 @@ class SpacesController extends StateNotifier<AsyncValue<List<SpaceEntity>>> {
       state = AsyncValue.data(spaces);
     } catch (e, stack) {
       state = AsyncValue.error(e, stack);
+    }
+  }
+
+  /// Refresh spaces after an update
+  Future<void> refreshAfterUpdate(String spaceId) async {
+    try {
+      // Invalidate any cached state
+      _ref.invalidate(spacesProvider);
+      _ref.invalidate(user_providers.userSpacesProvider);
+      _ref.invalidate(async_providers.spaceByIdProvider(spaceId));
+      
+      // Force a refresh of all spaces
+      await loadAllSpaces(forceRefresh: true);
+      
+      // Track analytics
+      _analyticsService.trackSpaceUpdate(spaceId);
+    } catch (e) {
+      debugPrint('Error refreshing spaces after update: $e');
     }
   }
 
@@ -296,6 +317,8 @@ class SpacesController extends StateNotifier<AsyncValue<List<SpaceEntity>>> {
         return 'Campus Living';
       case SpaceType.fraternityAndSorority:
         return 'Fraternity & Sorority';
+      case SpaceType.hiveExclusive:
+        return 'HIVE Exclusive';
       case SpaceType.other:
         // Try to determine from tags
         if (space.tags.any((tag) => tag.toLowerCase().contains('academic'))) {

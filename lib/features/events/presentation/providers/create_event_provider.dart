@@ -46,6 +46,38 @@ class CreateEventNotifier extends StateNotifier<CreateEventState> {
         _auth = auth ?? FirebaseAuth.instance,
         super(const CreateEventState());
 
+  /// Check if user is an admin of club
+  Future<bool> _isUserClubAdmin(String clubId, String userId) async {
+    try {
+      // Check in club_leader_index collection
+      final leaderIndexDoc = await _firestore
+          .collection('club_leader_index')
+          .doc('${userId}_$clubId')
+          .get();
+      
+      if (leaderIndexDoc.exists) {
+        return true;
+      }
+      
+      // Also check in Space object for admins array
+      final spaceSnapshot = await _firestore
+          .collectionGroup('spaces')
+          .where('id', isEqualTo: clubId)
+          .limit(1)
+          .get();
+          
+      if (spaceSnapshot.docs.isNotEmpty) {
+        final spaceData = spaceSnapshot.docs.first.data();
+        final List<String> admins = List<String>.from(spaceData['admins'] ?? []);
+        return admins.contains(userId);
+      }
+      
+      return false;
+    } catch (e) {
+      return false;
+    }
+  }
+
   /// Create event in a space
   Future<void> createEvent(EventCreationRequest request) async {
     try {
@@ -69,6 +101,18 @@ class CreateEventNotifier extends StateNotifier<CreateEventState> {
           errorMessage: 'You must be signed in to create an event',
         );
         return;
+      }
+
+      // If this is a club event, verify the user is an admin of the club
+      if (request.isClubEvent && request.clubId != null) {
+        final isAdmin = await _isUserClubAdmin(request.clubId!, user.uid);
+        if (!isAdmin) {
+          state = state.copyWith(
+            isLoading: false,
+            errorMessage: 'You must be an admin of this club to create an event',
+          );
+          return;
+        }
       }
 
       // Create event

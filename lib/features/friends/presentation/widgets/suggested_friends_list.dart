@@ -4,8 +4,6 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:hive_ui/features/friends/domain/entities/suggested_friend.dart';
 import 'package:hive_ui/features/friends/presentation/providers/suggested_friends_provider.dart' as local_providers;
 import 'package:hive_ui/features/friends/presentation/widgets/suggested_friend_card.dart';
-import 'package:hive_ui/providers/friend_providers.dart';
-import 'package:hive_ui/theme/app_colors.dart';
 import 'package:go_router/go_router.dart';
 
 /// A widget that displays a list of suggested friends

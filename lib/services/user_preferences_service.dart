@@ -264,24 +264,8 @@ class UserPreferencesService {
     if (_preferences == null) {
       debugPrint(
           'UserPreferencesService: Not initialized. Attempting to initialize now...');
-      // Instead of throwing an error, try to initialize
-      try {
-        // This will synchronously initialize shared preferences using Platform Channels
-        // which may be slower but more reliable than the async approach
-        SharedPreferences.setMockInitialValues({});
-        _preferences = SharedPreferences.getInstance() as SharedPreferences?;
-
-        // If initialization is still failing, we'll use an in-memory fallback
-        if (_preferences == null) {
-          debugPrint(
-              'UserPreferencesService: Using fallback empty preferences');
-        } else {
-          debugPrint(
-              'UserPreferencesService: Successfully initialized synchronously');
-        }
-      } catch (e) {
-        debugPrint('UserPreferencesService: Failed to create fallback: $e');
-      }
+      // Throw an exception that will be handled by the caller
+      throw Exception('UserPreferencesService not initialized. Call initialize() first.');
     }
   }
 

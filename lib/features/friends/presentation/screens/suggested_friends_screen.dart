@@ -86,7 +86,7 @@ class _SuggestedFriendsScreenState extends ConsumerState<SuggestedFriendsScreen>
             // Additional suggestions grouped by match type
             if (_selectedFilter == null) ...[
               // If no filter is selected, show all types
-              Expanded(
+              const Expanded(
                 child: SingleChildScrollView(
                   child: Column(
                     children: [
@@ -96,7 +96,7 @@ class _SuggestedFriendsScreenState extends ConsumerState<SuggestedFriendsScreen>
                         limit: 3,
                       ),
                       
-                      const SizedBox(height: 16),
+                      SizedBox(height: 16),
                       
                       SuggestedFriendsList(
                         filterCriteria: MatchCriteria.residence,
@@ -104,7 +104,7 @@ class _SuggestedFriendsScreenState extends ConsumerState<SuggestedFriendsScreen>
                         limit: 3,
                       ),
                       
-                      const SizedBox(height: 16),
+                      SizedBox(height: 16),
                       
                       SuggestedFriendsList(
                         filterCriteria: MatchCriteria.interest,
@@ -112,7 +112,7 @@ class _SuggestedFriendsScreenState extends ConsumerState<SuggestedFriendsScreen>
                         limit: 3,
                       ),
                       
-                      const SizedBox(height: 16),
+                      SizedBox(height: 16),
                     ],
                   ),
                 ),

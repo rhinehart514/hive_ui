@@ -8,6 +8,8 @@ import 'package:hive_ui/services/request_interceptor.dart';
 import 'package:hive_ui/theme/app_colors.dart';
 import 'package:hive_ui/widgets/firebase_stats_widget.dart';
 import 'package:hive_ui/widgets/glassmorphism.dart';
+import 'package:hive_ui/tools/messaging_test_data.dart';
+import 'package:hive_ui/pages/generate_test_messaging_data_screen.dart';
 
 /// Developer tools page for monitoring and debugging app performance
 class DeveloperToolsPage extends ConsumerStatefulWidget {
@@ -28,6 +30,10 @@ class _DeveloperToolsPageState extends ConsumerState<DeveloperToolsPage> {
         title: const Text('Developer Tools'),
         backgroundColor: Colors.black,
         elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () => Navigator.of(context).pop(),
+        ),
       ),
       body: Container(
         decoration: const BoxDecoration(
@@ -49,6 +55,8 @@ class _DeveloperToolsPageState extends ConsumerState<DeveloperToolsPage> {
                   _buildCacheControlSection(),
                   const SizedBox(height: 24),
                   _buildFirebaseSection(),
+                  const SizedBox(height: 24),
+                  _buildMessagingTestSection(),
                 ],
               ),
             ),
@@ -111,6 +119,44 @@ class _DeveloperToolsPageState extends ConsumerState<DeveloperToolsPage> {
           'Reset all Firebase usage counters',
           Icons.restore,
           onTap: _resetFirebaseStats,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildMessagingTestSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildSectionHeader('Messaging Test Data', Icons.message),
+        const SizedBox(height: 16),
+        Row(
+          children: [
+            Expanded(
+              child: _buildActionCard(
+                'Generate Basic Test Data',
+                'Creates mock users and conversations for testing the messaging feature',
+                Icons.add,
+                onTap: _generateTestData,
+              ),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: _buildActionCard(
+                'Advanced Test Options',
+                'Access more detailed options for generating and managing test messaging data',
+                Icons.settings,
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const GenerateTestMessagingDataScreen(),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
         ),
       ],
     );
@@ -281,6 +327,35 @@ class _DeveloperToolsPageState extends ConsumerState<DeveloperToolsPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Error resetting statistics: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      setState(() {
+        _isLoading = false;
+      });
+    }
+  }
+
+  Future<void> _generateTestData() async {
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      // Generate test data
+      await MessagingTestData.generateSampleData();
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Test data has been generated'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error generating test data: $e'),
           backgroundColor: Colors.red,
         ),
       );

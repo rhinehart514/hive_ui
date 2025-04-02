@@ -7,34 +7,19 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import 'package:hive_ui/features/spaces/utils/space_path_fixer.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:hive_ui/features/spaces/domain/entities/space_entity.dart';
+import 'package:hive_ui/features/spaces/domain/entities/space_metrics_entity.dart';
+import 'package:hive_ui/features/spaces/presentation/providers/spaces_repository_provider.dart';
+
+/// Cache duration for space data
+const spaceCacheDuration = Duration(minutes: 15);
 
 /// Provider for space service
 final spaceServiceProvider = Provider<SpaceService>((ref) => SpaceService());
 
 /// Provider for spaces state (with loading, error handling)
-final spacesProvider = FutureProvider<List<Space>>((ref) async {
-  try {
-    // Get current user to determine joined spaces
-    final userData = ref.watch(userProvider);
-    // TODO: In the future, rename joinedClubs to joinedSpaces in the UserData model for clarity
-    final List<String> joinedSpaceIds = userData?.joinedClubs ?? [];
-
-    // Get spaces directly from Firestore
-    final spacesResult = await SpaceService.getSpacesPaginated(limit: 50);
-
-    // Mark spaces as joined based on user data
-    final updatedSpaces = spacesResult.items.map((space) {
-      if (joinedSpaceIds.contains(space.id)) {
-        return space.copyWith(isJoined: true);
-      }
-      return space;
-    }).toList();
-
-    return updatedSpaces;
-  } catch (e, stack) {
-    debugPrint('Error loading spaces: $e\n$stack');
-    rethrow;
-  }
+final spacesProvider = StateNotifierProvider<SpacesNotifier, Map<String, SpaceEntity>>((ref) {
+  return SpacesNotifier(ref);
 });
 
 /// Provider for spaces organized by type from hierarchical Firestore structure
@@ -82,7 +67,10 @@ final hierarchicalSpacesProvider =
         debugPrint('Using SpacePathFixer for $collectionPath...');
         final List<Space> spaces = [];
         final pathFixerSpaces =
-            await SpacePathFixer.getSpacesWithPathDetection(collectionPath);
+            await SpacePathFixer.getSpacesWithPathDetection(
+              collectionPath,
+              includePrivate: false, // Don't include private spaces in explore
+            );
         spaces.addAll(pathFixerSpaces);
 
         // If we didn't find enough spaces, try the regular method with a higher limit
@@ -93,6 +81,7 @@ final hierarchicalSpacesProvider =
             collectionPath: collectionPath,
             limit: 40, // Increased limit to ensure we get enough spaces
             useCache: true,
+            includePrivate: false, // Don't include private spaces in explore
           );
 
           // Add spaces from regular method, avoiding duplicates
@@ -118,15 +107,22 @@ final hierarchicalSpacesProvider =
           debugPrint('WARNING: No spaces found in collection: $collectionPath');
         }
 
-        // Mark spaces as joined based on user data
+        // First mark spaces as joined based on user data
         final updatedSpaces = spaces.map((space) {
           if (joinedSpaceIds.contains(space.id)) {
             return space.copyWith(isJoined: true);
           }
           return space;
         }).toList();
+        
+        // Then filter out spaces that the user has already joined
+        // for the explore section (we want to show only spaces they haven't joined)
+        final exploreSpaces = updatedSpaces.where((space) => 
+          !joinedSpaceIds.contains(space.id)).toList();
 
-        return MapEntry(displayName, updatedSpaces);
+        debugPrint('After filtering joined spaces, showing ${exploreSpaces.length}/${updatedSpaces.length} spaces');
+
+        return MapEntry(displayName, exploreSpaces);
       } catch (e, stack) {
         debugPrint('Error loading spaces for type $collectionPath: $e');
         debugPrint('Stack trace: $stack');
@@ -676,3 +672,196 @@ final paginatedSpacesProvider =
     StateNotifierProvider<PaginatedSpacesNotifier, PaginatedSpacesState>((ref) {
   return PaginatedSpacesNotifier(ref);
 });
+
+/// Provider for recommended spaces filtered to show only public unjoined spaces
+final filteredRecommendedSpacesProvider = FutureProvider<List<Space>>((ref) async {
+  try {
+    // Get current user to determine joined spaces
+    final userData = ref.watch(userProvider);
+    final List<String> joinedSpaceIds = userData?.joinedClubs ?? [];
+    
+    debugPrint('Filtering recommended spaces - user has ${joinedSpaceIds.length} joined spaces');
+    if (joinedSpaceIds.isNotEmpty) {
+      debugPrint('Joined space IDs: ${joinedSpaceIds.join(', ')}');
+    }
+    
+    // Get all public spaces (no private spaces)
+    final spaces = await SpaceService.getSpacesPaginated(
+      limit: 50, 
+      includePrivate: false,
+    );
+    
+    debugPrint('Retrieved ${spaces.items.length} public spaces for recommendation filtering');
+    
+    // Filter out joined spaces
+    final filteredSpaces = spaces.items.where((space) => 
+      !joinedSpaceIds.contains(space.id)).toList();
+    
+    debugPrint('After filtering joined spaces: ${filteredSpaces.length} spaces remain');
+    
+    // Sort by recommendation algorithm (popularity + relevance)
+    filteredSpaces.sort((a, b) => 
+      (b.metrics.memberCount + b.metrics.activeMembers) - 
+      (a.metrics.memberCount + a.metrics.activeMembers));
+    
+    // Log some of the filtered spaces for debugging
+    if (filteredSpaces.isNotEmpty) {
+      final sampleSpaces = filteredSpaces.take(5).toList();
+      debugPrint('Sample recommended spaces after filtering:');
+      for (final space in sampleSpaces) {
+        debugPrint('  - ${space.id}: ${space.name} (joined: ${joinedSpaceIds.contains(space.id)})');
+      }
+    }
+    
+    return filteredSpaces;
+  } catch (e, stack) {
+    debugPrint('Error loading filtered recommended spaces: $e\n$stack');
+    return [];
+  }
+});
+
+/// Provider to get a specific space by ID with caching
+final spaceByIdProvider = Provider.family<AsyncValue<SpaceEntity?>, String>((ref, spaceId) {
+  final spacesNotifier = ref.watch(spacesProvider.notifier);
+  final spaces = ref.watch(spacesProvider);
+  
+  // If space is already in cache and not expired, return it
+  if (spaces.containsKey(spaceId) && !spacesNotifier.isExpired(spaceId)) {
+    return AsyncValue.data(spaces[spaceId]);
+  }
+  
+  // Otherwise, fetch it
+  return ref.watch(_fetchSpaceProvider(spaceId));
+});
+
+/// Provider for space metrics with caching
+final spaceMetricsProvider = StateNotifierProvider<SpaceMetricsNotifier, Map<String, SpaceMetricsEntity>>((ref) {
+  return SpaceMetricsNotifier(ref);
+});
+
+/// Provider to get metrics for a specific space with caching
+final spaceMetricsByIdProvider = Provider.family<AsyncValue<SpaceMetricsEntity>, String>((ref, spaceId) {
+  final metricsNotifier = ref.watch(spaceMetricsProvider.notifier);
+  final metrics = ref.watch(spaceMetricsProvider);
+  
+  // If metrics are already in cache and not expired, return them
+  if (metrics.containsKey(spaceId) && !metricsNotifier.isExpired(spaceId)) {
+    return AsyncValue.data(metrics[spaceId]!);
+  }
+  
+  // Otherwise, fetch them
+  return ref.watch(_fetchSpaceMetricsProvider(spaceId));
+});
+
+/// Internal provider to fetch a space from the repository
+final _fetchSpaceProvider = FutureProvider.family<SpaceEntity?, String>((ref, spaceId) async {
+  final repository = ref.watch(spaceRepositoryProvider);
+  final space = await repository.getSpaceById(spaceId);
+  
+  // If space was found, add it to the cache
+  if (space != null) {
+    ref.read(spacesProvider.notifier).addSpace(space);
+  }
+  
+  return space;
+});
+
+/// Internal provider to fetch space metrics from the repository
+final _fetchSpaceMetricsProvider = FutureProvider.family<SpaceMetricsEntity, String>((ref, spaceId) async {
+  final repository = ref.watch(spaceRepositoryProvider);
+  final metrics = SpaceMetricsEntity.initial(spaceId);
+  
+  // Add metrics to cache
+  ref.read(spaceMetricsProvider.notifier).addMetrics(metrics);
+  
+  return metrics;
+});
+
+/// Notifier to manage the spaces cache
+class SpacesNotifier extends StateNotifier<Map<String, SpaceEntity>> {
+  final Ref _ref;
+  final Map<String, DateTime> _cacheTimestamps = {};
+  
+  SpacesNotifier(this._ref) : super({});
+  
+  /// Add a space to the cache
+  void addSpace(SpaceEntity space) {
+    _cacheTimestamps[space.id] = DateTime.now();
+    state = {...state, space.id: space};
+  }
+  
+  /// Remove a space from the cache
+  void removeSpace(String spaceId) {
+    _cacheTimestamps.remove(spaceId);
+    final newState = Map<String, SpaceEntity>.from(state);
+    newState.remove(spaceId);
+    state = newState;
+  }
+  
+  /// Refresh a space in the cache
+  Future<void> refreshSpace(String spaceId) async {
+    removeSpace(spaceId);
+    final repository = _ref.read(spaceRepositoryProvider);
+    final space = await repository.getSpaceById(spaceId);
+    if (space != null) {
+      addSpace(space);
+    }
+  }
+  
+  /// Check if a cached space has expired
+  bool isExpired(String spaceId) {
+    final timestamp = _cacheTimestamps[spaceId];
+    if (timestamp == null) return true;
+    
+    return DateTime.now().difference(timestamp) > spaceCacheDuration;
+  }
+  
+  /// Clear all spaces from the cache
+  void clearCache() {
+    _cacheTimestamps.clear();
+    state = {};
+  }
+}
+
+/// Notifier to manage the space metrics cache
+class SpaceMetricsNotifier extends StateNotifier<Map<String, SpaceMetricsEntity>> {
+  final Ref _ref;
+  final Map<String, DateTime> _cacheTimestamps = {};
+  
+  SpaceMetricsNotifier(this._ref) : super({});
+  
+  /// Add metrics to the cache
+  void addMetrics(SpaceMetricsEntity metrics) {
+    _cacheTimestamps[metrics.spaceId] = DateTime.now();
+    state = {...state, metrics.spaceId: metrics};
+  }
+  
+  /// Remove metrics from the cache
+  void removeMetrics(String spaceId) {
+    _cacheTimestamps.remove(spaceId);
+    final newState = Map<String, SpaceMetricsEntity>.from(state);
+    newState.remove(spaceId);
+    state = newState;
+  }
+  
+  /// Refresh metrics in the cache
+  Future<void> refreshMetrics(String spaceId) async {
+    removeMetrics(spaceId);
+    final metrics = SpaceMetricsEntity.initial(spaceId);
+    addMetrics(metrics);
+  }
+  
+  /// Check if cached metrics have expired
+  bool isExpired(String spaceId) {
+    final timestamp = _cacheTimestamps[spaceId];
+    if (timestamp == null) return true;
+    
+    return DateTime.now().difference(timestamp) > spaceCacheDuration;
+  }
+  
+  /// Clear all metrics from the cache
+  void clearCache() {
+    _cacheTimestamps.clear();
+    state = {};
+  }
+}

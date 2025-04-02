@@ -4,16 +4,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'dart:async';
-import 'dart:io';
-import 'package:image_picker/image_picker.dart';
 import 'package:hive_ui/features/spaces/domain/entities/space_entity.dart';
 import 'package:hive_ui/features/spaces/presentation/providers/create_space_provider.dart';
-import 'package:hive_ui/features/spaces/presentation/providers/space_provider.dart';
 import 'package:hive_ui/features/spaces/presentation/providers/space_providers.dart';
 import 'package:hive_ui/services/analytics_service.dart';
 import 'package:hive_ui/theme/app_colors.dart';
 import 'package:hive_ui/widgets/hive_app_bar.dart';
 import 'package:hive_ui/providers/user_providers.dart';
+import 'package:hive_ui/core/navigation/routes.dart';
 
 class CreateSpacePage extends ConsumerStatefulWidget {
   const CreateSpacePage({super.key});
@@ -27,8 +25,9 @@ class _CreateSpacePageState extends ConsumerState<CreateSpacePage> {
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _descriptionController = TextEditingController();
 
-  SpaceType _spaceType = SpaceType.studentOrg;
-  bool _selectedPrivate = true; // This will be forced to true by business rules
+  // Always set space type to hiveExclusive
+  final SpaceType _spaceType = SpaceType.hiveExclusive;
+  final bool _selectedPrivate = true; // This will be forced to true by business rules
   bool _showErrors = false;
   bool _isCreating = false;
   String? _nameErrorText;
@@ -40,6 +39,7 @@ class _CreateSpacePageState extends ConsumerState<CreateSpacePage> {
     SpaceType.universityOrg: Icons.account_balance.codePoint,
     SpaceType.campusLiving: Icons.home.codePoint,
     SpaceType.fraternityAndSorority: Icons.diversity_3.codePoint,
+    SpaceType.hiveExclusive: Icons.verified.codePoint,
     SpaceType.other: Icons.category.codePoint,
   };
   
@@ -54,6 +54,8 @@ class _CreateSpacePageState extends ConsumerState<CreateSpacePage> {
         return Icons.home;
       case SpaceType.fraternityAndSorority:
         return Icons.diversity_3;
+      case SpaceType.hiveExclusive:
+        return Icons.verified;
       case SpaceType.other:
         return Icons.category;
     }
@@ -203,7 +205,7 @@ class _CreateSpacePageState extends ConsumerState<CreateSpacePage> {
         Future.delayed(const Duration(milliseconds: 300), () {
           if (!mounted) return;
           // Navigate to the space details page
-          GoRouter.of(context).pushReplacement('/spaces/${createdSpace.id}');
+          GoRouter.of(context).pushReplacement(AppRoutes.getSpaceDetailPath('hive_exclusive', createdSpace.id));
         });
       } else {
         // If no space was returned, just go back to spaces list
@@ -535,8 +537,8 @@ class _CreateSpacePageState extends ConsumerState<CreateSpacePage> {
                 ),
                 const SizedBox(height: 24),
 
-                // Space Type
-                _buildSpaceTypeSelector(),
+                // HIVE Exclusive Badge (replacing space type selection)
+                _buildHiveExclusiveBadge(),
 
                 // Privacy toggle - now shows info that space will be private
                 const SizedBox(height: 24),
@@ -647,7 +649,8 @@ class _CreateSpacePageState extends ConsumerState<CreateSpacePage> {
     );
   }
 
-  Widget _buildSpaceTypeSelector() {
+  // New widget to display HIVE Exclusive badge instead of space type selection
+  Widget _buildHiveExclusiveBadge() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -661,56 +664,49 @@ class _CreateSpacePageState extends ConsumerState<CreateSpacePage> {
             color: Colors.white,
           ),
         ),
-        const SizedBox(height: 8),
-        Text(
-          'All new spaces are HIVE exclusive and will appear in the HIVE exclusive category',
-          style: GoogleFonts.inter(
-            fontSize: 14,
-            color: AppColors.gold,
-          ),
-        ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 12),
         
-        // Space type selection
-        Wrap(
-          spacing: 12,
-          runSpacing: 12,
-          children: [
-            _buildSpaceTypeOption(SpaceType.studentOrg, 'Student Org'),
-            _buildSpaceTypeOption(SpaceType.universityOrg, 'University'),
-            _buildSpaceTypeOption(SpaceType.campusLiving, 'Campus Living'),
-            _buildSpaceTypeOption(SpaceType.fraternityAndSorority, 'Greek Life'),
-            _buildSpaceTypeOption(SpaceType.other, 'Other'),
-          ],
+        // HIVE Exclusive badge
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          decoration: BoxDecoration(
+            color: AppColors.gold.withOpacity(0.2),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: AppColors.gold),
+          ),
+          child: Row(
+            children: [
+              const Icon(
+                Icons.verified,
+                color: AppColors.gold,
+                size: 24,
+              ),
+              const SizedBox(width: 12),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'HIVE Exclusive',
+                    style: GoogleFonts.outfit(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.white,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'All new spaces are HIVE exclusive',
+                    style: GoogleFonts.inter(
+                      fontSize: 14,
+                      color: Colors.white70,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
       ],
-    );
-  }
-
-  Widget _buildSpaceTypeOption(SpaceType type, String text) {
-    final isSelected = _spaceType == type;
-    return InkWell(
-      onTap: () {
-        if (!mounted) return;
-        setState(() => _spaceType = type);
-      },
-      borderRadius: BorderRadius.circular(12),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        decoration: BoxDecoration(
-          color: isSelected ? AppColors.gold.withOpacity(0.2) : Colors.black26,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.white24),
-        ),
-        child: Text(
-          text,
-          style: GoogleFonts.inter(
-            fontSize: 16,
-            color: Colors.white,
-            fontWeight: isSelected ? FontWeight.w500 : FontWeight.normal,
-          ),
-        ),
-      ),
     );
   }
 } 

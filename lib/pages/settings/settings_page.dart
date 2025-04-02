@@ -151,19 +151,19 @@ class SettingsPage extends ConsumerWidget {
                       onTap: () => _showAboutDialog(context),
                     ),
 
-                    if (kDebugMode) ...[
-                      const SizedBox(height: 24),
-                      _buildSectionHeader('Developer'),
-                      const SizedBox(height: 12),
-                      _buildSettingCard(
-                        context,
-                        icon: Icons.developer_mode,
-                        title: 'Developer Tools',
-                        subtitle: 'Debug and performance tools',
-                        onTap: () => context.push(AppRoutes.developerTools),
-                      ),
-                    ],
+                    // Developer Section
+                    const SizedBox(height: 24),
+                    _buildSectionHeader('Developer'),
+                    const SizedBox(height: 12),
+                    _buildSettingCard(
+                      context,
+                      icon: Icons.developer_mode,
+                      title: 'Developer Tools',
+                      subtitle: 'Debug and performance tools',
+                      onTap: () => GoRouter.of(context).push('/dev/tools'),
+                    ),
 
+                    // Sign Out button
                     const SizedBox(height: 24),
                     _buildLogoutButton(context, ref),
                     const SizedBox(height: 16),

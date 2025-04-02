@@ -4,6 +4,8 @@ import 'package:hive_ui/models/event.dart';
 import 'package:hive_ui/providers/feed_provider.dart';
 import 'package:hive_ui/providers/profile_provider.dart';
 import 'package:hive_ui/theme/app_colors.dart';
+import 'package:hive_ui/components/event_card/event_card.dart';
+import 'package:hive_ui/features/spaces/data/repositories/space_repository_impl.dart';
 import 'dart:ui';
 import 'dart:math';
 import '../styles/feed_theme.dart';
@@ -11,6 +13,11 @@ import 'package:intl/intl.dart';
 import 'package:hive_ui/theme/huge_icons.dart';
 import 'package:confetti/confetti.dart';
 import 'package:google_fonts/google_fonts.dart';
+
+// Add the spaceRepositoryProvider
+final spaceRepositoryProvider = Provider<SpaceRepositoryImpl>((ref) {
+  return SpaceRepositoryImpl();
+});
 
 /// A beautiful event detail page with premium HIVE-branded design
 class EventDetailPage extends ConsumerStatefulWidget {
@@ -33,6 +40,7 @@ class _EventDetailPageState extends ConsumerState<EventDetailPage>
   late ConfettiController _confettiController;
   late AnimationController _animationController;
   late Animation<double> _blurAnimation;
+  late Future<List<Event>> _relatedEventsFuture;
 
   @override
   void initState() {
@@ -52,6 +60,13 @@ class _EventDetailPageState extends ConsumerState<EventDetailPage>
 
     _blurAnimation = Tween<double>(begin: 0, end: 10).animate(
         CurvedAnimation(parent: _animationController, curve: Curves.easeInOut));
+
+    // Initialize related events future
+    if (widget.event.spaceId != null) {
+      _relatedEventsFuture = ref.read(spaceRepositoryProvider).getSpaceEvents(widget.event.spaceId!);
+    } else {
+      _relatedEventsFuture = Future.value([]);
+    }
   }
 
   @override
@@ -142,6 +157,9 @@ class _EventDetailPageState extends ConsumerState<EventDetailPage>
                     // External link if available
                     if (widget.event.link.isNotEmpty)
                       _buildLinkSection(),
+
+                    // Add related events section before the bottom spacing
+                    if (widget.event.spaceId != null) _buildRelatedEventsSection(),
 
                     // Space at the bottom for the action bar
                     const SizedBox(height: 100),
@@ -313,7 +331,7 @@ class _EventDetailPageState extends ConsumerState<EventDetailPage>
               // Location preview
               _buildKeyDetailRow(
                 iconData: HugeIcons.spaces,
-                title: widget.event.location ?? 'Online Event',
+                title: widget.event.location.isEmpty ? 'Online Event' : widget.event.location,
                 subtitle: 'Tap for directions',
               ),
             ],
@@ -545,6 +563,82 @@ class _EventDetailPageState extends ConsumerState<EventDetailPage>
                 ),
               ),
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRelatedEventsSection() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Other Events in this Space',
+            style: FeedTheme.titleMedium.copyWith(
+              color: AppColors.yellow,
+            ),
+          ),
+          const SizedBox(height: 12),
+          FutureBuilder<List<Event>>(
+            future: _relatedEventsFuture,
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const Center(
+                  child: CircularProgressIndicator(
+                    valueColor: AlwaysStoppedAnimation<Color>(AppColors.yellow),
+                  ),
+                );
+              }
+
+              if (snapshot.hasError) {
+                return Center(
+                  child: Text(
+                    'Error loading events',
+                    style: FeedTheme.bodyMedium.copyWith(
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                );
+              }
+
+              final events = snapshot.data ?? [];
+              // Filter out current event and past events
+              final otherEvents = events
+                  .where((e) => e.id != widget.event.id && e.endDate.isAfter(DateTime.now()))
+                  .toList();
+
+              if (otherEvents.isEmpty) {
+                return Center(
+                  child: Text(
+                    'No other upcoming events',
+                    style: FeedTheme.bodyMedium.copyWith(
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                );
+              }
+
+              return ListView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: otherEvents.length,
+                itemBuilder: (context, index) {
+                  final event = otherEvents[index];
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: HiveEventCard(
+                      key: ValueKey('related_event_${event.id}'),
+                      event: event,
+                      isRepost: false,
+                      followsClub: false,
+                    ),
+                  );
+                },
+              );
+            },
           ),
         ],
       ),

@@ -19,59 +19,79 @@ class ProfilePhotoSheet extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return Container(
-      decoration: BoxDecoration(
-        color: Colors.black,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-      ),
+      color: Colors.black,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // Header with close button
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
-            child: Row(
-              children: [
-                Text(
-                  'Add Profile Photo',
-                  style: GoogleFonts.outfit(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.white,
-                  ),
-                ),
-                const Spacer(),
-                IconButton(
-                  icon: const Icon(Icons.close, color: Colors.white),
-                  onPressed: () {
-                    // Restore navigation bar before closing
-                    _restoreNavigationBar();
-                    Navigator.pop(context);
-                  },
+          Container(
+            decoration: BoxDecoration(
+              color: Colors.black,
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.5),
+                  blurRadius: 10,
+                  spreadRadius: 5,
                 ),
               ],
             ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Header with close button
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+                  child: Row(
+                    children: [
+                      Text(
+                        'Add Profile Photo',
+                        style: GoogleFonts.outfit(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.white,
+                        ),
+                      ),
+                      const Spacer(),
+                      IconButton(
+                        icon: const Icon(Icons.close, color: Colors.white),
+                        onPressed: () {
+                          // Restore navigation bar before closing
+                          _restoreNavigationBar();
+                          Navigator.pop(context);
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+                
+                const SizedBox(height: 20),
+                
+                // Take new photo button
+                _buildOptionButton(
+                  icon: Icons.camera_alt,
+                  label: 'Take New Photo', 
+                  onTap: () => _handleTakePhoto(context, ref),
+                ),
+                
+                const SizedBox(height: 16),
+                
+                // Choose from gallery button
+                _buildOptionButton(
+                  icon: Icons.photo_library,
+                  label: 'Choose from Gallery',
+                  onTap: () => _handleChooseGallery(context, ref),
+                ),
+                
+                // Add padding at bottom for safe area
+                SizedBox(height: MediaQuery.of(context).padding.bottom + 16),
+              ],
+            ),
           ),
-          
-          const SizedBox(height: 20),
-          
-          // Take new photo button
-          _buildOptionButton(
-            icon: Icons.camera_alt,
-            label: 'Take New Photo', 
-            onTap: () => _handleTakePhoto(context, ref),
+          // Add extra black space to ensure coverage of navigation bar
+          Container(
+            color: Colors.black,
+            height: 100, // Extra height to ensure coverage
           ),
-          
-          const SizedBox(height: 16),
-          
-          // Choose from gallery button
-          _buildOptionButton(
-            icon: Icons.photo_library,
-            label: 'Choose from Gallery',
-            onTap: () => _handleChooseGallery(context, ref),
-          ),
-          
-          // Add padding at bottom for safe area
-          SizedBox(height: MediaQuery.of(context).padding.bottom + 16),
         ],
       ),
     );
@@ -184,10 +204,10 @@ Future<void> showProfilePhotoSheet(
   // Use haptic feedback for better UX
   HapticFeedback.mediumImpact();
   
-  // Hide the navigation bar when showing the modal
+  // Completely hide system UI including navigation bar
   SystemChrome.setEnabledSystemUIMode(
     SystemUiMode.immersiveSticky,
-    overlays: [SystemUiOverlay.top],
+    overlays: [], // Explicitly specify no overlays to ensure navigation bar is hidden
   );
   
   // Show modal bottom sheet
@@ -195,8 +215,21 @@ Future<void> showProfilePhotoSheet(
     context: context,
     backgroundColor: Colors.transparent,
     isScrollControlled: true,
-    builder: (context) => ProfilePhotoSheet(
-      onImageSelected: onImageSelected,
+    isDismissible: true,
+    enableDrag: true,
+    barrierColor: Colors.black.withOpacity(0.5),
+    useSafeArea: false, // Don't use safe area to allow full extension
+    builder: (context) => Padding(
+      padding: EdgeInsets.only(top: MediaQuery.of(context).padding.top),
+      child: Container(
+        decoration: const BoxDecoration(
+          color: Colors.black,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+        ),
+        child: ProfilePhotoSheet(
+          onImageSelected: onImageSelected,
+        ),
+      ),
     ),
   ).then((_) {
     // Ensure navigation bar is restored when sheet is dismissed

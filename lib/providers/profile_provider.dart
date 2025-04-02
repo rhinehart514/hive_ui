@@ -367,8 +367,16 @@ class ProfileNotifier extends StateNotifier<ProfileState> {
         'updatedAt': FieldValue.serverTimestamp(),
       });
 
-      // Reload profile to get updated data
-      await loadProfile();
+      // Update local state
+      if (state.profile != null) {
+        state = state.copyWith(
+          profile: state.profile!.copyWith(
+            savedEvents: updatedEvents,
+            eventCount: (state.profile!.eventCount ?? 0) + 1,
+          ),
+          isLoading: false,
+        );
+      }
     } catch (e) {
       state = state.copyWith(
         isLoading: false,
@@ -395,8 +403,7 @@ class ProfileNotifier extends StateNotifier<ProfileState> {
       final currentEvents = state.profile?.savedEvents ?? [];
 
       // Remove the event
-      final updatedEvents =
-          currentEvents.where((e) => e.id != eventId).toList();
+      final updatedEvents = currentEvents.where((e) => e.id != eventId).toList();
 
       // Update in Firestore
       await _firestore.collection('users').doc(currentUser.uid).update({
@@ -405,8 +412,16 @@ class ProfileNotifier extends StateNotifier<ProfileState> {
         'updatedAt': FieldValue.serverTimestamp(),
       });
 
-      // Reload profile to get updated data
-      await loadProfile();
+      // Update local state
+      if (state.profile != null) {
+        state = state.copyWith(
+          profile: state.profile!.copyWith(
+            savedEvents: updatedEvents,
+            eventCount: (state.profile!.eventCount ?? 1) - 1,
+          ),
+          isLoading: false,
+        );
+      }
     } catch (e) {
       state = state.copyWith(
         isLoading: false,
@@ -621,12 +636,15 @@ class ProfileNotifier extends StateNotifier<ProfileState> {
   /// Add an interest to the user profile
   Future<void> addInterest(String interest) async {
     try {
+      state = state.copyWith(isLoading: true, error: null);
+      
       final currentUser = FirebaseAuth.instance.currentUser;
       if (currentUser == null) throw 'No authenticated user found';
       
       // Trim and validate interest
       final trimmedInterest = interest.trim();
       if (trimmedInterest.isEmpty) {
+        state = state.copyWith(isLoading: false);
         return; // Skip empty interests
       }
       
@@ -638,12 +656,33 @@ class ProfileNotifier extends StateNotifier<ProfileState> {
       // Check if interest already exists (case-insensitive)
       final existingInterests = state.profile?.interests ?? [];
       if (existingInterests.any((i) => i.toLowerCase() == trimmedInterest.toLowerCase())) {
+        state = state.copyWith(isLoading: false);
         return; // Already exists
       }
       
-      // Update Firestore
-      await _firestore.collection('users').doc(currentUser.uid).update({
-        'interests': FieldValue.arrayUnion([trimmedInterest]),
+      // Update Firestore with transaction for reliability
+      await _firestore.runTransaction((transaction) async {
+        // Get the current document
+        final docRef = _firestore.collection('users').doc(currentUser.uid);
+        final docSnapshot = await transaction.get(docRef);
+        
+        if (!docSnapshot.exists) {
+          throw 'User document not found';
+        }
+        
+        // Get current interests array or create empty one
+        List<dynamic> currentInterests = docSnapshot.data()?['interests'] ?? [];
+        
+        // Add the new interest if it doesn't exist
+        if (!currentInterests.contains(trimmedInterest)) {
+          currentInterests.add(trimmedInterest);
+          
+          // Update the document
+          transaction.update(docRef, {
+            'interests': currentInterests,
+            'updatedAt': FieldValue.serverTimestamp(),
+          });
+        }
       });
       
       // Update local state
@@ -652,28 +691,60 @@ class ProfileNotifier extends StateNotifier<ProfileState> {
         final updatedProfile = state.profile!.copyWith(
           interests: List<String>.from(updatedInterests),
         );
-        state = state.copyWith(profile: updatedProfile);
+        state = state.copyWith(profile: updatedProfile, isLoading: false);
+      } else {
+        // Reload profile if state was null
+        await refreshProfile();
       }
+      
+      debugPrint('Interest added successfully: $trimmedInterest');
     } catch (e) {
       debugPrint('Error adding interest: $e');
+      state = state.copyWith(
+        isLoading: false,
+        error: 'Failed to add tag: $e',
+      );
     }
   }
   
   /// Remove an interest from the user profile
   Future<void> removeInterest(String interest) async {
     try {
+      state = state.copyWith(isLoading: true, error: null);
+      
       final currentUser = FirebaseAuth.instance.currentUser;
       if (currentUser == null) throw 'No authenticated user found';
       
       // Trim interest
       final trimmedInterest = interest.trim();
       if (trimmedInterest.isEmpty) {
+        state = state.copyWith(isLoading: false);
         return; // Skip empty interests
       }
       
-      // Update Firestore
-      await _firestore.collection('users').doc(currentUser.uid).update({
-        'interests': FieldValue.arrayRemove([trimmedInterest]),
+      // Update Firestore with transaction for reliability
+      await _firestore.runTransaction((transaction) async {
+        // Get the current document
+        final docRef = _firestore.collection('users').doc(currentUser.uid);
+        final docSnapshot = await transaction.get(docRef);
+        
+        if (!docSnapshot.exists) {
+          throw 'User document not found';
+        }
+        
+        // Get current interests array or create empty one
+        List<dynamic> currentInterests = docSnapshot.data()?['interests'] ?? [];
+        
+        // Remove the interest if it exists
+        if (currentInterests.contains(trimmedInterest)) {
+          currentInterests.remove(trimmedInterest);
+          
+          // Update the document
+          transaction.update(docRef, {
+            'interests': currentInterests,
+            'updatedAt': FieldValue.serverTimestamp(),
+          });
+        }
       });
       
       // Update local state
@@ -684,10 +755,19 @@ class ProfileNotifier extends StateNotifier<ProfileState> {
         final updatedProfile = state.profile!.copyWith(
           interests: List<String>.from(updatedInterests),
         );
-        state = state.copyWith(profile: updatedProfile);
+        state = state.copyWith(profile: updatedProfile, isLoading: false);
+      } else {
+        // Reload profile if state was null
+        await refreshProfile();
       }
+      
+      debugPrint('Interest removed successfully: $trimmedInterest');
     } catch (e) {
       debugPrint('Error removing interest: $e');
+      state = state.copyWith(
+        isLoading: false,
+        error: 'Failed to remove tag: $e',
+      );
     }
   }
 }

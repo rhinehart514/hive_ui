@@ -14,7 +14,7 @@ class DebugLauncher extends StatelessWidget {
   const DebugLauncher({
     Key? key,
     required this.child,
-    this.visible = true,
+    this.visible = false,
   }) : super(key: key);
 
   @override

@@ -2,22 +2,21 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/material.dart';
 import '../models/event.dart';
 import '../services/rss_service.dart';
+import 'package:hive_ui/services/event_service.dart';
 
-/// Provider for all events - now using Firestore first approach
+/// Provider for all events
 final eventsProvider = FutureProvider.autoDispose<List<Event>>((ref) async {
-  // Use Firestore-first approach for better performance and cost efficiency
-  // This will fallback to RSS if needed automatically
+  // Get current time
+  final now = DateTime.now();
+
+  // Load events from Firestore
   final events = await RssService.loadEventsFromFirestore(
     includeExpired: false,
-    limit: 100,
+    limit: 50,
   );
 
-  // Set up listener for refresh
-  ref.onDispose(() {
-    // Any cleanup logic if needed
-  });
-
-  return events;
+  // Filter out events that have already started
+  return events.where((event) => event.startDate.isAfter(now)).toList();
 });
 
 /// Provider for refreshing events (force refresh)
@@ -102,17 +101,19 @@ final todayEventsProvider =
 });
 
 /// Provider for getting this week's events (next 7 days)
-final thisWeekEventsProvider =
-    FutureProvider.autoDispose<List<Event>>((ref) async {
+final thisWeekEventsProvider = FutureProvider.autoDispose<List<Event>>((ref) async {
   final now = DateTime.now();
   final weekEnd = DateTime(now.year, now.month, now.day + 7);
 
-  return await RssService.loadEventsFromFirestore(
+  final events = await RssService.loadEventsFromFirestore(
     includeExpired: false,
     limit: 50,
     startDate: now,
     endDate: weekEnd,
   );
+
+  // Filter out events that have already started
+  return events.where((event) => event.startDate.isAfter(now)).toList();
 });
 
 /// Provider for getting events in a date range
@@ -164,6 +165,12 @@ final searchEventsProvider =
           event.description.toLowerCase().contains(lowercaseQuery) ||
           event.category.toLowerCase().contains(lowercaseQuery))
       .toList();
+});
+
+/// Provider for getting events that a user has saved/RSVPed to
+final userSavedEventsProvider = FutureProvider.family<List<Event>, String>((ref, userId) async {
+  // Get both saved and RSVPed events since they are the same
+  return await EventService.getRsvpedEvents();
 });
 
 // Selected event category state

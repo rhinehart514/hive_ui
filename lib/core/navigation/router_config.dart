@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/widgets.dart';
 import 'package:go_router/go_router.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_ui/core/navigation/routes.dart';
 import 'package:hive_ui/core/navigation/transitions.dart';
 import 'package:hive_ui/shell.dart';
-import 'package:hive_ui/theme/app_colors.dart';
 import 'package:hive_ui/models/space.dart';
+import 'package:hive_ui/features/spaces/presentation/providers/spaces_async_providers.dart';
 
 // Page imports
 import 'package:hive_ui/pages/landing_page.dart';
@@ -23,7 +25,6 @@ import 'package:hive_ui/features/messaging/presentation/screens/chat_list_screen
 import 'package:hive_ui/features/messaging/presentation/screens/chat_screen.dart';
 import 'package:hive_ui/features/messaging/presentation/screens/chat_creation_screen.dart';
 import 'package:hive_ui/features/spaces/presentation/pages/spaces_page.dart';
-import 'package:hive_ui/features/spaces/presentation/pages/spaces_page_revamp.dart';
 import 'package:hive_ui/features/spaces/presentation/pages/create_space_page.dart';
 import 'package:hive_ui/features/spaces/presentation/pages/create_space_splash_page.dart';
 import 'package:hive_ui/features/events/presentation/pages/create_event_page.dart';
@@ -32,20 +33,21 @@ import 'package:hive_ui/services/admin_service.dart';
 import 'package:hive_ui/pages/quote_repost_page.dart';
 import 'package:hive_ui/models/event.dart';
 // Settings pages
-import 'package:hive_ui/pages/settings/settings_page.dart' as old_settings;
 import 'package:hive_ui/pages/settings/account_settings_page.dart';
 import 'package:hive_ui/pages/settings/privacy_settings_page.dart';
 import 'package:hive_ui/pages/settings/notification_settings_page.dart';
 import 'package:hive_ui/pages/settings/appearance_settings_page.dart';
 import 'package:hive_ui/features/feed/presentation/pages/event_detail_page.dart';
-import 'package:hive_ui/models/event.dart';
 import 'package:hive_ui/pages/photo_view_page.dart';
 import 'package:hive_ui/features/settings/presentation/pages/settings_page.dart';
-import 'package:hive_ui/pages/main_feed.dart';
+import 'package:hive_ui/pages/main_feed.dart' as legacy;
+import 'package:hive_ui/features/feed/presentation/pages/feed_page.dart';
 import 'package:hive_ui/features/friends/presentation/screens/suggested_friends_screen.dart';
 import 'package:hive_ui/features/profile/presentation/pages/profile_photo_page.dart';
+import 'package:hive_ui/features/post/presentation/pages/create_post_page.dart';
 // Test pages
 import 'package:hive_ui/components/event_card/event_card_test_page.dart';
+import 'package:hive_ui/features/clubs/presentation/widgets/space_detail/space_detail_screen.dart';
 
 /// Error display page for navigation errors
 class ErrorDisplayPage extends StatelessWidget {
@@ -90,7 +92,14 @@ class ErrorDisplayPage extends StatelessWidget {
                 ),
                 const SizedBox(height: 24),
                 ElevatedButton(
-                  onPressed: () => GoRouter.of(context).pop(),
+                  onPressed: () {
+                    // Try to pop first, if that fails navigate to home
+                    if (context.canPop()) {
+                      context.pop();
+                    } else {
+                      context.go('/home');
+                    }
+                  },
                   child: const Text('Go Back'),
                 ),
               ],
@@ -202,16 +211,23 @@ final GoRouter appRouter = GoRouter(
     // Quote repost page route
     GoRoute(
       path: AppRoutes.quoteRepost,
-      name: AppRoutes.quoteRepost.substring(1).replaceAll('-', '_'),
+      name: 'quote_repost',
       pageBuilder: _buildPageTransition(
         (context, state) {
-          final event = state.extra as Event;
-          return QuoteRepostPage(
-            event: event,
-            onComplete: (state.uri.queryParameters['onComplete'] == 'true') 
-                ? (bool success) {} 
-                : null,
-          );
+          try {
+            final event = state.extra as Event;
+            return QuoteRepostPage(
+              event: event,
+              onComplete: (state.uri.queryParameters['onComplete'] == 'true') 
+                  ? (bool success) {} 
+                  : null,
+            );
+          } catch (e) {
+            debugPrint('Error loading QuoteRepostPage: $e');
+            return ErrorDisplayPage(
+              message: 'Unable to load quote repost page',
+            );
+          }
         },
         type: TransitionType.cupertinoPush,
       ),
@@ -226,11 +242,14 @@ final GoRouter appRouter = GoRouter(
         // Feed branch
         StatefulShellBranch(
           routes: [
-            // Home route using MainFeed component from main_feed.dart
+            // Home route - can switch between implementations
             GoRoute(
               path: AppRoutes.home,
               pageBuilder: _buildPageTransition(
-                (context, state) => const MainFeed(),
+                // Use the new optimized FeedPage implementation
+                (context, state) => const FeedPage(),
+                // Legacy implementation commented out
+                // (context, state) => const legacy.MainFeed(),
               ),
               routes: [
                 // Event detail route
@@ -298,6 +317,14 @@ final GoRouter appRouter = GoRouter(
                   ),
                 ),
                 GoRoute(
+                  path: AppRoutes.createPost,
+                  name: 'create_post',
+                  pageBuilder: _buildPageTransition(
+                    (context, state) => const CreatePostPage(),
+                    type: TransitionType.cupertinoModal,
+                  ),
+                ),
+                GoRoute(
                   path: 'photo/:photoId',
                   pageBuilder: _buildPageTransition(
                     (context, state) {
@@ -332,71 +359,54 @@ final GoRouter appRouter = GoRouter(
             GoRoute(
               path: AppRoutes.spaces,
               pageBuilder: _buildPageTransition(
-                (context, state) {
-                  // Check if we should show the new spaces page
-                  final useRevampedUI =
-                      state.uri.queryParameters['revamped'] == 'true';
-
-                  return useRevampedUI
-                      ? const SpacesPageRevamp()
-                      : const SpacesPage();
-                },
+                (context, state) => const SpacesPage(),
               ),
               routes: [
-                // Nested routes under spaces
+                // Legacy club space route - will be removed later
                 GoRoute(
                   path: 'club',
                   pageBuilder: _buildPageTransition(
+                    (context, state) => ClubSpacePage.fromGoRouterState(state),
+                  ),
+                ),
+                // New space detail route with type and ID
+                GoRoute(
+                  path: ':type/spaces/:id',
+                  pageBuilder: _buildPageTransition(
                     (context, state) {
-                      final clubId = state.uri.queryParameters['id'];
-                      final spaceType = state.uri.queryParameters['type'] ??
-                          'student_organizations';
-
-                      if (clubId == null || clubId.isEmpty) {
-                        return const ErrorDisplayPage(
-                          message: 'Club ID is required in query parameter',
-                        );
-                      }
-
-                      return ClubSpacePage(
-                        clubId: Uri.decodeComponent(clubId),
+                      final spaceType = state.pathParameters['type'];
+                      final spaceId = state.pathParameters['id'];
+                      final space = state.extra is Map ? (state.extra as Map)['space'] as Space? : null;
+                      
+                      return SpaceDetailScreen(
+                        spaceId: spaceId,
+                        space: space,
                         spaceType: spaceType,
                       );
                     },
-                    type: TransitionType.cupertinoModal,
                   ),
                 ),
-                // New route for the revamped spaces page
+                // Create space route
                 GoRoute(
-                  path: 'revamp',
-                  pageBuilder: _buildPageTransition(
-                    (context, state) => const SpacesPageRevamp(),
-                    type: TransitionType.fade,
-                  ),
-                ),
-                // Add route for creating a new space
-                GoRoute(
-                  path: 'create',
+                  path: AppRoutes.createSpace,
                   pageBuilder: _buildPageTransition(
                     (context, state) => const CreateSpaceSplashPage(),
-                    type: TransitionType.cupertinoModal,
                   ),
                 ),
-                // Direct route to CreateSpacePage (used by the splash page for redirection)
+                // Direct create space route (skips splash)
                 GoRoute(
                   path: 'create-direct',
                   pageBuilder: _buildPageTransition(
                     (context, state) => const CreateSpacePage(),
-                    type: TransitionType.fade,
                   ),
                 ),
-                // Add route for creating a new event
+                // Create event route
                 GoRoute(
-                  path: 'create-event',
+                  path: AppRoutes.createEvent,
                   pageBuilder: _buildPageTransition(
                     (context, state) {
                       final extra = state.extra as Map<String, dynamic>?;
-                      final space = extra?['space'] as Space?;
+                      final space = extra?['selectedSpace'] as Space?;
                       
                       if (space == null) {
                         return const ErrorDisplayPage(
@@ -406,7 +416,6 @@ final GoRouter appRouter = GoRouter(
                       
                       return CreateEventPage(selectedSpace: space);
                     },
-                    type: TransitionType.cupertinoModal,
                   ),
                 ),
               ],
@@ -429,9 +438,7 @@ final GoRouter appRouter = GoRouter(
                   pageBuilder: _buildPageTransition(
                     (context, state) {
                       final userId = state.pathParameters['userId'];
-                      final args = state.extra as Map<String, dynamic>?;
-                      final username = args?['username'] as String?;
-
+                      
                       if (userId == null || userId.isEmpty) {
                         return const ErrorDisplayPage(
                           message: 'User ID is required',
@@ -610,9 +617,12 @@ Future<String?> _handleRedirect(
 
 /// Checks if a route is public (doesn't require authentication)
 /// This function will be used when implementing authentication guards
+// Commented out as it's not currently used
+/*
 bool _isPublicRoute(String location) {
   return location == AppRoutes.landing ||
       location == AppRoutes.signIn ||
       location == AppRoutes.createAccount ||
       location == AppRoutes.onboarding;
 }
+*/

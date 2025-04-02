@@ -255,7 +255,7 @@ class RecommendedSpaceCard extends ConsumerWidget {
     return Row(
       children: [
         // Member count
-        Icon(
+        const Icon(
           Icons.people_outline,
           color: AppColors.textTertiary,
           size: 16,

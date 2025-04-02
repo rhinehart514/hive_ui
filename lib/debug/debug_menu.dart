@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
 import '../components/event_card/event_card_example.dart';
-import '../routes/app_routes.dart';
 import '../theme/app_colors.dart';
 
 /// Debug menu for quick access to test components and screens

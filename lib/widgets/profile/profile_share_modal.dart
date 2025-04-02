@@ -4,7 +4,6 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:hive_ui/models/user_profile.dart';
 import 'package:hive_ui/theme/app_colors.dart';
 import 'package:hive_ui/theme/glassmorphism_guide.dart';
-import 'package:qr_flutter/qr_flutter.dart';
 import 'package:hive_ui/extensions/neumorphic_extension.dart';
 
 /// A peeking bottom sheet for profile sharing with QR code
@@ -154,7 +153,7 @@ class _ProfileShareModalState extends State<ProfileShareModal>
           const SizedBox(height: 16),
 
           // QR Code with improved neumorphic effect
-          Container(
+          SizedBox(
             width: qrSize,
             height: qrSize,
             child: const SizedBox() // Empty container for sizing
@@ -240,7 +239,7 @@ class _ProfileShareModalState extends State<ProfileShareModal>
           const SizedBox(height: 32),
 
           // QR Code using the neumorphic extension
-          Container(
+          SizedBox(
             width: qrSize,
             height: qrSize,
             child: const SizedBox() // Empty container for sizing

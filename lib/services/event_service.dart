@@ -50,17 +50,40 @@ class EventService {
         }
       }
 
+      // Filter out past events that have already ended
+      final now = DateTime.now();
+      debugPrint('EventService: Filtering ${_cachedEvents.length} cached events to remove past events');
+      
+      final filteredEvents = _cachedEvents.where((event) { 
+        final isUpcoming = event.endDate.isAfter(now);
+        
+        if (!isUpcoming) {
+          // Log details about filtered events
+          debugPrint('EventService: ⚠️ Filtering out past event: "${event.title}" - ended at ${event.endDate}');
+        } else {
+          // Log details about kept events 
+          debugPrint('EventService: ✅ Keeping upcoming event: "${event.title}" - ends at ${event.endDate}');
+        }
+        
+        return isUpcoming;
+      }).toList();
+      
+      debugPrint('EventService: Filtered out ${_cachedEvents.length - filteredEvents.length} past events. Keeping ${filteredEvents.length} upcoming events.');
+
       if (sortByDate) {
-        _cachedEvents.sort((a, b) => a.startDate.compareTo(b.startDate));
+        filteredEvents.sort((a, b) => a.startDate.compareTo(b.startDate));
       }
 
-      /// Return whatever we have now
-      return _cachedEvents;
+      /// Return filtered events only
+      return filteredEvents;
     } catch (e) {
       debugPrint('Error fetching events: $e');
 
-      /// If error occurs, try to return cached events if available
-      return _cachedEvents;
+      /// If error occurs, try to return cached events if available, but still filter past events
+      final now = DateTime.now();
+      final filteredCachedEvents = _cachedEvents.where((event) => event.endDate.isAfter(now)).toList();
+      debugPrint('EventService: Fallback - filtered ${_cachedEvents.length - filteredCachedEvents.length} past events from cache');
+      return filteredCachedEvents;
     }
   }
 
@@ -645,9 +668,8 @@ class EventService {
     return uniqueEvents;
   }
 
-  /// RSVP to an event with enhanced functionality
-  static Future<bool> rsvpToEvent(String eventId, bool attending,
-      {bool addToCalendar = false}) async {
+  /// RSVP to an event
+  static Future<bool> rsvpToEvent(String eventId, bool attending) async {
     try {
       // Get current user ID from Firebase Auth
       final FirebaseAuth auth = FirebaseAuth.instance;
@@ -664,45 +686,68 @@ class EventService {
       // Persist RSVP status to shared preferences
       await _saveRsvpStatus();
 
-      // Update event attendees list in Firestore
+      // Use a transaction to ensure data consistency
       final FirebaseFirestore firestore = FirebaseFirestore.instance;
+      bool success = false;
       
-      try {
-        // First, update the event document in the root collection
+      await firestore.runTransaction((transaction) async {
+        // Get event document
+        final eventDoc = await transaction.get(
+          firestore.collection('events').doc(eventId)
+        );
+        
+        // Get user document
+        final userDoc = await transaction.get(
+          firestore.collection('users').doc(userId)
+        );
+
         if (attending) {
           // Add user to attendees
-          await firestore.collection('events').doc(eventId).update({
-            'attendees': FieldValue.arrayUnion([userId]),
-            'rsvpCount': FieldValue.increment(1),
-          });
+          transaction.update(
+            firestore.collection('events').doc(eventId),
+            {
+              'attendees': FieldValue.arrayUnion([userId]),
+              'rsvpCount': FieldValue.increment(1),
+              'updatedAt': FieldValue.serverTimestamp(),
+            },
+          );
+          
+          // Add event to user's saved events
+          transaction.update(
+            firestore.collection('users').doc(userId),
+            {
+              'savedEvents': FieldValue.arrayUnion([eventId]),
+              'eventCount': FieldValue.increment(1),
+              'updatedAt': FieldValue.serverTimestamp(),
+            },
+          );
         } else {
           // Remove user from attendees
-          await firestore.collection('events').doc(eventId).update({
-            'attendees': FieldValue.arrayRemove([userId]),
-            'rsvpCount': FieldValue.increment(-1),
-          });
+          transaction.update(
+            firestore.collection('events').doc(eventId),
+            {
+              'attendees': FieldValue.arrayRemove([userId]),
+              'rsvpCount': FieldValue.increment(-1),
+              'updatedAt': FieldValue.serverTimestamp(),
+            },
+          );
+          
+          // Remove event from user's saved events
+          transaction.update(
+            firestore.collection('users').doc(userId),
+            {
+              'savedEvents': FieldValue.arrayRemove([eventId]),
+              'eventCount': FieldValue.increment(-1),
+              'updatedAt': FieldValue.serverTimestamp(),
+            },
+          );
         }
-      } catch (e) {
-        // The event might not exist in Firestore yet, but we still want to track the RSVP
-        // This is common for events coming from RSS feeds that haven't been saved to Firestore
-        debugPrint('Could not update event in Firestore: $e');
-        // We'll continue with the user profile update anyway
-      }
-      
-      // For calendar integration, try to find the event in cache
-      Event? event;
-      if (addToCalendar && attending) {
-        event = _findEventById(eventId);
         
-        if (event != null) {
-          await CalendarIntegrationService.addEventToCalendar(event);
-        }
-      }
+        success = true;
+        return success;
+      });
       
-      // Always update user's profile
-      await _updateUserRsvpStatus(userId, eventId, attending);
-
-      return true;
+      return success;
     } catch (e) {
       debugPrint('Error RSVPing to event: $e');
       return false;

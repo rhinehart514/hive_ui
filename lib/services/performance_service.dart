@@ -3,6 +3,9 @@ import 'dart:async';
 import 'analytics_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:firebase_performance/firebase_performance.dart';
+import 'dart:collection';
+import 'package:firebase_core/firebase_core.dart';
 
 /// Provider for the performance service
 final performanceServiceProvider = Provider<PerformanceService>((ref) {
@@ -15,17 +18,139 @@ class PerformanceService {
   final AnalyticsService _analytics = AnalyticsService();
   final Map<String, Stopwatch> _activeTraces = {};
   final Map<String, List<int>> _performanceData = {};
+  
+  // Firebase Performance Monitoring
+  FirebasePerformance? _firebasePerformance;
+  final Map<String, Trace> _firebaseTraces = {};
+  
+  // Frame timing monitoring
+  final ValueNotifier<double> _frameRate = ValueNotifier<double>(60.0);
+  int _frameCount = 0;
+  DateTime _lastFrameTime = DateTime.now();
+  Timer? _frameTimer;
+  
+  // Memory usage
+  final ValueNotifier<int> _memoryUsage = ValueNotifier<int>(0);
+  Timer? _memoryTimer;
+  
+  // Performance thresholds
+  static const int _slowFrameThresholdMs = 16; // ~60fps
+  
+  // Cache for expensive operations
+  final _computeCache = _LruCache<String, dynamic>(50);
+  
+  /// Get the current frame rate
+  ValueNotifier<double> get frameRate => _frameRate;
+  
+  /// Get the current memory usage in MB
+  ValueNotifier<int> get memoryUsage => _memoryUsage;
 
   /// Constructor
-  PerformanceService(this._ref);
+  PerformanceService(this._ref) {
+    // Start monitoring frame rate in debug mode
+    if (kDebugMode) {
+      _startFrameMonitoring();
+      _startMemoryMonitoring();
+    }
+    
+    // Safe initialization of Firebase Performance
+    _initializeFirebasePerformance();
+  }
+  
+  /// Safely initialize Firebase Performance
+  void _initializeFirebasePerformance() {
+    if (kDebugMode) return; // No Firebase performance in debug mode
+    
+    try {
+      if (Firebase.apps.isNotEmpty) {
+        _firebasePerformance = FirebasePerformance.instance;
+        _firebasePerformance?.setPerformanceCollectionEnabled(true);
+        debugPrint('Firebase Performance initialized successfully');
+      } else {
+        debugPrint('Firebase not initialized yet, deferring Performance initialization');
+      }
+    } catch (e) {
+      debugPrint('Error initializing Firebase Performance: $e');
+    }
+  }
+  
+  /// Start monitoring frame rate
+  void _startFrameMonitoring() {
+    WidgetsBinding.instance.addPostFrameCallback((_) => _onFrameRendered());
+    
+    _frameTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      final now = DateTime.now();
+      final timeDiff = now.difference(_lastFrameTime).inMilliseconds;
+      
+      if (timeDiff > 0) {
+        final fps = 1000 * _frameCount / timeDiff;
+        _frameRate.value = fps;
+        
+        if (kDebugMode && fps < 40) {
+          debugPrint('⚠️ Low frame rate detected: ${fps.toStringAsFixed(1)} FPS');
+        }
+        
+        _frameCount = 0;
+        _lastFrameTime = now;
+      }
+    });
+  }
+  
+  void _onFrameRendered() {
+    _frameCount++;
+    WidgetsBinding.instance.addPostFrameCallback((_) => _onFrameRendered());
+  }
+  
+  /// Start monitoring memory usage
+  void _startMemoryMonitoring() {
+    _memoryTimer = Timer.periodic(const Duration(seconds: 5), (_) async {
+      try {
+        // This is a simplistic approach - in a real app you'd use platform channels
+        // to get accurate memory info from the OS
+        final memInfo = await _getMemoryInfo();
+        _memoryUsage.value = memInfo;
+        
+        if (kDebugMode && memInfo > 200) {
+          debugPrint('⚠️ High memory usage: $memInfo MB');
+        }
+      } catch (e) {
+        // Ignore memory monitoring errors
+      }
+    });
+  }
+  
+  Future<int> _getMemoryInfo() async {
+    // This is a very approximate measurement
+    // A real implementation would use platform channels to get OS memory info
+    return 0; // Placeholder return 
+  }
 
   /// Start tracking a performance operation
   void startTrace(String operationName) {
     final stopwatch = Stopwatch()..start();
     _activeTraces[operationName] = stopwatch;
+    
+    // Start Firebase trace in non-debug mode
+    if (!kDebugMode) {
+      try {
+        // Try to initialize Firebase Performance if it wasn't available at construction time
+        if (_firebasePerformance == null && Firebase.apps.isNotEmpty) {
+          _initializeFirebasePerformance();
+        }
+        
+        if (_firebasePerformance != null) {
+          final trace = _firebasePerformance!.newTrace(operationName);
+          _firebaseTraces[operationName] = trace;
+          trace.start();
+        }
+      } catch (e) {
+        // Ignore Firebase errors in production
+        debugPrint('Error starting Firebase trace: $e');
+      }
+    }
 
     if (kDebugMode) {
-      print('⏱️ Started trace: $operationName');
+      debugPrint('⏱️ Started trace: $operationName');
     }
   }
 
@@ -35,13 +160,25 @@ class PerformanceService {
 
     if (stopwatch == null) {
       if (kDebugMode) {
-        print('⚠️ Attempted to stop non-existent trace: $operationName');
+        debugPrint('⚠️ Attempted to stop non-existent trace: $operationName');
       }
       return;
     }
 
     stopwatch.stop();
     final durationMs = stopwatch.elapsedMilliseconds;
+    
+    // Stop Firebase trace if it exists
+    if (!kDebugMode) {
+      try {
+        final trace = _firebaseTraces.remove(operationName);
+        if (trace != null) {
+          trace.stop();
+        }
+      } catch (e) {
+        // Ignore Firebase errors in production
+      }
+    }
 
     // Store performance data
     if (!_performanceData.containsKey(operationName)) {
@@ -58,7 +195,12 @@ class PerformanceService {
     _analytics.trackPerformance(operationName, durationMs);
 
     if (kDebugMode) {
-      print('⏱️ Completed trace: $operationName in ${durationMs}ms');
+      debugPrint('⏱️ Completed trace: $operationName in ${durationMs}ms');
+      
+      // Flag slow operations in debug mode
+      if (durationMs > 100) {
+        debugPrint('⚠️ Slow operation detected: $operationName took ${durationMs}ms');
+      }
     }
   }
 
@@ -82,17 +224,59 @@ class PerformanceService {
       stopTrace(operationName);
     }
   }
+  
+  /// Cache the result of an expensive computation
+  T cachedCompute<T>(String cacheKey, T Function() computation) {
+    // Check cache first
+    if (_computeCache.containsKey(cacheKey)) {
+      return _computeCache.get(cacheKey) as T;
+    }
+    
+    // Perform the computation and cache it
+    final result = computation();
+    _computeCache.put(cacheKey, result);
+    return result;
+  }
+  
+  /// Compute something expensive on a background isolate with caching
+  Future<T> backgroundCompute<T>(
+    String cacheKey,
+    T Function(dynamic) computation,
+    dynamic message,
+  ) async {
+    // Check cache first
+    if (_computeCache.containsKey(cacheKey)) {
+      return _computeCache.get(cacheKey) as T;
+    }
+    
+    // Compute in background
+    final result = await compute(computation, message);
+    _computeCache.put(cacheKey, result);
+    return result;
+  }
 
   /// Mark a significant event for performance tracking
   void markEvent(String eventName) {
     if (kDebugMode) {
-      print('⏱️ Performance event: $eventName at ${DateTime.now()}');
+      debugPrint('⏱️ Performance event: $eventName at ${DateTime.now()}');
     }
 
     _analytics.trackEvent('performance_event', {
       'event_name': eventName,
       'timestamp': DateTime.now().toIso8601String(),
     });
+    
+    // Add custom metric to Firebase trace if one is active
+    if (!kDebugMode) {
+      try {
+        if (_firebaseTraces.isNotEmpty) {
+          final trace = _firebaseTraces.values.first;
+          trace.incrementMetric('event_$eventName', 1);
+        }
+      } catch (e) {
+        // Ignore Firebase errors
+      }
+    }
   }
 
   /// Get performance statistics for an operation
@@ -144,6 +328,63 @@ class PerformanceService {
       builder: builder,
     );
   }
+  
+  /// Clear all performance data
+  void clearData() {
+    _performanceData.clear();
+    _activeTraces.clear();
+    _firebaseTraces.clear();
+    _computeCache.clear();
+  }
+  
+  /// Dispose timers and resources
+  void dispose() {
+    _frameTimer?.cancel();
+    _memoryTimer?.cancel();
+    
+    // Stop all active traces
+    for (final operationName in _activeTraces.keys.toList()) {
+      stopTrace(operationName);
+    }
+    
+    // Clear caches
+    clearData();
+  }
+  
+  /// Record image load time for performance tracking
+  void recordImageLoadTime(String imageUrl, int loadTimeMs) {
+    // Track as a performance metric
+    if (!_performanceData.containsKey('image_load')) {
+      _performanceData['image_load'] = [];
+    }
+    _performanceData['image_load']!.add(loadTimeMs);
+    
+    // Log slow image loads
+    if (kDebugMode && loadTimeMs > 500) {
+      debugPrint('⚠️ Slow image load: $imageUrl took ${loadTimeMs}ms');
+    }
+    
+    // Log to analytics for images that take too long
+    if (loadTimeMs > 1000) {
+      _analytics.trackEvent('slow_image_load', {
+        'image_url': imageUrl,
+        'load_time_ms': loadTimeMs,
+      });
+    }
+  }
+  
+  /// Record image load failure for analytics
+  void recordImageLoadFailure(String imageUrl) {
+    // Log to analytics
+    _analytics.trackEvent('image_load_failure', {
+      'image_url': imageUrl,
+      'timestamp': DateTime.now().toIso8601String(),
+    });
+    
+    if (kDebugMode) {
+      debugPrint('❌ Image load failed: $imageUrl');
+    }
+  }
 }
 
 /// Widget that tracks build performance
@@ -191,5 +432,43 @@ extension PerformanceWidgetExtension on Widget {
       widgetName,
       (_) => this,
     );
+  }
+}
+
+/// LRU Cache implementation for expensive computations
+class _LruCache<K, V> {
+  final int _maxSize;
+  final LinkedHashMap<K, V> _cache = LinkedHashMap<K, V>();
+  
+  _LruCache(this._maxSize);
+  
+  V? get(K key) {
+    if (!_cache.containsKey(key)) {
+      return null;
+    }
+    
+    // Move to the end (most recently used)
+    final value = _cache.remove(key);
+    _cache[key] = value as V;
+    return value;
+  }
+  
+  void put(K key, V value) {
+    if (_cache.containsKey(key)) {
+      _cache.remove(key);
+    } else if (_cache.length >= _maxSize) {
+      // Remove the first item (least recently used)
+      _cache.remove(_cache.keys.first);
+    }
+    
+    _cache[key] = value;
+  }
+  
+  bool containsKey(K key) {
+    return _cache.containsKey(key);
+  }
+  
+  void clear() {
+    _cache.clear();
   }
 }

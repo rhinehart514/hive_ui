@@ -1,92 +1,158 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:hive_ui/features/messaging/domain/entities/chat_user.dart';
 import 'package:hive_ui/features/messaging/application/providers/messaging_providers.dart';
 import 'package:hive_ui/theme/app_colors.dart';
 
-/// A widget that displays typing indicators for a chat
+/// A widget that displays typing indicators in a chat
 class TypingIndicator extends ConsumerWidget {
   final String chatId;
-  final List<String> participantIds;
-  final Map<String, String> participantNames;
-  final String currentUserId;
-  final TextStyle? textStyle;
 
   const TypingIndicator({
     Key? key,
     required this.chatId,
-    required this.participantIds,
-    required this.participantNames,
-    required this.currentUserId,
-    this.textStyle,
   }) : super(key: key);
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // Watch typing indicators stream
-    final typingAsync = ref.watch(typingIndicatorsProvider(chatId));
+    // Watch the typing status stream for this chat
+    final typingStreamAsync = ref.watch(typingIndicatorsProvider(chatId));
     
-    return typingAsync.when(
+    // Watch the participants in this chat
+    final participantsAsync = ref.watch(chatParticipantsProvider(chatId));
+    
+    // Extract current user ID to exclude it from typing indicators
+    final currentUserId = ref.watch(currentUserIdProvider);
+    
+    return typingStreamAsync.when(
       data: (typingUsers) {
-        // Filter out current user and get only users who are typing
-        final typingUserIds = typingUsers.keys
-            .where((id) => id != currentUserId)
+        // Filter out the current user and users who are not typing
+        final typingUserIds = typingUsers.entries
+            .where((entry) => 
+                entry.key != currentUserId && 
+                DateTime.now().difference(entry.value).inSeconds < 6) // Only show recent typing
+            .map((e) => e.key)
             .toList();
         
         if (typingUserIds.isEmpty) {
-          return const SizedBox.shrink();
+          return const SizedBox.shrink(); // No one is typing
         }
         
-        // Get names of typing users
-        final typingNames = <String>[];
-        for (final userId in typingUserIds) {
-          final name = participantNames[userId] ?? 'Someone';
-          typingNames.add(name);
-        }
-        
+        return participantsAsync.when(
+          data: (participants) {
+            // Get the names of users who are typing
+            final typingNames = _getTypingUserNames(participants, typingUserIds);
         return _buildTypingIndicator(context, typingNames);
+          },
+          loading: () => _buildLoadingIndicator(),
+          error: (_, __) => const SizedBox.shrink(),
+        );
       },
-      loading: () => const SizedBox.shrink(),
+      loading: () => _buildLoadingIndicator(),
       error: (_, __) => const SizedBox.shrink(),
     );
   }
 
-  Widget _buildTypingIndicator(BuildContext context, List<String> typingNames) {
-    final baseStyle = textStyle ?? 
-        const TextStyle(fontSize: 12, color: Colors.white70, fontStyle: FontStyle.italic);
+  /// Creates a typing message based on which users are typing
+  String _getTypingUserNames(List<ChatUser> participants, List<String> typingUserIds) {
+    // Get participant map by ID for quick lookup
+    final participantMap = {for (var p in participants) p.id: p};
     
-    String text;
-    if (typingNames.length == 1) {
-      text = '${typingNames.first} is typing...';
+    // Get names of typing users
+    final typingNames = typingUserIds
+        .where((id) => participantMap.containsKey(id))
+        .map((id) => participantMap[id]!.name.split(' ').first) // Use first names only
+        .toList();
+    
+    if (typingNames.isEmpty) {
+      return '';
+    } else if (typingNames.length == 1) {
+      return '${typingNames[0]} is typing...';
     } else if (typingNames.length == 2) {
-      text = '${typingNames.join(' and ')} are typing...';
+      return '${typingNames[0]} and ${typingNames[1]} are typing...';
     } else {
-      text = 'Several people are typing...';
+      return '${typingNames.length} people are typing...';
     }
-    
-    return Row(
+  }
+  
+  /// Builds the typing indicator widget with animation
+  Widget _buildTypingIndicator(BuildContext context, String text) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+      alignment: Alignment.centerLeft,
+      child: Row(
       mainAxisSize: MainAxisSize.min,
       children: [
         _buildAnimatedDots(),
         const SizedBox(width: 8),
         Text(
           text,
-          style: baseStyle,
+            style: TextStyle(
+              fontSize: 12,
+              color: Colors.white.withOpacity(0.7),
+              fontStyle: FontStyle.italic,
+            ),
         ),
       ],
+      ),
     );
   }
 
+  /// Builds the animated dots for the typing indicator
   Widget _buildAnimatedDots() {
     return SizedBox(
       width: 24,
-      height: 8,
+      height: 12,
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         children: [
-          _AnimatedDot(delay: 0),
-          _AnimatedDot(delay: 0.2),
-          _AnimatedDot(delay: 0.4),
+          _buildAnimatedDot(0),
+          _buildAnimatedDot(1),
+          _buildAnimatedDot(2),
         ],
+      ),
+    );
+  }
+  
+  /// Builds a single animated dot with a delay based on index
+  Widget _buildAnimatedDot(int index) {
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0.0, end: 1.0),
+      duration: const Duration(milliseconds: 600),
+      curve: Curves.easeInOut,
+      builder: (context, value, child) {
+        // Apply a delay based on the index
+        final delayedValue = (value + (index * 0.3)) % 1.0;
+        
+        // Calculate size and opacity for animation
+        final size = 3.0 + (delayedValue * 1.5);
+        final opacity = 0.3 + (delayedValue * 0.7);
+        
+        return Container(
+          width: size,
+          height: size,
+          decoration: BoxDecoration(
+            color: AppColors.gold.withOpacity(opacity),
+            shape: BoxShape.circle,
+          ),
+        );
+      },
+    );
+  }
+  
+  /// Builds a loading indicator
+  Widget _buildLoadingIndicator() {
+    return const SizedBox(
+      height: 12,
+      child: Center(
+        child: SizedBox(
+          width: 10,
+          height: 10,
+          child: CircularProgressIndicator(
+            strokeWidth: 1,
+            valueColor: AlwaysStoppedAnimation<Color>(AppColors.gold),
+          ),
+        ),
       ),
     );
   }

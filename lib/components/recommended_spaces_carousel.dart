@@ -8,7 +8,7 @@ import 'package:hive_ui/theme/app_colors.dart';
 import 'dart:ui';
 import 'package:flutter_staggered_animations/flutter_staggered_animations.dart';
 import 'package:go_router/go_router.dart';
-import 'package:hive_ui/features/clubs/presentation/pages/club_space_page.dart';
+import 'package:hive_ui/features/clubs/presentation/widgets/space_detail/space_detail_screen.dart';
 
 /// A horizontally scrolling carousel of recommended spaces that appears
 /// at the top of the Discover tab
@@ -128,15 +128,15 @@ class _RecommendedSpacesCarouselState
         // Apply haptic feedback for better tactile response
         HapticFeedback.mediumImpact();
 
-        // Navigate to club space
+        // Clean up and encode the space ID for URL safety
+        final String encodedId = Uri.encodeComponent(space.id);
+        debugPrint('Space card tapped: ${space.id}');
+        
         try {
-          // Clean up and encode the space ID for URL safety
-          final String encodedId = Uri.encodeComponent(space.id);
-          debugPrint('Space card tapped: ${space.id}');
-          debugPrint('Encoded ID for URL: $encodedId');
-
-          GoRouter.of(context).push('/club-space?id=$encodedId');
-          debugPrint('Navigated to club space via GoRouter');
+          // Navigate to space detail screen
+          // Use spaces/club path which now redirects to SpaceDetailScreen
+          GoRouter.of(context).push('/spaces/club?id=$encodedId&type=space');
+          debugPrint('Navigated to space detail screen via spaces path in GoRouter');
         } catch (e) {
           debugPrint('Error using GoRouter: $e');
 
@@ -144,13 +144,13 @@ class _RecommendedSpacesCarouselState
           Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (context) => ClubSpacePage(
-                clubId: space.id, // Original ID for direct navigation
+              builder: (context) => SpaceDetailScreen(
+                spaceId: space.id,
                 space: space,
               ),
             ),
           );
-          debugPrint('Navigated to club space via MaterialPageRoute');
+          debugPrint('Navigated to space detail screen via MaterialPageRoute');
         }
       },
       child: Padding(

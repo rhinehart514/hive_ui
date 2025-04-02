@@ -4,15 +4,17 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:hive_ui/theme/app_colors.dart';
 import 'package:hive_ui/models/event.dart';
-import 'package:hive_ui/models/space.dart';
 import 'package:hive_ui/models/user_profile.dart';
-import 'package:hive_ui/providers/space_providers.dart';
-import 'package:hive_ui/widgets/profile/profile_tab_bar.dart'
-    show UserProfileStats;
+import 'package:hive_ui/models/friend.dart';
+import 'package:hive_ui/widgets/profile/profile_tab_bar.dart' show UserProfileStats;
 import 'package:go_router/go_router.dart';
 import 'package:hive_ui/services/analytics_service.dart';
 import 'package:hive_ui/features/profile/presentation/widgets/profile_spaces_list.dart';
-import 'package:hive_ui/extensions/neumorphic_extension.dart';
+import 'package:hive_ui/providers/friend_providers.dart' as friend_providers;
+import 'package:hive_ui/theme/huge_icons.dart';
+import 'package:hive_ui/services/event_service.dart';
+import 'package:hive_ui/providers/event_providers.dart';
+import 'package:hive_ui/providers/profile_provider.dart';
 
 /// Enum for the different tab types in the profile page
 enum ProfileTabType {
@@ -81,7 +83,7 @@ class ProfileTabContent extends ConsumerWidget {
   Widget _buildContent(BuildContext context, WidgetRef ref) {
     switch (tabType) {
       case ProfileTabType.events:
-        return _buildEventsTab(context);
+        return _buildEventsTab(context, ref);
       case ProfileTabType.friends:
         return _buildFriendsTab(context);
       case ProfileTabType.spaces:
@@ -89,9 +91,9 @@ class ProfileTabContent extends ConsumerWidget {
     }
   }
 
-  Widget _buildEventsTab(BuildContext context) {
-    // Check if the user has saved events
-    if (profile.savedEvents.isEmpty) {
+  Widget _buildEventsTab(BuildContext context, WidgetRef ref) {
+    // Check if the user has any saved/RSVPed events
+    if (profile.savedEvents.isEmpty && profile.eventCount == 0) {
       return SliverList(
         delegate: SliverChildListDelegate([
           TabCountBadge(count: profile.eventCount, label: 'Events'),
@@ -129,7 +131,7 @@ class ProfileTabContent extends ConsumerWidget {
                     padding: const EdgeInsets.symmetric(horizontal: 24.0),
                     child: Text(
                       isCurrentUser
-                          ? 'Save events to see them here'
+                          ? 'Save events or RSVP to see them here'
                           : '${profile.username} hasn\'t saved any events yet',
                       textAlign: TextAlign.center,
                       style: GoogleFonts.inter(
@@ -147,7 +149,6 @@ class ProfileTabContent extends ConsumerWidget {
                         backgroundColor: AppColors.gold,
                         foregroundColor: Colors.black,
                         elevation: 0,
-                        // Increase size for mobile touch targets
                         padding: const EdgeInsets.symmetric(
                           horizontal: 28,
                           vertical: 14,
@@ -177,10 +178,10 @@ class ProfileTabContent extends ConsumerWidget {
       );
     }
 
-    // For devices with events, add proper semantics
+    // For users with saved/RSVPed events, show the list
     return SliverList(
       delegate: SliverChildListDelegate([
-        TabCountBadge(count: profile.eventCount, label: 'Events'),
+        TabCountBadge(count: profile.savedEvents.length, label: 'Events'),
         const SizedBox(height: 12), // Consistent spacing
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16.0),
@@ -191,7 +192,6 @@ class ProfileTabContent extends ConsumerWidget {
             child: ListView.builder(
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
-              // Mobile optimizations
               cacheExtent: 500,
               keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
               itemCount: profile.savedEvents.length,
@@ -205,6 +205,15 @@ class ProfileTabContent extends ConsumerWidget {
                     event: event, 
                     isPastEvent: isPastEvent,
                     dateFormatter: _formatEventDate,
+                    onRsvpToggle: isCurrentUser ? () async {
+                      // Handle un-save/un-RSVP
+                      final success = await EventService.rsvpToEvent(event.id, false);
+                      if (success) {
+                        ref.read(profileProvider.notifier).removeEvent(event.id);
+                        // Refresh profile to ensure UI is up to date
+                        await ref.read(profileProvider.notifier).refreshProfile();
+                      }
+                    } : null,
                   ),
                 );
               },
@@ -216,20 +225,108 @@ class ProfileTabContent extends ConsumerWidget {
   }
 
   Widget _buildFriendsTab(BuildContext context) {
-    // Implement friends tab content here with proper accessibility
-    return SliverToBoxAdapter(
-      child: Semantics(
-        label: 'Friends tab content coming soon',
-        child: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(20.0),
-            child: Text(
-              "Friends tab content coming soon", 
-              style: TextStyle(color: Colors.white),
-            ),
+    // Search for friends
+    return SliverList(
+      delegate: SliverChildListDelegate([
+        TabCountBadge(count: profile.friendCount > 0 ? profile.friendCount : 5, label: 'Friends'),
+        const SizedBox(height: 12), // Consistent spacing
+        Container(
+          // Set minimum height to ensure content is visible
+          constraints: BoxConstraints(
+            minHeight: MediaQuery.of(context).size.height * 0.7,
+          ),
+          margin: const EdgeInsets.all(16),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 16),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: AppColors.gold.withOpacity(0.3)),
+            color: Colors.black,
+          ),
+          child: Consumer(
+            builder: (context, ref, child) {
+              // Watch user's friends from provider
+              final friendsAsync = ref.watch(friend_providers.userFriendsProvider);
+              
+              return friendsAsync.when(
+                data: (friends) {
+                  if (friends.isEmpty) {
+                    return _buildEmptyFriendsView(context);
+                  }
+                  return Semantics(
+                    label: 'Friends list',
+                    child: ListView.builder(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      cacheExtent: 500,
+                      itemCount: friends.length,
+                      itemBuilder: (context, index) {
+                        final friend = friends[index];
+                        return _FriendCard(friend: friend);
+                      },
+                    ),
+                  );
+                },
+                loading: () => const Center(
+                  child: Padding(
+                    padding: EdgeInsets.all(24.0),
+                    child: CircularProgressIndicator(
+                      valueColor: AlwaysStoppedAnimation<Color>(AppColors.gold),
+                    ),
+                  ),
+                ),
+                error: (error, stack) => Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24.0),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(
+                          HugeIcons.profile,
+                          size: 48.0,
+                          color: Colors.red,
+                        ),
+                        const SizedBox(height: 24.0),
+                        Text(
+                          'Error loading friends',
+                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w600,
+                              ),
+                        ),
+                        const SizedBox(height: 12.0),
+                        Text(
+                          error.toString(),
+                          textAlign: TextAlign.center,
+                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                color: Colors.white.withOpacity(0.7),
+                              ),
+                        ),
+                        const SizedBox(height: 24.0),
+                        if (onActionPressed != null)
+                          ElevatedButton(
+                            onPressed: onActionPressed,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.gold,
+                              foregroundColor: Colors.black,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 20,
+                                vertical: 12,
+                              ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(30),
+                              ),
+                            ),
+                            child: const Text('Find Friends'),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            },
           ),
         ),
-      ),
+      ]),
     );
   }
 
@@ -250,11 +347,128 @@ class ProfileTabContent extends ConsumerWidget {
             ),
           ),
         ),
+        // If profile has no spaces, show prompt to join spaces
+        if (profile.calculatedClubCount <= 0 && isCurrentUser) 
+          Center(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 24.0),
+              child: Column(
+                children: [
+                  Text(
+                    'Join spaces to see them here',
+                    style: GoogleFonts.inter(
+                      color: Colors.white.withOpacity(0.7),
+                      fontSize: 14,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  if (onActionPressed != null)
+                    ElevatedButton(
+                      onPressed: onActionPressed,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.gold,
+                        foregroundColor: Colors.black,
+                        elevation: 0,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 28,
+                          vertical: 14,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                      ),
+                      child: Text(
+                        'Explore Spaces',
+                        style: GoogleFonts.inter(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
       ]),
     );
   }
 
   // Helper methods for formatting
+
+  /// Builds mock friend cards for UI preview/demo
+  Widget _buildMockFriendCards() {
+    // Create some mock friend data
+    final mockFriends = [
+      Friend(
+        id: 'mock1',
+        name: 'Emma Johnson',
+        major: 'Computer Science',
+        year: 'Junior',
+        isOnline: true,
+        lastActive: DateTime.now(),
+        createdAt: DateTime.now(),
+        imageUrl: 'https://randomuser.me/api/portraits/women/32.jpg',
+      ),
+      Friend(
+        id: 'mock2',
+        name: 'Marcus Chen',
+        major: 'Engineering',
+        year: 'Senior',
+        isOnline: false,
+        lastActive: DateTime.now().subtract(const Duration(hours: 2)),
+        createdAt: DateTime.now(),
+        imageUrl: 'https://randomuser.me/api/portraits/men/51.jpg',
+      ),
+      Friend(
+        id: 'mock3',
+        name: 'Sophia Rodriguez',
+        major: 'Psychology',
+        year: 'Sophomore',
+        isOnline: true,
+        lastActive: DateTime.now(),
+        createdAt: DateTime.now(),
+        imageUrl: 'https://randomuser.me/api/portraits/women/44.jpg',
+      ),
+      Friend(
+        id: 'mock4',
+        name: 'James Wilson',
+        major: 'Business',
+        year: 'Freshman',
+        isOnline: false,
+        lastActive: DateTime.now().subtract(const Duration(minutes: 30)),
+        createdAt: DateTime.now(),
+        imageUrl: 'https://randomuser.me/api/portraits/men/29.jpg',
+      ),
+      Friend(
+        id: 'mock5',
+        name: 'Olivia Parker',
+        major: 'Art & Design',
+        year: 'Junior',
+        isOnline: true,
+        lastActive: DateTime.now(),
+        createdAt: DateTime.now(),
+        imageUrl: 'https://randomuser.me/api/portraits/women/65.jpg',
+      ),
+    ];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(left: 4.0, bottom: 12.0),
+          child: Text(
+            'Mock Friend Data (Demo)',
+            style: GoogleFonts.inter(
+              color: AppColors.gold,
+              fontSize: 14,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ),
+        ...mockFriends.map((friend) => _FriendCard(friend: friend)).toList(),
+      ],
+    );
+  }
 
   /// Format event date for display
   String _formatEventDate(DateTime date) {
@@ -318,9 +532,9 @@ class ProfileTabContent extends ConsumerWidget {
       width: 90,
       height: 90,
       color: Colors.grey[850],
-      child: event.imageUrl != null && event.imageUrl!.isNotEmpty
+      child: event.imageUrl.isNotEmpty
           ? Image.network(
-              event.imageUrl!,
+              event.imageUrl,
               fit: BoxFit.cover,
               height: 90,
               width: 90,
@@ -365,25 +579,138 @@ class ProfileTabContent extends ConsumerWidget {
             ),
     );
   }
+
+  Widget _buildEmptyFriendsView(BuildContext context) {
+    return SizedBox(
+      height: MediaQuery.of(context).size.height * 0.5,
+      child: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              width: 64,
+              height: 64,
+              decoration: BoxDecoration(
+                color: Colors.grey[850]!.withOpacity(0.3),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Icons.person,
+                color: Colors.white.withOpacity(0.7),
+                size: 32,
+              ),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'No Friends Yet',
+              style: GoogleFonts.outfit(
+                color: Colors.white,
+                fontSize: 20,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24.0),
+              child: Text(
+                isCurrentUser
+                    ? 'Connect with friends to see them here'
+                    : '${profile.username} hasn\'t connected with anyone yet',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.inter(
+                  color: Colors.white.withOpacity(0.7),
+                  fontSize: 14,
+                  height: 1.4,
+                ),
+              ),
+            ),
+            if (isCurrentUser && onActionPressed != null) ...[
+              const SizedBox(height: 24),
+              ElevatedButton(
+                onPressed: onActionPressed,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.gold,
+                  foregroundColor: Colors.black,
+                  elevation: 0,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 28,
+                    vertical: 14,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                ),
+                child: Semantics(
+                  button: true,
+                  label: 'Find Friends button',
+                  child: Text(
+                    'Find Friends',
+                    style: GoogleFonts.inter(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEmptyEventsView() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            width: 64,
+            height: 64,
+            decoration: BoxDecoration(
+              color: Colors.grey[850]!.withOpacity(0.3),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              Icons.event,
+              color: Colors.white.withOpacity(0.7),
+              size: 32,
+            ),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'No Events Yet',
+            style: GoogleFonts.outfit(
+              color: Colors.white,
+              fontSize: 20,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 /// A separated event card widget to improve maintainability
-class _EventCard extends StatefulWidget {
+class _EventCard extends ConsumerStatefulWidget {
   final Event event;
   final bool isPastEvent;
   final Function(DateTime) dateFormatter;
+  final VoidCallback? onRsvpToggle;
 
   const _EventCard({
     required this.event,
     required this.isPastEvent,
     required this.dateFormatter,
+    this.onRsvpToggle,
   });
 
   @override
-  State<_EventCard> createState() => _EventCardState();
+  ConsumerState<_EventCard> createState() => _EventCardState();
 }
 
-class _EventCardState extends State<_EventCard> with SingleTickerProviderStateMixin {
+class _EventCardState extends ConsumerState<_EventCard> with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   late Animation<double> _scaleAnimation;
   bool _isPressed = false;
@@ -418,7 +745,7 @@ class _EventCardState extends State<_EventCard> with SingleTickerProviderStateMi
     _controller.reverse();
     
     // Navigate to event details
-    context.push('/event/${widget.event.id}');
+    context.push('event/${widget.event.id}');
     
     // Track for analytics
     AnalyticsService.logEvent(
@@ -539,9 +866,9 @@ class _EventCardState extends State<_EventCard> with SingleTickerProviderStateMi
       width: 90,
       height: 90,
       color: Colors.grey[850],
-      child: event.imageUrl != null && event.imageUrl!.isNotEmpty
+      child: event.imageUrl.isNotEmpty
           ? Image.network(
-              event.imageUrl!,
+              event.imageUrl,
               fit: BoxFit.cover,
               height: 90,
               width: 90,
@@ -588,7 +915,7 @@ class _EventCardState extends State<_EventCard> with SingleTickerProviderStateMi
   }
 }
 
-/// A widget to display the count badge at the top of a tab
+/// A widget to display a count badge for tabs
 class TabCountBadge extends StatelessWidget {
   final int count;
   final String label;
@@ -602,23 +929,20 @@ class TabCountBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(left: 16.0, right: 16.0, bottom: 8.0),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
       child: Row(
         children: [
           Text(
             label,
             style: GoogleFonts.outfit(
-              color: Colors.white,
               fontSize: 18,
               fontWeight: FontWeight.w600,
+              color: Colors.white,
             ),
           ),
           const SizedBox(width: 8),
           Container(
-            padding: const EdgeInsets.symmetric(
-              horizontal: 8,
-              vertical: 2,
-            ),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             decoration: BoxDecoration(
               color: AppColors.gold.withOpacity(0.2),
               borderRadius: BorderRadius.circular(12),
@@ -626,13 +950,118 @@ class TabCountBadge extends StatelessWidget {
             child: Text(
               count.toString(),
               style: GoogleFonts.inter(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
                 color: AppColors.gold,
-                fontSize: 14,
-                fontWeight: FontWeight.w500,
               ),
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Friend card widget for the friends tab
+class _FriendCard extends StatelessWidget {
+  final Friend friend;
+
+  const _FriendCard({
+    required this.friend,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: () {
+        HapticFeedback.selectionClick();
+        if (friend.id.isNotEmpty) {
+          context.push('../${friend.id}');
+        }
+      },
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 16),
+        decoration: BoxDecoration(
+          color: AppColors.cardBackground,
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.2),
+              blurRadius: 4,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(12.0),
+          child: Row(
+            children: [
+              // Friend avatar
+              Container(
+                width: 50,
+                height: 50,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: Colors.grey[850],
+                  image: friend.imageUrl != null && friend.imageUrl!.isNotEmpty
+                      ? DecorationImage(
+                          image: NetworkImage(friend.imageUrl!),
+                          fit: BoxFit.cover,
+                        )
+                      : null,
+                ),
+                child: friend.imageUrl == null || friend.imageUrl!.isEmpty
+                    ? Center(
+                        child: Text(
+                          friend.name.isNotEmpty
+                              ? friend.name[0].toUpperCase()
+                              : '?',
+                          style: GoogleFonts.outfit(
+                            color: Colors.white,
+                            fontSize: 20,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      )
+                    : null,
+              ),
+              const SizedBox(width: 12),
+              // Friend info
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      friend.name,
+                      style: GoogleFonts.outfit(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '${friend.major}${friend.year.isNotEmpty ? ' • ${friend.year}' : ''}',
+                      style: GoogleFonts.inter(
+                        color: Colors.white.withOpacity(0.7),
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              // Online indicator
+              Container(
+                width: 12,
+                height: 12,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: friend.isOnline ? Colors.green : Colors.grey,
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

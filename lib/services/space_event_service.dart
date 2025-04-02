@@ -498,6 +498,8 @@ class SpaceEventService {
         return 'campus_living';
       case SpaceType.fraternityAndSorority:
         return 'fraternity_and_sorority';
+      case SpaceType.hiveExclusive:
+        return 'hive_exclusive';
       case SpaceType.other:
         return 'other';
     }
