@@ -61,7 +61,7 @@ class _InlineProfileEditorState extends ConsumerState<InlineProfileEditor> {
     _selectedYear = widget.profile.year;
     _selectedMajor = widget.profile.major;
     _selectedResidence = widget.profile.residence;
-    _selectedInterests = widget.profile.interests?.toList() ?? [];
+    _selectedInterests = widget.profile.interests.toList() ?? [];
 
     // Add listeners to track changes
     _usernameController.addListener(() => _updateFieldChanged('username'));

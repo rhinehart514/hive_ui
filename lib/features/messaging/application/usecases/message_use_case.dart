@@ -228,7 +228,7 @@ class MessageUseCase {
     await updateMessageDeliveryStatus(
       messageId,
       userId,
-      MessageDeliveryStatus.read,
+      MessageDeliveryStatus.seen,
     );
   }
 

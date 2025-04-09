@@ -3,9 +3,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:hive_ui/services/performance_service.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'dart:io' show Platform, File;
 import '../theme/app_colors.dart';
-import '../utils/file_path_handler.dart';
 import 'dart:math';
 
 /// Dedicated cache manager for event images with tuned parameters

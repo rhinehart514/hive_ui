@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:hive_ui/features/auth/providers/auth_providers.dart';
-import 'package:hive_ui/services/user_preferences_service.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:hive_ui/theme/app_colors.dart';
 
 /// Callback for authentication results
@@ -31,11 +30,12 @@ class LoginForm extends ConsumerStatefulWidget {
 }
 
 class LoginFormState extends ConsumerState<LoginForm> {
-  final _emailController = TextEditingController();
-  final _passwordController = TextEditingController();
-  bool _isPasswordVisible = false;
-  String? _emailError;
+  final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _passwordController = TextEditingController();
+  final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
   bool _isLoading = false;
+  String? _emailError;
+  bool _obscurePassword = true;
 
   @override
   void initState() {
@@ -79,82 +79,54 @@ class LoginFormState extends ConsumerState<LoginForm> {
     return _emailController.text.trim();
   }
 
-  Future<void> handleSignIn() async {
-    if (_emailController.text.isEmpty || _passwordController.text.isEmpty) {
-      widget.onAuthResult
-          ?.call(false, 'Please enter both email and password', false);
-      return;
-    }
-
-    if (_emailError != null) {
-      widget.onAuthResult
-          ?.call(false, 'Please enter a valid email address', false);
-      return;
-    }
-
-    setState(() {
-      _isLoading = true;
-    });
-
-    // Success haptic feedback
-    HapticFeedback.mediumImpact();
-
-    try {
-      // Initialize preferences if not already
-      await UserPreferencesService.initialize();
-
-      // Store the user's email for reference
-      final email = _emailController.text.trim();
-      await UserPreferencesService.saveUserEmail(email);
-
-      // Sign in with Firebase - use the auth controller for proper state management
-      await ref.read(authControllerProvider.notifier).signInWithEmailPassword(
-            email,
-            _passwordController.text,
-          );
-
-      // Check if user has completed onboarding - but only if we got a valid sign in
-      final hasCompletedOnboarding =
-          UserPreferencesService.hasCompletedOnboarding();
-
-      // Call the onAuthResult callback with success
-      widget.onAuthResult
-          ?.call(true, 'Sign in successful!', !hasCompletedOnboarding);
-    } catch (e) {
-      String errorMessage = 'Invalid email or password';
-
-      if (e is FirebaseAuthException) {
-        switch (e.code) {
-          case 'user-not-found':
-            errorMessage = 'No account found with this email';
-            break;
-          case 'wrong-password':
-            errorMessage = 'Incorrect password';
-            break;
-          case 'invalid-credential':
-            errorMessage = 'Invalid login credentials';
-            break;
-          case 'user-disabled':
-            errorMessage = 'This account has been disabled';
-            break;
-          case 'too-many-requests':
-            errorMessage = 'Too many attempts. Please try again later';
-            break;
-          default:
-            errorMessage = e.message ?? 'Authentication failed';
-        }
-      }
-
-      // Provide haptic feedback for error
-      HapticFeedback.vibrate();
-
-      // Set loading state back to false
+  void _handleLogin() async {
+    if (_formKey.currentState!.validate()) {
       setState(() {
-        _isLoading = false;
+        _isLoading = true;
       });
 
-      // Call the onAuthResult callback with failure
-      widget.onAuthResult?.call(false, errorMessage, false);
+      try {
+        final email = _emailController.text.trim();
+        final password = _passwordController.text;
+        
+        await ref.read(authControllerProvider.notifier).signInWithEmailPassword(
+          email,
+          password,
+        );
+        
+        // Check if user has accepted terms
+        final hasAcceptedTerms = ref.read(userPreferencesProvider.notifier).hasAcceptedTerms();
+        
+        if (hasAcceptedTerms == false) {
+          // Navigate to terms acceptance page
+          if (mounted) {
+            GoRouter.of(context).push('/terms?isOnboarding=false');
+          }
+        } else {
+          // Navigate to home or dashboard
+          if (mounted) {
+            GoRouter.of(context).go('/home');
+          }
+        }
+      } catch (e) {
+        // Provide haptic feedback for error
+        HapticFeedback.vibrate();
+        
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Login failed: ${e.toString()}'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      } finally {
+        if (mounted) {
+          setState(() {
+            _isLoading = false;
+          });
+        }
+      }
     }
   }
 
@@ -212,7 +184,7 @@ class LoginFormState extends ConsumerState<LoginForm> {
         TextField(
           controller: _passwordController,
           style: GoogleFonts.inter(color: AppColors.white),
-          obscureText: !_isPasswordVisible,
+          obscureText: _obscurePassword,
           decoration: InputDecoration(
             labelText: 'Password',
             labelStyle: GoogleFonts.inter(
@@ -237,12 +209,12 @@ class LoginFormState extends ConsumerState<LoginForm> {
             ),
             suffixIcon: IconButton(
               icon: Icon(
-                _isPasswordVisible ? Icons.visibility_off : Icons.visibility,
+                _obscurePassword ? Icons.visibility_off : Icons.visibility,
                 color: AppColors.white.withOpacity(0.7),
               ),
               onPressed: () {
                 setState(() {
-                  _isPasswordVisible = !_isPasswordVisible;
+                  _obscurePassword = !_obscurePassword;
                 });
               },
             ),
@@ -254,7 +226,7 @@ class LoginFormState extends ConsumerState<LoginForm> {
         SizedBox(
           width: double.infinity,
           child: ElevatedButton(
-            onPressed: _isLoading ? null : handleSignIn,
+            onPressed: _isLoading ? null : _handleLogin,
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.gold,
               foregroundColor: AppColors.black,

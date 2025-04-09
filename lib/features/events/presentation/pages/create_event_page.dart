@@ -1,18 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:google_fonts/google_fonts.dart';
-import 'package:intl/intl.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-
+import 'package:google_fonts/google_fonts.dart';
+import 'package:hive_ui/theme/app_colors.dart';
 import 'package:hive_ui/models/event_creation_request.dart';
 import 'package:hive_ui/models/event.dart';
 import 'package:hive_ui/models/space.dart';
 import 'package:hive_ui/services/analytics_service.dart';
-import 'package:hive_ui/theme/app_colors.dart';
 import 'package:hive_ui/theme/glassmorphism_guide.dart';
 import 'package:hive_ui/extensions/glassmorphism_extension.dart';
-import 'package:hive_ui/features/spaces/data/repositories/space_repository_impl.dart';
+import 'package:hive_ui/features/events/presentation/controllers/recurring_event_controller.dart';
+import 'package:hive_ui/features/events/presentation/widgets/recurring_event_options.dart';
+import 'package:intl/intl.dart';
+import 'package:hive_ui/features/spaces/presentation/providers/spaces_repository_provider.dart';
 
 class CreateEventPage extends ConsumerStatefulWidget {
   final Space selectedSpace;
@@ -27,7 +28,13 @@ class CreateEventPage extends ConsumerStatefulWidget {
 }
 
 class _CreateEventPageState extends ConsumerState<CreateEventPage> {
-  final _formKey = GlobalKey<FormState>();
+  // Form key for validation
+  final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
+  
+  // Submission state
+  bool _isSubmitting = false;
+  
+  // Text editing controllers
   final TextEditingController _titleController = TextEditingController();
   final TextEditingController _descriptionController = TextEditingController();
   final TextEditingController _locationController = TextEditingController();
@@ -38,20 +45,36 @@ class _CreateEventPageState extends ConsumerState<CreateEventPage> {
   String _visibility = 'public';
   final List<String> _selectedTags = [];
   
-  bool _showErrors = false;
-  bool _isSubmitting = false;
+  // Recurring event fields
+  bool _isRecurring = false;
+  String _recurrenceFrequency = 'weekly';
+  int _recurrenceInterval = 1;
+  List<String> _daysOfWeek = [];
+  DateTime? _recurrenceEndDate;
+  int? _maxOccurrences;
+  int _dayOfMonth = 1;
+  int _weekOfMonth = 1;
+  int _monthOfYear = 1;
+  bool _byDayOfWeek = false;
   
   // Pre-defined event categories
   final List<String> _categories = [
-    'Social',
     'Academic',
-    'Sports',
     'Arts',
     'Career',
-    'Service',
+    'Club',
+    'Community Service',
     'Cultural',
+    'Entertainment',
+    'Fitness',
     'Greek Life',
-    'Other',
+    'Health',
+    'Religious',
+    'Social',
+    'Sports',
+    'Tech',
+    'Workshop',
+    'Other'
   ];
   
   // Pre-defined tags to select from
@@ -90,6 +113,19 @@ class _CreateEventPageState extends ConsumerState<CreateEventPage> {
     super.initState();
     // Track screen view
     AnalyticsService.logScreenView('create_event_page');
+    
+    // Initialize days of week if using weekly recurrence
+    // Default to the day of week of the start date
+    _daysOfWeek = [_getDayOfWeekString(_startDate.weekday % 7)]; // Convert from 1-7 (Mon-Sun) to 0-6 (Sun-Sat)
+    
+    // Initialize day of month for monthly recurrence
+    _dayOfMonth = _startDate.day;
+    
+    // Initialize week of month for monthly recurrence
+    _weekOfMonth = ((_startDate.day - 1) ~/ 7) + 1;
+    
+    // Initialize month of year for yearly recurrence
+    _monthOfYear = _startDate.month;
   }
 
   @override
@@ -100,128 +136,145 @@ class _CreateEventPageState extends ConsumerState<CreateEventPage> {
     super.dispose();
   }
 
-  // Date picker for start date
+  /// Select start date
   Future<void> _selectStartDate(BuildContext context) async {
     final DateTime? pickedDate = await showDatePicker(
       context: context,
       initialDate: _startDate,
       firstDate: DateTime.now(),
       lastDate: DateTime.now().add(const Duration(days: 365)),
-      builder: (context, child) {
+      builder: (BuildContext context, Widget? child) {
         return Theme(
-          data: Theme.of(context).copyWith(
-            colorScheme: const ColorScheme.dark(
+          data: ThemeData.dark().copyWith(
+            colorScheme: ColorScheme.dark(
               primary: AppColors.gold,
               onPrimary: Colors.black,
-              surface: AppColors.cardBackground,
+              surface: Colors.grey.shade900,
               onSurface: Colors.white,
             ),
-            dialogBackgroundColor: AppColors.cardBackground,
+            dialogBackgroundColor: Colors.grey.shade900,
           ),
           child: child!,
         );
       },
     );
 
+    if (!mounted) return;
+
     if (pickedDate != null) {
-      final TimeOfDay? selectedTime = await showTimePicker(
+      final TimeOfDay? pickedTime = await showTimePicker(
         context: context,
         initialTime: TimeOfDay.fromDateTime(_startDate),
-        builder: (context, child) {
+        builder: (BuildContext context, Widget? child) {
           return Theme(
-            data: Theme.of(context).copyWith(
-              colorScheme: const ColorScheme.dark(
+            data: ThemeData.dark().copyWith(
+              colorScheme: ColorScheme.dark(
                 primary: AppColors.gold,
                 onPrimary: Colors.black,
-                surface: AppColors.cardBackground,
+                surface: Colors.grey.shade900,
                 onSurface: Colors.white,
               ),
-              dialogBackgroundColor: AppColors.cardBackground,
+              dialogBackgroundColor: Colors.grey.shade900,
             ),
             child: child!,
           );
         },
       );
+      
+      if (!mounted) return;
 
-      if (selectedTime != null) {
+      if (pickedTime != null) {
         setState(() {
           _startDate = DateTime(
             pickedDate.year,
             pickedDate.month,
             pickedDate.day,
-            selectedTime.hour,
-            selectedTime.minute,
+            pickedTime.hour,
+            pickedTime.minute,
           );
           
-          // If end date is now before start date, adjust it
-          if (_endDate.isBefore(_startDate) || _endDate.isAtSameMomentAs(_startDate)) {
-            _endDate = _startDate.add(const Duration(hours: 2));
+          // Ensure end date is after start date
+          if (_endDate.isBefore(_startDate)) {
+            _endDate = _startDate.add(const Duration(hours: 1));
           }
         });
       }
     }
   }
 
-  // Date picker for end date
+  /// Select end date
   Future<void> _selectEndDate(BuildContext context) async {
     final DateTime? pickedDate = await showDatePicker(
       context: context,
-      initialDate: _endDate.isBefore(_startDate) ? _startDate : _endDate,
-      firstDate: DateTime.now(),
+      initialDate: _endDate,
+      firstDate: _startDate,
       lastDate: DateTime.now().add(const Duration(days: 365)),
-      builder: (context, child) {
+      builder: (BuildContext context, Widget? child) {
         return Theme(
-          data: Theme.of(context).copyWith(
-            colorScheme: const ColorScheme.dark(
+          data: ThemeData.dark().copyWith(
+            colorScheme: ColorScheme.dark(
               primary: AppColors.gold,
               onPrimary: Colors.black,
-              surface: AppColors.cardBackground,
+              surface: Colors.grey.shade900,
               onSurface: Colors.white,
             ),
-            dialogBackgroundColor: AppColors.cardBackground,
+            dialogBackgroundColor: Colors.grey.shade900,
           ),
           child: child!,
         );
       },
     );
 
+    if (!mounted) return;
+
     if (pickedDate != null) {
-      final TimeOfDay? selectedTime = await showTimePicker(
+      final TimeOfDay? pickedTime = await showTimePicker(
         context: context,
         initialTime: TimeOfDay.fromDateTime(_endDate),
-        builder: (context, child) {
+        builder: (BuildContext context, Widget? child) {
           return Theme(
-            data: Theme.of(context).copyWith(
-              colorScheme: const ColorScheme.dark(
+            data: ThemeData.dark().copyWith(
+              colorScheme: ColorScheme.dark(
                 primary: AppColors.gold,
                 onPrimary: Colors.black,
-                surface: AppColors.cardBackground,
+                surface: Colors.grey.shade900,
                 onSurface: Colors.white,
               ),
-              dialogBackgroundColor: AppColors.cardBackground,
+              dialogBackgroundColor: Colors.grey.shade900,
             ),
             child: child!,
           );
         },
       );
+      
+      if (!mounted) return;
 
-      if (selectedTime != null) {
+      if (pickedTime != null) {
         setState(() {
           _endDate = DateTime(
             pickedDate.year,
             pickedDate.month,
             pickedDate.day,
-            selectedTime.hour,
-            selectedTime.minute,
+            pickedTime.hour,
+            pickedTime.minute,
           );
-          
-          // If end date is now before start date, adjust start date
-          if (_endDate.isBefore(_startDate)) {
-            _startDate = _endDate.subtract(const Duration(hours: 2));
-          }
         });
       }
     }
+  }
+
+  // Helper method to convert day of week index to string representation
+  String _getDayOfWeekString(int dayIndex) {
+    final days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    return days[dayIndex];
+  }
+
+  // Helper method to convert day of week strings to indices
+  List<int> _getDaysOfWeekIndices(List<String> days) {
+    final Map<String, int> dayMap = {
+      'Sun': 0, 'Mon': 1, 'Tue': 2, 'Wed': 3, 'Thu': 4, 'Fri': 5, 'Sat': 6
+    };
+    return days.map((day) => dayMap[day] ?? 0).toList();
   }
 
   // Helper method to validate space type
@@ -245,21 +298,15 @@ class _CreateEventPageState extends ConsumerState<CreateEventPage> {
     return validTypes.contains(spaceType);
   }
 
-  // Create the event
+  /// Create the event
   Future<void> _createEvent() async {
     try {
       // Validate form
       if (!_formKey.currentState!.validate()) {
-        setState(() {
-          _showErrors = true;
-        });
         return;
       }
       
       if (_titleController.text.isEmpty) {
-        setState(() {
-          _showErrors = true;
-        });
         return;
       }
       
@@ -271,12 +318,6 @@ class _CreateEventPageState extends ConsumerState<CreateEventPage> {
       // Create a Firebase reference for the new event
       final CollectionReference eventsCollection = FirebaseFirestore.instance.collection('events');
       final DocumentReference newEventRef = eventsCollection.doc();
-
-      // Get timestamp
-      final DateTime now = DateTime.now();
-      
-      // Determine visibility based on selection
-      String visibilityValue = _visibility;
       
       // First check if the user is an admin of the space if it's a club/space event
       final currentUser = FirebaseAuth.instance.currentUser;
@@ -290,21 +331,37 @@ class _CreateEventPageState extends ConsumerState<CreateEventPage> {
         return;
       }
       
-      // Verify admin status again as a safeguard
+      // Verify admin status using the repository for accurate role check
       final isSpaceEvent = widget.selectedSpace.id.isNotEmpty;
+      bool isSpaceAdmin = false; // Default to false
       if (isSpaceEvent) {
-        final isAdmin = widget.selectedSpace.admins.contains(currentUser.uid);
+        final repository = ref.read(spaceRepositoryProvider);
+        final spaceId = widget.selectedSpace.id;
+        final userId = currentUser.uid;
         
-        if (!isAdmin) {
+        try {
+            final member = await repository.getSpaceMember(spaceId, userId);
+            isSpaceAdmin = member?.role == 'admin';
+        } catch (e) {
+            debugPrint('Error checking space admin status during event creation: $e');
+            // Handle error case - prevent event creation if status check fails
+            if (!mounted) return;
+            ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Could not verify space permissions. Please try again.')),
+            );
+            setState(() { _isSubmitting = false; });
+            return;
+        }
+
+        if (!isSpaceAdmin) {
+          if (!mounted) return;
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text('You must be an admin of this space to create an event'),
               backgroundColor: Colors.red,
             ),
           );
-          setState(() {
-            _isSubmitting = false;
-          });
+          setState(() { _isSubmitting = false; });
           return;
         }
       }
@@ -323,6 +380,17 @@ class _CreateEventPageState extends ConsumerState<CreateEventPage> {
         organizerEmail: currentUser.email ?? '',
         clubId: isSpaceEvent ? widget.selectedSpace.id : null,
         isClubEvent: isSpaceEvent,
+        // Add recurring event parameters
+        isRecurring: _isRecurring,
+        recurrenceFrequency: _isRecurring ? _recurrenceFrequency : null,
+        recurrenceInterval: _isRecurring ? _recurrenceInterval : null,
+        recurrenceEndDate: _isRecurring ? _recurrenceEndDate : null,
+        maxOccurrences: _isRecurring ? _maxOccurrences : null,
+        daysOfWeek: _isRecurring && _recurrenceFrequency == 'weekly' ? _getDaysOfWeekIndices(_daysOfWeek) : null,
+        dayOfMonth: _isRecurring && (_recurrenceFrequency == 'monthly' || _recurrenceFrequency == 'yearly') ? _dayOfMonth : null,
+        weekOfMonth: _isRecurring && _recurrenceFrequency == 'monthly' && _byDayOfWeek ? _weekOfMonth : null,
+        monthOfYear: _isRecurring && _recurrenceFrequency == 'yearly' ? _monthOfYear : null,
+        byDayOfWeek: _isRecurring && _recurrenceFrequency == 'monthly' ? _byDayOfWeek : null,
       );
 
       // Validate request
@@ -331,187 +399,74 @@ class _CreateEventPageState extends ConsumerState<CreateEventPage> {
         throw Exception(validationError);
       }
 
-      // Create the event
-      final event = Event.createClubEvent(
-        title: request.title,
-        description: request.description,
-        location: request.location,
-        startDate: request.startDate,
-        endDate: request.endDate,
-        clubId: widget.selectedSpace.id,
-        clubName: widget.selectedSpace.name,
-        creatorId: currentUser.uid,
-        category: request.category,
-        organizerEmail: currentUser.email ?? '',
-        visibility: request.visibility,
-        tags: request.tags,
-        imageUrl: widget.selectedSpace.imageUrl ?? '',
-      );
-
-      // Get the space type for Firestore path
-      final spaceType = widget.selectedSpace.spaceType.toString().split('.').last.toLowerCase();
-      debugPrint('Using space type for Firestore path: $spaceType');
-      
-      // Validate space type - fallback to a default if there's an issue
-      final validSpaceType = _isValidSpaceType(spaceType) ? spaceType : 'student_organizations';
-      if (validSpaceType != spaceType) {
-        debugPrint('WARNING: Invalid space type "$spaceType", using fallback: $validSpaceType');
-      }
-      
-      try {
-        // Save to main events collection first
-        await FirebaseFirestore.instance
-            .collection('events')
-            .doc(event.id)
-            .set({
-          'id': event.id,
-          'title': event.title,
-          'description': event.description,
-          'location': event.location,
-          'startDate': event.startDate.toIso8601String(),
-          'endDate': event.endDate.toIso8601String(),
-          'organizerEmail': event.organizerEmail,
-          'organizerName': event.organizerName,
-          'category': event.category,
-          'status': event.status,
-          'link': event.link,
-          'imageUrl': event.imageUrl,
-          'tags': event.tags,
-          'source': 'club',
-          'createdBy': event.createdBy,
-          'lastModified': FieldValue.serverTimestamp(),
-          'visibility': event.visibility,
-          'attendees': event.attendees,
-          'spaceId': widget.selectedSpace.id, // Set the spaceId field
-        });
+      if (_isRecurring) {
+        // Use the RecurringEventController to create a recurring event
+        final controller = ref.read(recurringEventControllerProvider.notifier);
+        final recurringEvent = await controller.createRecurringEvent(request, currentUser.uid);
         
-        debugPrint('Event saved to main events collection');
-        
-        // Now link it to the space using SpaceRepositoryImpl
-        final spaceRepository = SpaceRepositoryImpl();
-        final linked = await spaceRepository.createSpaceEvent(
-          widget.selectedSpace.id, 
-          event.id, 
-          currentUser.uid
+        if (recurringEvent == null) {
+          throw Exception('Failed to create recurring event');
+        }
+      } else {
+        // Create regular (non-recurring) event
+        final event = Event.createClubEvent(
+          title: request.title,
+          description: request.description,
+          location: request.location,
+          startDate: request.startDate,
+          endDate: request.endDate,
+          clubId: widget.selectedSpace.id,
+          clubName: widget.selectedSpace.name,
+          creatorId: currentUser.uid,
+          category: request.category,
+          organizerEmail: currentUser.email ?? '',
+          visibility: request.visibility,
+          tags: request.tags,
+          imageUrl: widget.selectedSpace.imageUrl ?? '',
         );
-        
-        if (!linked) {
-          debugPrint('Warning: Failed to link event to space through SpaceRepositoryImpl');
-        }
-        
-        // Save to space-specific collection as well (as a fallback)
-        await FirebaseFirestore.instance
-            .collection('spaces')
-            .doc(validSpaceType)
-            .collection('spaces')
-            .doc(widget.selectedSpace.id)
-            .collection('events')
-            .doc(event.id)
-            .set({
-          'id': event.id,
-          'title': event.title,
-          'description': event.description,
-          'location': event.location,
-          'startDate': event.startDate.toIso8601String(),
-          'endDate': event.endDate.toIso8601String(),
-          'organizerEmail': event.organizerEmail,
-          'organizerName': event.organizerName,
-          'category': event.category,
-          'status': event.status,
-          'link': event.link,
-          'imageUrl': event.imageUrl,
-          'tags': event.tags,
-          'source': 'club',
-          'createdBy': event.createdBy,
-          'lastModified': FieldValue.serverTimestamp(),
-          'visibility': event.visibility,
-          'attendees': event.attendees,
-          'spaceId': widget.selectedSpace.id, // Set the spaceId field
-        });
-        
-        debugPrint('Event document created successfully');
 
-        // Update space with event count
-        await FirebaseFirestore.instance
+        // Get the space type for Firestore path
+        final spaceType = widget.selectedSpace.spaceType.toString().split('.').last.toLowerCase();
+        debugPrint('Using space type for Firestore path: $spaceType');
+        
+        // Validate space type - fallback to a default if there's an issue
+        final validSpaceType = _isValidSpaceType(spaceType) ? spaceType : 'student_organizations';
+        
+        // Reference to the space
+        final spaceRef = FirebaseFirestore.instance
             .collection('spaces')
             .doc(validSpaceType)
             .collection('spaces')
-            .doc(widget.selectedSpace.id)
-            .update({
-          'eventCount': FieldValue.increment(1),
-          'lastActivity': FieldValue.serverTimestamp(),
+            .doc(widget.selectedSpace.id);
+            
+        // Reference to the event in the space's events subcollection
+        final spaceEventRef = spaceRef.collection('events').doc(event.id);
+        
+        // Create a batch to update multiple locations atomically
+        final batch = FirebaseFirestore.instance.batch();
+        
+        // Add event data to batch
+        final eventData = event.toMap();
+        
+        // Add to global events collection
+        batch.set(newEventRef, eventData);
+        
+        // Also add to space's events subcollection
+        batch.set(spaceEventRef, eventData);
+        
+        // Update space document to include this event
+        batch.update(spaceRef, {
+          'eventIds': FieldValue.arrayUnion([event.id]),
+          'updatedAt': FieldValue.serverTimestamp(),
         });
         
-        debugPrint('Space document updated with event count');
-      } catch (firestoreError) {
-        debugPrint('Firestore error: $firestoreError');
+        // Commit all the writes
+        await batch.commit();
         
-        // Fallback to collection group query to find the space
-        try {
-          debugPrint('Attempting fallback with collection group query...');
-          
-          // Find the space using collection group query
-          final spaceQuery = await FirebaseFirestore.instance
-              .collectionGroup('spaces')
-              .where('id', isEqualTo: widget.selectedSpace.id)
-              .limit(1)
-              .get();
-              
-          if (spaceQuery.docs.isEmpty) {
-            throw Exception('Space not found after collection group query');
-          }
-          
-          final spaceRef = spaceQuery.docs.first.reference;
-          debugPrint('Found space at path: ${spaceRef.path}');
-          
-          // Create event in the space's events collection
-          await spaceRef.collection('events').doc(event.id).set({
-            'id': event.id,
-            'title': event.title,
-            'description': event.description,
-            'location': event.location,
-            'startDate': event.startDate.toIso8601String(),
-            'endDate': event.endDate.toIso8601String(),
-            'organizerEmail': event.organizerEmail,
-            'organizerName': event.organizerName,
-            'category': event.category,
-            'status': event.status,
-            'link': event.link,
-            'imageUrl': event.imageUrl,
-            'tags': event.tags,
-            'source': 'club',
-            'createdBy': event.createdBy,
-            'lastModified': FieldValue.serverTimestamp(),
-            'visibility': event.visibility,
-            'attendees': event.attendees,
-          });
-          
-          // Update event count
-          await spaceRef.update({
-            'eventCount': FieldValue.increment(1),
-            'lastActivity': FieldValue.serverTimestamp(),
-          });
-          
-          debugPrint('Successfully created event using fallback method');
-        } catch (fallbackError) {
-          debugPrint('Fallback also failed: $fallbackError');
-          throw Exception('Error saving event (fallback also failed): $fallbackError');
-        }
+        debugPrint('Event created successfully with ID: ${event.id}');
       }
 
-      // Log analytics
-      AnalyticsService.logEvent(
-        'event_created',
-        parameters: {
-          'event_title': event.title,
-          'space_id': widget.selectedSpace.id,
-          'space_name': widget.selectedSpace.name,
-          'event_category': event.category,
-          'event_visibility': event.visibility,
-        },
-      );
-
-      // Show success message and navigate back
+      // Show success snackbar
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -597,32 +552,22 @@ class _CreateEventPageState extends ConsumerState<CreateEventPage> {
                       ),
                       child: Row(
                         children: [
-                          // Space icon or image
                           Container(
-                            width: 40,
-                            height: 40,
+                            width: 48,
+                            height: 48,
                             decoration: BoxDecoration(
+                              color: AppColors.cardBackground,
                               borderRadius: BorderRadius.circular(8),
-                              color: AppColors.black,
-                              border: Border.all(
-                                color: AppColors.gold.withOpacity(0.3),
-                                width: 1,
-                              ),
-                            ),
-                            child: widget.selectedSpace.imageUrl != null && 
-                                   widget.selectedSpace.imageUrl!.isNotEmpty
-                                ? ClipRRect(
-                                    borderRadius: BorderRadius.circular(8),
-                                    child: Image.network(
-                                      widget.selectedSpace.imageUrl!,
+                              image: widget.selectedSpace.imageUrl != null
+                                  ? DecorationImage(
+                                      image: NetworkImage(widget.selectedSpace.imageUrl!),
                                       fit: BoxFit.cover,
-                                    ),
-                                  )
-                                : const Icon(
-                                    Icons.groups,
-                                    color: AppColors.gold,
-                                    size: 20,
-                                  ),
+                                    )
+                                  : null,
+                            ),
+                            child: widget.selectedSpace.imageUrl == null
+                                ? const Icon(Icons.group, color: Colors.white54)
+                                : null,
                           ),
                           const SizedBox(width: 12),
                           Expanded(
@@ -681,9 +626,6 @@ class _CreateEventPageState extends ConsumerState<CreateEventPage> {
                           borderRadius: BorderRadius.circular(8),
                           borderSide: BorderSide.none,
                         ),
-                        errorStyle: const TextStyle(
-                          color: Colors.redAccent,
-                        ),
                       ),
                       validator: (value) {
                         if (value == null || value.isEmpty) {
@@ -717,9 +659,6 @@ class _CreateEventPageState extends ConsumerState<CreateEventPage> {
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(8),
                           borderSide: BorderSide.none,
-                        ),
-                        errorStyle: const TextStyle(
-                          color: Colors.redAccent,
                         ),
                       ),
                       validator: (value) {
@@ -758,9 +697,6 @@ class _CreateEventPageState extends ConsumerState<CreateEventPage> {
                           Icons.location_on_outlined,
                           color: Colors.white70,
                         ),
-                        errorStyle: const TextStyle(
-                          color: Colors.redAccent,
-                        ),
                       ),
                       validator: (value) {
                         if (value == null || value.isEmpty) {
@@ -773,93 +709,80 @@ class _CreateEventPageState extends ConsumerState<CreateEventPage> {
                     const SizedBox(height: 20),
                     
                     // Date and time
+                    Text(
+                      'Date & Time',
+                      style: GoogleFonts.outfit(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.white,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
                     Row(
                       children: [
                         Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Start Date & Time',
-                                style: GoogleFonts.outfit(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.white,
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              InkWell(
-                                onTap: () => _selectStartDate(context),
+                          child: GestureDetector(
+                            onTap: () => _selectStartDate(context),
+                            child: Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: AppColors.inputBackground,
                                 borderRadius: BorderRadius.circular(8),
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 12,
-                                    vertical: 16,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    borderRadius: BorderRadius.circular(8),
-                                    color: AppColors.inputBackground,
-                                  ),
-                                  child: Row(
-                                    children: [
-                                      const Icon(
-                                        Icons.event,
-                                        color: Colors.white70,
-                                      ),
-                                      const SizedBox(width: 8),
-                                      Text(
-                                        DateFormat('MMM d, yyyy h:mm a').format(_startDate),
-                                        style: const TextStyle(color: Colors.white),
-                                      ),
-                                    ],
-                                  ),
-                                ),
                               ),
-                            ],
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Starts',
+                                    style: TextStyle(
+                                      color: Colors.white.withOpacity(0.6),
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    DateFormat('MMM d, yyyy • h:mm a').format(_startDate),
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 14,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
                           ),
                         ),
-                        const SizedBox(width: 16),
+                        const SizedBox(width: 12),
                         Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'End Date & Time',
-                                style: GoogleFonts.outfit(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.white,
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              InkWell(
-                                onTap: () => _selectEndDate(context),
+                          child: GestureDetector(
+                            onTap: () => _selectEndDate(context),
+                            child: Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: AppColors.inputBackground,
                                 borderRadius: BorderRadius.circular(8),
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 12,
-                                    vertical: 16,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    borderRadius: BorderRadius.circular(8),
-                                    color: AppColors.inputBackground,
-                                  ),
-                                  child: Row(
-                                    children: [
-                                      const Icon(
-                                        Icons.event,
-                                        color: Colors.white70,
-                                      ),
-                                      const SizedBox(width: 8),
-                                      Text(
-                                        DateFormat('MMM d, yyyy h:mm a').format(_endDate),
-                                        style: const TextStyle(color: Colors.white),
-                                      ),
-                                    ],
-                                  ),
-                                ),
                               ),
-                            ],
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Ends',
+                                    style: TextStyle(
+                                      color: Colors.white.withOpacity(0.6),
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    DateFormat('MMM d, yyyy • h:mm a').format(_endDate),
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 14,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
                           ),
                         ),
                       ],
@@ -867,7 +790,84 @@ class _CreateEventPageState extends ConsumerState<CreateEventPage> {
                     
                     const SizedBox(height: 20),
                     
-                    // Event category
+                    // Recurring event options
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: AppColors.cardBackground.withOpacity(0.3),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: RecurringEventOptions(
+                        isRecurring: _isRecurring,
+                        frequency: _recurrenceFrequency,
+                        interval: _recurrenceInterval,
+                        daysOfWeek: _daysOfWeek,
+                        endDate: _recurrenceEndDate,
+                        maxOccurrences: _maxOccurrences,
+                        dayOfMonth: _dayOfMonth,
+                        weekOfMonth: _weekOfMonth,
+                        monthOfYear: _monthOfYear,
+                        byDayOfWeek: _byDayOfWeek,
+                        onRecurringToggled: (value) {
+                          setState(() {
+                            _isRecurring = value;
+                          });
+                        },
+                        onFrequencyChanged: (value) {
+                          setState(() {
+                            _recurrenceFrequency = value;
+                          });
+                        },
+                        onIntervalChanged: (value) {
+                          setState(() {
+                            _recurrenceInterval = value;
+                          });
+                        },
+                        onDaysOfWeekChanged: (value) {
+                          setState(() {
+                            _daysOfWeek = value;
+                          });
+                        },
+                        onEndDateChanged: (value) {
+                          setState(() {
+                            _recurrenceEndDate = value;
+                          });
+                        },
+                        onMaxOccurrencesChanged: (value) {
+                          setState(() {
+                            _maxOccurrences = value;
+                          });
+                        },
+                        onDayOfMonthChanged: (value) {
+                          setState(() {
+                            _dayOfMonth = value;
+                          });
+                        },
+                        onWeekOfMonthChanged: (value) {
+                          setState(() {
+                            _weekOfMonth = value;
+                          });
+                        },
+                        onMonthOfYearChanged: (value) {
+                          setState(() {
+                            _monthOfYear = value;
+                          });
+                        },
+                        onByDayOfWeekChanged: (value) {
+                          setState(() {
+                            _byDayOfWeek = value;
+                          });
+                        },
+                      ),
+                    ).addGlassmorphism(
+                      borderRadius: 12,
+                      blur: GlassmorphismGuide.kCardBlur,
+                      opacity: GlassmorphismGuide.kCardGlassOpacity,
+                    ),
+                    
+                    const SizedBox(height: 20),
+                    
+                    // Category
                     Text(
                       'Category',
                       style: GoogleFonts.outfit(
@@ -878,31 +878,31 @@ class _CreateEventPageState extends ConsumerState<CreateEventPage> {
                     ),
                     const SizedBox(height: 8),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
                       decoration: BoxDecoration(
                         color: AppColors.inputBackground,
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: DropdownButtonHideUnderline(
                         child: DropdownButton<String>(
-                          isExpanded: true,
                           value: _category,
                           dropdownColor: AppColors.cardBackground,
-                          icon: const Icon(Icons.arrow_drop_down, color: Colors.white70),
                           style: const TextStyle(color: Colors.white),
-                          onChanged: (String? newValue) {
+                          iconEnabledColor: Colors.white,
+                          isExpanded: true,
+                          items: _categories.map((String value) {
+                            return DropdownMenuItem<String>(
+                              value: value,
+                              child: Text(value),
+                            );
+                          }).toList(),
+                          onChanged: (newValue) {
                             if (newValue != null) {
                               setState(() {
                                 _category = newValue;
                               });
                             }
                           },
-                          items: _categories.map<DropdownMenuItem<String>>((String value) {
-                            return DropdownMenuItem<String>(
-                              value: value,
-                              child: Text(value),
-                            );
-                          }).toList(),
                         ),
                       ),
                     ),
@@ -919,37 +919,29 @@ class _CreateEventPageState extends ConsumerState<CreateEventPage> {
                       ),
                     ),
                     const SizedBox(height: 8),
-                    Column(
-                      children: _visibilityOptions.entries.map((entry) {
-                        return RadioListTile<String>(
-                          title: Text(
-                            entry.value.split(' - ')[0],
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.w500,
-                            ),
+                    ...(_visibilityOptions.entries.map((entry) {
+                      return RadioListTile<String>(
+                        title: Text(
+                          entry.value,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 14,
                           ),
-                          subtitle: Text(
-                            entry.value.split(' - ')[1],
-                            style: TextStyle(
-                              color: Colors.white.withOpacity(0.7),
-                              fontSize: 12,
-                            ),
-                          ),
-                          value: entry.key,
-                          groupValue: _visibility,
-                          activeColor: AppColors.gold,
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 0),
-                          onChanged: (value) {
-                            if (value != null) {
-                              setState(() {
-                                _visibility = value;
-                              });
-                            }
-                          },
-                        );
-                      }).toList(),
-                    ),
+                        ),
+                        value: entry.key,
+                        groupValue: _visibility,
+                        onChanged: (value) {
+                          if (value != null) {
+                            setState(() {
+                              _visibility = value;
+                            });
+                          }
+                        },
+                        activeColor: AppColors.gold,
+                        dense: true,
+                        contentPadding: EdgeInsets.zero,
+                      );
+                    }).toList()),
                     
                     const SizedBox(height: 20),
                     
@@ -962,15 +954,15 @@ class _CreateEventPageState extends ConsumerState<CreateEventPage> {
                         color: Colors.white,
                       ),
                     ),
-                    const SizedBox(height: 4),
+                    const SizedBox(height: 8),
                     Text(
-                      'Select tags that describe your event',
-                      style: GoogleFonts.inter(
+                      'Select tags to help people discover your event',
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(0.7),
                         fontSize: 14,
-                        color: Colors.white70,
                       ),
                     ),
-                    const SizedBox(height: 10),
+                    const SizedBox(height: 12),
                     Wrap(
                       spacing: 8,
                       runSpacing: 8,
@@ -1013,32 +1005,6 @@ class _CreateEventPageState extends ConsumerState<CreateEventPage> {
                           ),
                         );
                       }).toList(),
-                    ),
-                    
-                    const SizedBox(height: 32),
-                    
-                    // Create button
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton(
-                        onPressed: _isSubmitting ? null : _createEvent,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.gold,
-                          foregroundColor: Colors.black,
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          disabledBackgroundColor: AppColors.gold.withOpacity(0.3),
-                        ),
-                        child: Text(
-                          _isSubmitting ? 'Creating...' : 'Create Event',
-                          style: GoogleFonts.outfit(
-                            fontWeight: FontWeight.w600,
-                            fontSize: 16,
-                          ),
-                        ),
-                      ),
                     ),
                     
                     const SizedBox(height: 32),

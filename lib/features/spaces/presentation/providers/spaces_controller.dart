@@ -1,15 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:hive_ui/features/spaces/presentation/providers/space_providers.dart';
+import 'package:hive_ui/features/spaces/presentation/providers/spaces_providers.dart';
 import 'package:hive_ui/features/spaces/presentation/providers/user_spaces_providers.dart' as user_spaces;
 import 'package:hive_ui/models/space.dart';
 import 'package:hive_ui/models/event.dart';
+import 'package:hive_ui/models/space_type.dart';
 import 'package:hive_ui/services/analytics_service.dart';
 import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hive_ui/providers/user_providers.dart';
+import 'package:hive_ui/features/spaces/presentation/providers/space_search_provider.dart' 
+  show spaceSearchQueryProvider, spaceSearchActiveProvider, searchedSpacesProvider;
 
 /// State class for spaces page
 class SpacesPageState {
@@ -67,12 +70,17 @@ class SpacesController extends StateNotifier<SpacesPageState> {
 
   /// Update search query
   void updateSearchQuery(String query) {
-    if (query == state.searchQuery) return;
+    if (state.searchQuery == query) return;
 
     state = state.copyWith(
       searchQuery: query,
       isSearching: query.isNotEmpty,
     );
+
+    // Update the search query state provider
+    _ref.read(spaceSearchQueryProvider.notifier).state = query;
+    // Also update the search active state provider
+    _ref.read(spaceSearchActiveProvider.notifier).state = query.isNotEmpty;
 
     // If query is empty, clear search results
     if (query.isEmpty) {
@@ -103,6 +111,11 @@ class SpacesController extends StateNotifier<SpacesPageState> {
 
     // Clear search state
     state = state.copyWith(searchQuery: '', isSearching: false);
+
+    // Clear the search query state provider
+    _ref.read(spaceSearchQueryProvider.notifier).state = '';
+    // Update the search active state provider
+    _ref.read(spaceSearchActiveProvider.notifier).state = false;
 
     // Clear search results
     _ref.read(spaceSearchProvider.notifier).clear();
@@ -198,9 +211,12 @@ class SpacesController extends StateNotifier<SpacesPageState> {
 
   /// Refresh spaces data
   Future<void> refreshSpaces() async {
-    // Refresh providers to fetch latest data
-    _ref.refresh(spacesProvider);
-    _ref.refresh(user_spaces.userSpacesProvider);
+    // Invalidate providers to trigger refetch
+    _ref.invalidate(allSpacesProvider);      // Refresh discoverable spaces
+    _ref.invalidate(joinedSpacesProvider);    // Refresh joined spaces
+    _ref.invalidate(user_spaces.userSpacesProvider); // User-specific spaces
+    // Refresh search results if needed
+    _ref.invalidate(searchedSpacesProvider);
 
     // Log analytics event
     AnalyticsService.logEvent('spaces_refreshed');
@@ -294,33 +310,7 @@ class SpacesController extends StateNotifier<SpacesPageState> {
       return false;
     }
   }
-}
 
-/// Provider for spaces controller
-final spacesControllerProvider =
-    StateNotifierProvider<SpacesController, SpacesPageState>((ref) {
-  return SpacesController(ref);
-});
-
-/// Helper function to navigate directly to create space page for debugging
-void debugNavigateToCreateSpace(BuildContext context) {
-  try {
-    // Log attempt
-    debugPrint('DEBUG: Attempting to navigate to create space page');
-    
-    // Direct navigation using routes constant
-    GoRouter.of(context).push('/spaces/create');
-    
-    // Log success
-    debugPrint('DEBUG: Navigation attempt completed');
-  } catch (e) {
-    // Log any errors
-    debugPrint('DEBUG: Navigation failed with error: $e');
-  }
-}
-
-/// Create an event in a space and save to Firestore
-extension SpacesControllerExtension on SpacesController {
   /// Create an event in a space
   Future<bool> createEventInSpace(Event event, Space space) async {
     if (state.isLoading) return false;
@@ -371,19 +361,26 @@ extension SpacesControllerExtension on SpacesController {
       // Save event to events collection
       await firestore.collection('events').doc(event.id).set(eventData);
 
-      // Add event ID to space
-      await firestore.collection('spaces').doc(space.id).update({
-        'eventIds': FieldValue.arrayUnion([event.id]),
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
+      // Add event ID to space document (root level)
+       final collectionPath = _getSpaceCollectionPathByType(space.spaceType);
+       if (collectionPath != null) {
+          await firestore.collection(collectionPath).doc(space.id).update({
+            'eventIds': FieldValue.arrayUnion([event.id]),
+            'updatedAt': FieldValue.serverTimestamp(), // Use server timestamp
+            'lastActivityAt': FieldValue.serverTimestamp(), // Update last activity
+          });
+       } else {
+         debugPrint("Warning: Could not determine collection path for space type: ${space.spaceType}");
+       }
 
-      // Also add to the separate events subcollection in the space
-      await firestore
-          .collection('spaces')
-          .doc(space.id)
-          .collection('events')
-          .doc(event.id)
-          .set(eventData);
+      // Also add to the separate events subcollection in the space (if used)
+      // Consider if this duplication is necessary
+      // await firestore
+      //     .collection(collectionPath)
+      //     .doc(space.id)
+      //     .collection('events')
+      //     .doc(event.id)
+      //     .set(eventData);
           
       // Also update the user's rsvpedEvents list since they are the creator
       await firestore.collection('users').doc(userId).update({
@@ -396,8 +393,10 @@ extension SpacesControllerExtension on SpacesController {
         parameters: {'event_id': event.id, 'space_id': space.id},
       );
 
-      // Refresh providers to update UI
-      _ref.refresh(user_spaces.userSpacesProvider);
+      // Refresh relevant providers after event creation
+      _ref.invalidate(user_spaces.userSpacesProvider);
+      // Potentially invalidate specific space provider if it holds event list
+      // _ref.invalidate(spaceProvider(space.id)); 
 
       // Reset loading state
       state = state.copyWith(isLoading: false);
@@ -413,4 +412,73 @@ extension SpacesControllerExtension on SpacesController {
       return false;
     }
   }
+
+  // Helper to get Firestore collection path (consider moving to a utility class)
+  String? _getSpaceCollectionPathByType(SpaceType spaceType) {
+    switch (spaceType) {
+      case SpaceType.studentOrg:
+        return 'spaces/student_organizations/spaces';
+      case SpaceType.universityOrg:
+        return 'spaces/university/spaces';
+      case SpaceType.campusLiving:
+        return 'spaces/campus_living/spaces';
+      case SpaceType.fraternityAndSorority:
+        return 'spaces/greek_life/spaces';
+      case SpaceType.hiveExclusive:
+        return 'spaces/hive_exclusive/spaces';
+      case SpaceType.other:
+        return 'spaces/other/spaces';
+    }
+    // Return null for any unexpected values (though this should never happen)
+    return null;
+  }
 }
+
+/// Provider for spaces controller
+final spacesControllerProvider =
+    StateNotifierProvider<SpacesController, SpacesPageState>((ref) {
+  return SpacesController(ref);
+});
+
+/// Helper function to navigate directly to create space page for debugging
+void debugNavigateToCreateSpace(BuildContext context) {
+  try {
+    // Log attempt
+    debugPrint('DEBUG: Attempting to navigate to create space page');
+    
+    // Direct navigation using routes constant
+    GoRouter.of(context).push('/spaces/create');
+    
+    // Log success
+    debugPrint('DEBUG: Navigation attempt completed');
+  } catch (e) {
+    // Log any errors
+    debugPrint('DEBUG: Navigation failed with error: $e');
+  }
+}
+
+// Add a StateNotifier for search functionality
+class SpaceSearchNotifier extends StateNotifier<void> {
+  final Ref _ref;
+  
+  SpaceSearchNotifier(this._ref) : super(null);
+  
+  void search(String query) {
+    _ref.read(spaceSearchQueryProvider.notifier).state = query;
+    _ref.read(spaceSearchActiveProvider.notifier).state = true;
+    // Force a refresh of searchedSpacesProvider
+    _ref.invalidate(searchedSpacesProvider);
+  }
+  
+  void clear() {
+    _ref.read(spaceSearchQueryProvider.notifier).state = '';
+    _ref.read(spaceSearchActiveProvider.notifier).state = false;
+    // Force a refresh of searchedSpacesProvider
+    _ref.invalidate(searchedSpacesProvider);
+  }
+}
+
+// Add the provider for our search notifier
+final spaceSearchProvider = StateNotifierProvider<SpaceSearchNotifier, void>((ref) {
+  return SpaceSearchNotifier(ref);
+});

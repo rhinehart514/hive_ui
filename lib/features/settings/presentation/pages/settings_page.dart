@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+import 'package:hive_ui/core/navigation/routes.dart';
+import 'package:hive_ui/core/providers/role_checker_provider.dart';
+import 'package:hive_ui/core/services/role_checker.dart';
 import 'package:hive_ui/features/auth/providers/auth_providers.dart';
 import 'package:hive_ui/widgets/hive_app_bar.dart';
 
@@ -12,6 +16,9 @@ class SettingsPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     // Access auth controller for sign out functionality
     final authController = ref.watch(authControllerProvider.notifier);
+    
+    // Check if user is admin for admin-only sections
+    final isAdmin = ref.watch(hasRoleProvider(UserRole.admin));
     
     return Scaffold(
       appBar: const HiveAppBar(
@@ -70,6 +77,30 @@ class SettingsPage extends ConsumerWidget {
           ),
           
           const Divider(),
+          
+          // Admin Section - only visible to admins
+          isAdmin.when(
+            data: (isAdmin) {
+              if (!isAdmin) return const SizedBox.shrink();
+              
+              return Column(
+                children: [
+                  _buildSection(
+                    title: 'Verification Admin',
+                    icon: Icons.verified_user,
+                    subtitle: 'Manage verification requests',
+                    onTap: () {
+                      context.go(AppRoutes.adminVerification);
+                    },
+                    color: Colors.amber,
+                  ),
+                  const Divider(),
+                ],
+              );
+            },
+            loading: () => const SizedBox.shrink(),
+            error: (_, __) => const SizedBox.shrink(),
+          ),
           
           // About
           _buildSection(

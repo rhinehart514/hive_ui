@@ -2,6 +2,16 @@
 cmake_minimum_required(VERSION 3.14)
 project(hive_ui LANGUAGES CXX)
 
+# Add Firebase SDK paths explicitly
+if(DEFINED ENV{FIREBASE_CPP_SDK_DIR})
+  message(STATUS "Using Firebase SDK from: $ENV{FIREBASE_CPP_SDK_DIR}")
+  include_directories($ENV{FIREBASE_CPP_SDK_DIR}/include)
+  # Point to the specific architecture/configuration using generator expressions
+  link_directories($ENV{FIREBASE_CPP_SDK_DIR}/libs/windows/x64/$<$<CONFIG:Debug>:Debug>$<$<CONFIG:Release>:Release>$<$<CONFIG:Profile>:Release>)
+else()
+  message(FATAL_ERROR "FIREBASE_CPP_SDK_DIR environment variable not set. Please set it to the Firebase C++ SDK directory.")
+endif()
+
 # Configure platform-specific build options
 if(CMAKE_SYSTEM_NAME STREQUAL "Windows")
   # Firebase plugin workarounds for Windows
@@ -75,6 +85,8 @@ add_subdirectory(${FLUTTER_MANAGED_DIR})
 # Application build; see runner/CMakeLists.txt.
 add_subdirectory("runner")
 
+# Add custom firebase_database plugin
+# add_subdirectory("flutter/firebase_database")
 
 # Generated plugin build rules, which manage building the plugins and adding
 # them to the application.
@@ -129,3 +141,13 @@ install(DIRECTORY "${PROJECT_BUILD_DIR}/${FLUTTER_ASSET_DIR_NAME}"
 install(FILES "${AOT_LIBRARY}" DESTINATION "${INSTALL_BUNDLE_DATA_DIR}"
   CONFIGURATIONS Profile;Release
   COMPONENT Runtime)
+
+# Explicitly copy core Firebase DLLs (adjust based on SDK structure and needed services)
+# if(DEFINED ENV{FIREBASE_CPP_SDK_DIR})
+#   # Example for firebase_app.dll - add others as needed
+#   install(FILES "$ENV{FIREBASE_CPP_SDK_DIR}/libs/windows/x64/$<$<CONFIG:Debug>:Debug>$<$<CONFIG:Release>:Release>$<$<CONFIG:Profile>:Release>/firebase_app.dll"
+#     DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
+#     COMPONENT Runtime
+#   )
+#   # Add install commands for other required DLLs (e.g., firebase_auth.dll, firebase_firestore.dll) here
+# endif()

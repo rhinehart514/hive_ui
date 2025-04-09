@@ -5,6 +5,10 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hive_ui/theme/app_colors.dart';
 import 'package:hive_ui/providers/settings_provider.dart';
+import 'package:hive_ui/features/profile/presentation/pages/profile_visibility_settings_page.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:hive_ui/core/navigation/transitions.dart';
+import 'package:hive_ui/core/navigation/routes.dart';
 
 // Using central settings provider instead of local state provider
 // final privacySettingsProvider = StateProvider<Map<String, bool>>((ref) {
@@ -57,6 +61,9 @@ class PrivacySettingsPage extends ConsumerWidget {
               children: [
                 _buildSectionHeader('Profile Privacy'),
                 const SizedBox(height: 16),
+                
+                // Profile Visibility Settings
+                _buildVisibilitySettingsButton(context),
 
                 // Public Profile Toggle
                 _buildToggleSetting(
@@ -153,6 +160,94 @@ class PrivacySettingsPage extends ConsumerWidget {
                 _buildPrivacyPolicyLink(context),
 
                 const SizedBox(height: 16),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // New method to build the visibility settings button
+  Widget _buildVisibilitySettingsButton(BuildContext context) {
+    final currentUserId = FirebaseAuth.instance.currentUser?.uid;
+    
+    if (currentUserId == null) {
+      return const SizedBox.shrink();
+    }
+    
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      decoration: BoxDecoration(
+        color: Colors.grey[900],
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: AppColors.gold.withOpacity(0.1),
+          width: 1,
+        ),
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () {
+            HapticFeedback.mediumImpact();
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => ProfileVisibilitySettingsPage(
+                  userId: currentUserId,
+                ),
+              ),
+            );
+          },
+          borderRadius: BorderRadius.circular(16),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              children: [
+                Container(
+                  width: 48,
+                  height: 48,
+                  decoration: BoxDecoration(
+                    color: AppColors.gold.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Center(
+                    child: Icon(
+                      Icons.visibility,
+                      size: 24,
+                      color: AppColors.gold,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Visibility Controls',
+                        style: GoogleFonts.outfit(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      Text(
+                        'Control what others can see on your profile',
+                        style: GoogleFonts.inter(
+                          color: Colors.white.withOpacity(0.6),
+                          fontSize: 13,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Icon(
+                  Icons.chevron_right,
+                  color: Colors.white.withOpacity(0.5),
+                  size: 24,
+                ),
               ],
             ),
           ),
@@ -322,6 +417,10 @@ class PrivacySettingsPage extends ConsumerWidget {
         onPressed: () {
           // Open privacy policy
           HapticFeedback.selectionClick();
+          NavigationTransitions.applyNavigationFeedback(
+            type: NavigationFeedbackType.pageTransition,
+          );
+          GoRouter.of(context).push(AppRoutes.privacyPolicy);
         },
         style: TextButton.styleFrom(
           foregroundColor: AppColors.gold,

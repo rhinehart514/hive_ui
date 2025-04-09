@@ -60,7 +60,7 @@ class MessageDeliveryIndicator extends ConsumerWidget {
         label = 'Delivered';
         statusColor = Colors.grey;
         break;
-      case MessageDeliveryStatus.read:
+      case MessageDeliveryStatus.seen:
         icon = Icons.done_all;
         label = 'Read';
         statusColor = iconColor;

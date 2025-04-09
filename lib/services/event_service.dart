@@ -8,6 +8,10 @@ import 'package:xml/xml.dart';
 import 'calendar_integration_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'dart:async';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'dart:io';
+import 'package:firebase_storage/firebase_storage.dart';
 
 /// Service for handling event-related operations
 class EventService {
@@ -92,27 +96,57 @@ class EventService {
     try {
       final List<Event> newEvents = [];
 
-      /// Fetch from RSS feed
-      final List<Event> rssEvents = await _fetchEventsFromRss();
+      /// Fetch from RSS feed with error handling
+      List<Event> rssEvents = [];
+      try {
+        rssEvents = await _fetchEventsFromRss();
+      } catch (e) {
+        debugPrint('RSS feed fetch failed, continuing with other sources: $e');
+        // Continue with empty RSS events rather than failing the entire refresh
+      }
       newEvents.addAll(rssEvents);
 
       /// Additional sources could be added here
+
+      /// If we got no events from any source and we have cached events, use those
+      if (newEvents.isEmpty && _cachedEvents.isNotEmpty) {
+        debugPrint('No new events fetched, using cached events');
+        return _cachedEvents.toList();
+      }
 
       /// Process and deduplicate events before storing
       final List<Event> processedEvents =
           _processAndDeduplicateEvents(newEvents);
 
-      /// Save to memory and persistent cache
-      _cachedEvents.clear();
-      _cachedEvents.addAll(processedEvents);
-      await _saveEventsToCache(processedEvents);
+      // Only update cache if we actually got events
+      if (processedEvents.isNotEmpty) {
+        /// Save to memory and persistent cache
+        _cachedEvents.clear();
+        _cachedEvents.addAll(processedEvents);
+        await _saveEventsToCache(processedEvents);
+      } else if (_cachedEvents.isEmpty) {
+        // If we still don't have any events, try loading from cache
+        debugPrint('No events fetched, attempting to load from cache');
+        return await _loadEventsFromCache();
+      }
 
-      return processedEvents;
+      return processedEvents.isEmpty ? _cachedEvents.toList() : processedEvents;
     } catch (e) {
       debugPrint('Error refreshing events: $e');
-      rethrow;
-
-      /// Let the caller handle the error
+      
+      // Return cached events if available instead of throwing
+      if (_cachedEvents.isNotEmpty) {
+        debugPrint('Returning cached events due to refresh error');
+        return _cachedEvents.toList();
+      }
+      
+      // Try loading from persistent cache as last resort
+      try {
+        return await _loadEventsFromCache();
+      } catch (cacheError) {
+        debugPrint('Error loading from cache: $cacheError');
+        return []; // Return empty list as last resort
+      }
     }
   }
 
@@ -199,17 +233,33 @@ class EventService {
   /// Fetch events from RSS feed
   static Future<List<Event>> _fetchEventsFromRss() async {
     try {
-      final http.Response response = await http.get(Uri.parse(rssFeedUrl));
+      // Add timeout to prevent hanging
+      final http.Response response = await http.get(Uri.parse(rssFeedUrl))
+          .timeout(const Duration(seconds: 5), onTimeout: () {
+        throw TimeoutException('RSS feed request timed out after 5 seconds');
+      });
 
       if (response.statusCode != 200) {
+        debugPrint('Error fetching events from RSS: status code ${response.statusCode}');
         throw Exception('Failed to load RSS feed: ${response.statusCode}');
       }
 
       final String xmlData = response.body;
+      
+      // Validate that we got proper XML data
+      if (xmlData.trim().isEmpty || !xmlData.contains('<rss') && !xmlData.contains('<feed')) {
+        debugPrint('Error fetching events from RSS: Invalid XML response');
+        throw Exception('Invalid RSS feed data received');
+      }
 
       /// Try to parse XML data
       final document = XmlDocument.parse(xmlData);
       final items = document.findAllElements('item');
+
+      if (items.isEmpty) {
+        debugPrint('No items found in RSS feed');
+        return []; // Return empty list instead of throwing
+      }
 
       final List<Event> events = [];
 
@@ -356,19 +406,21 @@ class EventService {
             organizerEmail: organizerEmail,
             imageUrl: _extractImageUrlFromDescription(description),
             status: 'confirmed', // Default status
+            source: EventSource.external, // External source for RSS feeds
           );
 
           events.add(event);
         } catch (e) {
-          /// Skip this event on error
-          debugPrint('Error parsing event: $e');
-          continue;
+          // Log but don't fail the entire operation if a single item fails
+          debugPrint('Error parsing RSS item: $e');
+          // Continue to next item
         }
       }
 
       return events;
     } catch (e) {
       debugPrint('Error fetching events from RSS: $e');
+      // Return an empty list instead of rethrowing to prevent UI disruption
       return [];
     }
   }
@@ -668,90 +720,55 @@ class EventService {
     return uniqueEvents;
   }
 
-  /// RSVP to an event
-  static Future<bool> rsvpToEvent(String eventId, bool attending) async {
+  /// Update RSVP status for an event
+  static Future<bool> rsvpToEvent(String eventId, bool isAttending) async {
     try {
-      // Get current user ID from Firebase Auth
-      final FirebaseAuth auth = FirebaseAuth.instance;
-      final String? userId = auth.currentUser?.uid;
+      /// Gets the current user
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) return false;
+
+      /// Reference to the event document
+      final eventRef = FirebaseFirestore.instance.collection('events').doc(eventId);
+
+      /// Get the current event data
+      final eventDoc = await eventRef.get();
+      if (!eventDoc.exists) return false;
+
+      final event = Event.fromJson(
+        Map<String, dynamic>.from({...eventDoc.data()!, 'id': eventId}),
+      );
       
-      if (userId == null) {
-        debugPrint('Cannot RSVP: No authenticated user');
-        return false;
+      /// Update the attendees list based on RSVP status
+      if (isAttending) {
+        /// Add the user to attendees if they're not already there
+        if (!event.attendees.contains(user.uid)) {
+          await eventRef.update({
+            'attendees': FieldValue.arrayUnion([user.uid]),
+          });
+        }
+      } else {
+        /// Remove the user from attendees
+        if (event.attendees.contains(user.uid)) {
+          await eventRef.update({
+            'attendees': FieldValue.arrayRemove([user.uid]),
+          });
+        }
       }
 
-      // Update in-memory cache
-      _rsvpStatusCache[eventId] = attending;
+      /// Update the local cache
+      _updateRsvpStatusInCache(eventId, isAttending);
 
-      // Persist RSVP status to shared preferences
-      await _saveRsvpStatus();
-
-      // Use a transaction to ensure data consistency
-      final FirebaseFirestore firestore = FirebaseFirestore.instance;
-      bool success = false;
-      
-      await firestore.runTransaction((transaction) async {
-        // Get event document
-        final eventDoc = await transaction.get(
-          firestore.collection('events').doc(eventId)
-        );
-        
-        // Get user document
-        final userDoc = await transaction.get(
-          firestore.collection('users').doc(userId)
-        );
-
-        if (attending) {
-          // Add user to attendees
-          transaction.update(
-            firestore.collection('events').doc(eventId),
-            {
-              'attendees': FieldValue.arrayUnion([userId]),
-              'rsvpCount': FieldValue.increment(1),
-              'updatedAt': FieldValue.serverTimestamp(),
-            },
-          );
-          
-          // Add event to user's saved events
-          transaction.update(
-            firestore.collection('users').doc(userId),
-            {
-              'savedEvents': FieldValue.arrayUnion([eventId]),
-              'eventCount': FieldValue.increment(1),
-              'updatedAt': FieldValue.serverTimestamp(),
-            },
-          );
-        } else {
-          // Remove user from attendees
-          transaction.update(
-            firestore.collection('events').doc(eventId),
-            {
-              'attendees': FieldValue.arrayRemove([userId]),
-              'rsvpCount': FieldValue.increment(-1),
-              'updatedAt': FieldValue.serverTimestamp(),
-            },
-          );
-          
-          // Remove event from user's saved events
-          transaction.update(
-            firestore.collection('users').doc(userId),
-            {
-              'savedEvents': FieldValue.arrayRemove([eventId]),
-              'eventCount': FieldValue.increment(-1),
-              'updatedAt': FieldValue.serverTimestamp(),
-            },
-          );
-        }
-        
-        success = true;
-        return success;
-      });
-      
-      return success;
+      return true;
     } catch (e) {
       debugPrint('Error RSVPing to event: $e');
       return false;
     }
+  }
+  
+  /// Update the RSVP status in the local cache
+  static void _updateRsvpStatusInCache(String eventId, bool isAttending) {
+    _rsvpStatusCache[eventId] = isAttending;
+    _saveRsvpStatus();
   }
   
   /// Helper method to get space ID for an event
@@ -969,22 +986,14 @@ class EventService {
   /// Save user event to local storage
   static Future<bool> saveUserEvent(Event event) async {
     try {
-      // Add event to in-memory cache if not already there
-      if (!_cachedEvents.any((e) => e.id == event.id)) {
-        _cachedEvents.add(event);
-      } else {
-        // Update the existing event
-        final index = _cachedEvents.indexWhere((e) => e.id == event.id);
-        if (index >= 0) {
-          _cachedEvents[index] = event;
-        }
-      }
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) return false;
 
-      // Save to local storage
-      await _saveUserEvents();
+      final eventDoc = FirebaseFirestore.instance.collection('events').doc(event.id);
+      await eventDoc.set(event.toMap());
 
-      // Also update the main cache
-      await _saveEventsToCache(_cachedEvents);
+      // Update local cache
+      _updateCachedEvent(event);
 
       return true;
     } catch (e) {
@@ -1032,14 +1041,19 @@ class EventService {
       final prefs = await SharedPreferences.getInstance();
 
       // Filter out only user-created events
-      final userEvents = _cachedEvents.where((e) => e.isUserCreated).toList();
+      final userEvents = _cachedEvents.where((e) => _isUserCreated(e)).toList();
 
       // Save as JSON
-      final eventsJson = userEvents.map((e) => e.toJson()).toList();
+      final eventsJson = userEvents.map((e) => e.toMap()).toList();
       await prefs.setString(_userEventsKey, jsonEncode(eventsJson));
     } catch (e) {
       debugPrint('Error saving user events: $e');
     }
+  }
+  
+  /// Helper method to check if an event was created by a user
+  static bool _isUserCreated(Event event) {
+    return event.source == EventSource.user;
   }
 
   /// Add to calendar without RSVPing
@@ -1096,4 +1110,345 @@ class EventService {
       return null;
     }
   }
+
+  /// Updates an existing event
+  static Future<bool> updateEvent(Event event) async {
+    try {
+      // Validate user's permission to update this event
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) return false;
+      
+      // Only allow updating if the user is the creator or an admin
+      final eventDoc = await FirebaseFirestore.instance
+          .collection('events')
+          .doc(event.id)
+          .get();
+      
+      if (!eventDoc.exists) {
+        debugPrint('Event not found for update: ${event.id}');
+        return false;
+      }
+      
+      final eventData = eventDoc.data() as Map<String, dynamic>;
+      final creatorId = eventData['createdBy'] as String? ?? '';
+      
+      // Check if the user is the creator or has admin permissions
+      // In practice, you'd check for admin role or space admin status
+      if (creatorId != user.uid) {
+        debugPrint('User does not have permission to update this event');
+        return false;
+      }
+      
+      // Update the last modified timestamp
+      final updatedEvent = event.copyWith(
+        lastModified: DateTime.now(),
+      );
+      
+      // Update the event in Firestore
+      await FirebaseFirestore.instance
+          .collection('events')
+          .doc(event.id)
+          .update(updatedEvent.toMap());
+      
+      // If this is a club/space event, also update it in the space's events collection
+      if (event.isClubCreated && event.organizerName.isNotEmpty) {
+        // Generate space ID or use the provided one
+        final spaceId = event.spaceId ?? _generateSpaceId(event.organizerName);
+        final spaceType = _determineSpaceType(event.category);
+        
+        // Use spaceId and spaceType variables to avoid linter warnings
+        debugPrint('Updating event in space: $spaceId of type $spaceType');
+        
+        // Check if this event exists in a space collection
+        final spaceEventQuery = await FirebaseFirestore.instance
+            .collectionGroup('events')
+            .where('id', isEqualTo: event.id)
+            .limit(1)
+            .get();
+            
+        if (spaceEventQuery.docs.isNotEmpty) {
+          // Update the event in the space's collection
+          await spaceEventQuery.docs.first.reference.update(updatedEvent.toMap());
+        }
+      }
+      
+      // Update local cache
+      _updateCachedEvent(updatedEvent);
+      
+      return true;
+    } catch (e) {
+      debugPrint('Error updating event: $e');
+      return false;
+    }
+  }
+  
+  /// Cancel an event by updating its status
+  static Future<bool> cancelEvent(String eventId) async {
+    try {
+      // Validate user's permission to cancel
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) return false;
+      
+      // Get the event
+      final eventDoc = await FirebaseFirestore.instance
+          .collection('events')
+          .doc(eventId)
+          .get();
+      
+      if (!eventDoc.exists) {
+        debugPrint('Event not found for cancellation: $eventId');
+        return false;
+      }
+      
+      final eventData = eventDoc.data() as Map<String, dynamic>;
+      final creatorId = eventData['createdBy'] as String? ?? '';
+      final organizerName = eventData['organizerName'] as String? ?? '';
+      
+      // Check if the user is the creator
+      if (creatorId != user.uid) {
+        debugPrint('User does not have permission to cancel this event');
+        return false;
+      }
+      
+      // Update the event status to cancelled
+      await FirebaseFirestore.instance
+          .collection('events')
+          .doc(eventId)
+          .update({
+        'status': 'cancelled',
+        'lastModified': FieldValue.serverTimestamp(),
+      });
+      
+      // If this is a club/space event, also update it in the space's events collection
+      if (organizerName.isNotEmpty) {
+        // Check if this event exists in a space collection
+        final spaceEventQuery = await FirebaseFirestore.instance
+            .collectionGroup('events')
+            .where('id', isEqualTo: eventId)
+            .limit(1)
+            .get();
+            
+        if (spaceEventQuery.docs.isNotEmpty) {
+          // Update the event status in the space's collection
+          await spaceEventQuery.docs.first.reference.update({
+            'status': 'cancelled',
+            'lastModified': FieldValue.serverTimestamp(),
+          });
+        }
+      }
+      
+      // Update the cached event
+      for (int i = 0; i < _cachedEvents.length; i++) {
+        if (_cachedEvents[i].id == eventId) {
+          _cachedEvents[i] = _cachedEvents[i].copyWith(status: 'cancelled');
+          break;
+        }
+      }
+      
+      return true;
+    } catch (e) {
+      debugPrint('Error cancelling event: $e');
+      return false;
+    }
+  }
+  
+  /// Generate space ID from organizer name
+  static String _generateSpaceId(String organizerName) {
+    final normalizedName = organizerName
+        .toLowerCase()
+        .replaceAll(RegExp(r'[^\w\s]'), '')
+        .trim()
+        .replaceAll(RegExp(r'\s+'), '_');
+    return 'space_$normalizedName';
+  }
+  
+  /// Determine space type from event category
+  static String _determineSpaceType(String category) {
+    // Simple mapping based on event category
+    switch (category.toLowerCase()) {
+      case 'greek life':
+        return 'fraternity_and_sorority';
+      case 'academic':
+        return 'university_organizations';
+      case 'community service':
+        return 'student_organizations';
+      case 'club':
+        return 'student_organizations';
+      case 'housing':
+      case 'residential':
+        return 'campus_living';
+      default:
+        return 'student_organizations';
+    }
+  }
+  
+  /// Updates or adds an event in the cache
+  static void _updateCachedEvent(Event event) {
+    bool found = false;
+    for (int i = 0; i < _cachedEvents.length; i++) {
+      if (_cachedEvents[i].id == event.id) {
+        _cachedEvents[i] = event;
+        found = true;
+        break;
+      }
+    }
+    
+    if (!found) {
+      _cachedEvents.add(event);
+    }
+    
+    // Save the updated cache
+    _saveEventsToCache(_cachedEvents);
+  }
+
+  /// Retrieves an event by its ID
+  static Future<Event?> getEventById(String eventId) async {
+    try {
+      // First try to get from the cache
+      for (var event in _cachedEvents) {
+        if (event.id == eventId) {
+          return event;
+        }
+      }
+      
+      // If not found in cache, retrieve from Firestore
+      final eventDoc = await FirebaseFirestore.instance
+          .collection('events')
+          .doc(eventId)
+          .get();
+      
+      if (!eventDoc.exists) {
+        debugPrint('Event not found: $eventId');
+        return null;
+      }
+      
+      final eventData = eventDoc.data() as Map<String, dynamic>;
+      final event = Event.fromJson({...eventData, 'id': eventId});
+      
+      // Add to cache for future use
+      _updateCachedEvent(event);
+      
+      return event;
+    } catch (e) {
+      debugPrint('Error retrieving event: $e');
+      return null;
+    }
+  }
+
+  /// Creates a new event with the given details
+  static Future<Event?> createEvent({
+    required String title,
+    required String description,
+    required String location,
+    required DateTime startDate,
+    required DateTime endDate,
+    required String category,
+    String organizerName = '',
+    String organizerEmail = '',
+    String visibility = 'public',
+    List<String> tags = const [],
+    String imageUrl = '',
+    String link = '',
+  }) async {
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) return null;
+
+      // Create an event object
+      final event = Event.createUserEvent(
+        title: title,
+        description: description,
+        location: location,
+        startDate: startDate,
+        endDate: endDate,
+        userId: user.uid,
+        organizerName: organizerName.isNotEmpty
+            ? organizerName
+            : user.displayName ?? 'Anonymous',
+        category: category,
+        organizerEmail: organizerEmail.isNotEmpty
+            ? organizerEmail
+            : user.email ?? '',
+        visibility: visibility,
+        tags: tags,
+        imageUrl: imageUrl,
+      );
+
+      // Save to Firestore
+      await FirebaseFirestore.instance
+          .collection('events')
+          .doc(event.id)
+          .set(event.toMap());
+
+      // Add to local cache
+      _cachedEvents.add(event);
+
+      return event;
+    } catch (e) {
+      debugPrint('Error creating event: $e');
+      return null;
+    }
+  }
+
+  /// Adds an event to Firebase
+  static Future<String> addEventToFirebase(Event event, {File? imageFile}) async {
+    try {
+      // Upload image if provided
+      String imageUrl = event.imageUrl;
+      if (imageFile != null) {
+        imageUrl = await _uploadEventImage(imageFile, event.id);
+      }
+
+      // Create the updated event with the image URL
+      final updatedEvent = event.copyWith(
+        imageUrl: imageUrl,
+      );
+
+      // Save to Firestore
+      await FirebaseFirestore.instance
+          .collection('events')
+          .doc(updatedEvent.id)
+          .set(updatedEvent.toMap());
+
+      // If this is a user event, add to user's events collection
+      final user = FirebaseAuth.instance.currentUser;
+      if (user != null && _isUserCreated(updatedEvent)) {
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(user.uid)
+            .collection('events')
+            .doc(updatedEvent.id)
+            .set(updatedEvent.toMap());
+      }
+
+      return updatedEvent.id;
+    } catch (e) {
+      debugPrint('Error adding event to Firebase: $e');
+      return '';
+    }
+  }
+
+  /// Upload event image to Firebase Storage
+  static Future<String> _uploadEventImage(File imageFile, String eventId) async {
+    try {
+      final FirebaseStorage storage = FirebaseStorage.instance;
+      final Reference ref = storage.ref().child('events').child('$eventId.jpg');
+      
+      // Upload the file
+      final UploadTask uploadTask = ref.putFile(imageFile);
+      final TaskSnapshot snapshot = await uploadTask;
+      
+      // Get download URL
+      final String url = await snapshot.ref.getDownloadURL();
+      return url;
+    } catch (e) {
+      debugPrint('Error uploading event image: $e');
+      return '';
+    }
+  }
 }
+
+/// Provider for the event service
+final eventServiceProvider = Provider<EventService>((ref) {
+  return EventService();
+});

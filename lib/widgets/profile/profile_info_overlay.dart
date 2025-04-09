@@ -47,7 +47,7 @@ class ProfileInfoOverlay extends StatelessWidget {
             children: [
               Flexible(
                 child: Text(
-                  profile.username,
+                  _formatDisplayName(profile.displayName, profile.username),
                   style: GoogleFonts.outfit(
                     fontSize: usernameFontSize,
                     fontWeight: FontWeight.bold,
@@ -157,5 +157,16 @@ class ProfileInfoOverlay extends StatelessWidget {
     if (username.length > 20) fontSize -= 2;
 
     return fontSize;
+  }
+
+  /// Format display name to avoid showing raw Firebase UIDs
+  String _formatDisplayName(String displayName, String username) {
+    // Check if the displayName looks like a Firebase UID
+    if (displayName.startsWith('user_') || 
+        (displayName.length > 20 && displayName.contains(RegExp(r'[A-Za-z0-9]{20,}')))) {
+      // Use username if available, otherwise a generic name
+      return username.isNotEmpty ? username.split('_').first : 'HIVE User';
+    }
+    return displayName;
   }
 }

@@ -4,7 +4,6 @@ import 'package:timeago/timeago.dart' as timeago;
 import '../providers/mock_messages_provider.dart' as mock;
 import 'package:hive_ui/features/messaging/injection.dart' as injection;
 import 'package:hive_ui/features/messaging/domain/entities/chat.dart';
-import 'package:hive_ui/features/messaging/domain/entities/message.dart';
 import 'chat_screen.dart';
 
 class ConversationsScreen extends ConsumerWidget {

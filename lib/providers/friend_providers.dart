@@ -128,4 +128,53 @@ final acceptFriendRequestProvider = FutureProvider.family<bool, ({String request
 final rejectFriendRequestProvider = FutureProvider.family<bool, String>((ref, requestId) async {
   final friendService = ref.watch(friendServiceProvider);
   return await friendService.rejectFriendRequest(requestId);
+});
+
+/// Provider to check if two users are friends
+final checkFriendshipProvider = FutureProvider.family<bool, String>((ref, otherUserId) async {
+  final friendService = ref.watch(friendServiceProvider);
+  final currentUser = FirebaseAuth.instance.currentUser;
+  
+  if (currentUser == null) {
+    return false;
+  }
+  
+  return await friendService.areFriends(currentUser.uid, otherUserId);
+});
+
+/// Provider to check if there's a pending friend request from another user
+final hasPendingRequestFromProvider = FutureProvider.family<bool, String>((ref, otherUserId) async {
+  final friendService = ref.watch(friendServiceProvider);
+  final currentUser = FirebaseAuth.instance.currentUser;
+  
+  if (currentUser == null) {
+    return false;
+  }
+  
+  return await friendService.hasPendingRequestFrom(currentUser.uid, otherUserId);
+});
+
+/// Provider to check if there's a pending outgoing friend request to another user
+final hasOutgoingRequestProvider = FutureProvider.family<bool, String>((ref, otherUserId) async {
+  final friendService = ref.watch(friendServiceProvider);
+  final currentUser = FirebaseAuth.instance.currentUser;
+  
+  if (currentUser == null) {
+    return false;
+  }
+  
+  // This needs to check if current user (sender) sent a request to otherUserId (recipient)
+  return await friendService.hasPendingRequestFrom(otherUserId, currentUser.uid);
+});
+
+/// Provider to remove a friend
+final removeFriendProvider = FutureProvider.family<bool, String>((ref, friendId) async {
+  final friendService = ref.watch(friendServiceProvider);
+  final currentUser = FirebaseAuth.instance.currentUser;
+  
+  if (currentUser == null) {
+    return false;
+  }
+  
+  return await friendService.removeFriend(currentUser.uid, friendId);
 }); 

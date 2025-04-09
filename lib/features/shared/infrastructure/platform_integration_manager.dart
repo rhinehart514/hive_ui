@@ -1,11 +1,10 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:hive_ui/models/event.dart';
 import 'package:hive_ui/models/space.dart';
 import 'package:hive_ui/models/space_metrics.dart';
-import 'package:hive_ui/models/user_profile.dart';
+import 'package:http/http.dart' as http;
 
 /// PlatformIntegrationManager handles cross-feature integrations in the HIVE platform.
 ///
@@ -14,12 +13,17 @@ import 'package:hive_ui/models/user_profile.dart';
 class PlatformIntegrationManager {
   final FirebaseFirestore _firestore;
   final FirebaseAuth _auth;
+  final http.Client _httpClient;
 
   PlatformIntegrationManager({
     FirebaseFirestore? firestore,
     FirebaseAuth? auth,
+    http.Client? httpClient,
   })  : _firestore = firestore ?? FirebaseFirestore.instance,
-        _auth = auth ?? FirebaseAuth.instance;
+        _auth = auth ?? FirebaseAuth.instance,
+        _httpClient = httpClient ?? http.Client();
+
+  http.Client get httpClient => _httpClient;
 
   /// Returns the current user ID or null if not authenticated
   String? get currentUserId => _auth.currentUser?.uid;
@@ -195,6 +199,74 @@ class PlatformIntegrationManager {
         return null;
       }
 
+      // --- BEGIN ROLE VERIFICATION ---
+      // Check if user has Verified+ status for this space
+      final userSpaceRoleDoc = await _firestore
+          .collection('users')
+          .doc(uid)
+          .collection('spaceRoles')
+          .doc(spaceId)
+          .get();
+      
+      bool hasVerifiedPlusRole = false;
+      
+      if (userSpaceRoleDoc.exists) {
+        final roleData = userSpaceRoleDoc.data();
+        // Check for Verified+ role or admin/owner role
+        hasVerifiedPlusRole = roleData != null && 
+            (roleData['role'] == 'verified_plus' || 
+             roleData['role'] == 'admin' || 
+             roleData['role'] == 'owner');
+      }
+      
+      // If not space-specific Verified+, check for global Verified+ status
+      if (!hasVerifiedPlusRole) {
+        final userDoc = await _firestore.collection('users').doc(uid).get();
+        if (userDoc.exists) {
+          final userData = userDoc.data();
+          // Global verification status check
+          hasVerifiedPlusRole = userData != null && 
+              userData['verificationLevel'] == 'verified_plus';
+        }
+      }
+      
+      if (!hasVerifiedPlusRole) {
+        debugPrint('PlatformIntegrationManager: User $uid does not have Verified+ role required to create events for space $spaceId');
+        return null;
+      }
+      // --- END ROLE VERIFICATION ---
+      
+      // Define the time window for duplicate check (e.g., 5 minutes)
+      const duplicateTimeWindow = Duration(minutes: 5);
+      final startTimeWindowStart = startDate.subtract(duplicateTimeWindow);
+      final startTimeWindowEnd = startDate.add(duplicateTimeWindow);
+
+      // Query for potentially duplicate events
+      final potentialDuplicates = await _firestore
+          .collection('events')
+          .where('spaceId', isEqualTo: spaceId)
+          .where('startDate', isGreaterThanOrEqualTo: Timestamp.fromDate(startTimeWindowStart))
+          .where('startDate', isLessThanOrEqualTo: Timestamp.fromDate(startTimeWindowEnd))
+          .limit(5) // Limit query results for performance
+          .get();
+
+      // Check if any potential duplicate has the same title (case-insensitive)
+      if (potentialDuplicates.docs.isNotEmpty) {
+        final normalizedNewTitle = title.trim().toLowerCase();
+        final hasDuplicate = potentialDuplicates.docs.any((doc) {
+           final docData = doc.data();
+           final existingTitle = docData['title'] as String?;
+           return existingTitle?.trim().toLowerCase() == normalizedNewTitle;
+        });
+
+        if (hasDuplicate) {
+          debugPrint('PlatformIntegrationManager: Potential duplicate event creation detected for space $spaceId with title "$title" near start time $startDate. Aborting.');
+          // Optionally throw a specific exception here instead of returning null
+          // throw DuplicateEventException('Potential duplicate event detected.');
+          return null;
+        }
+      }
+
       // Create the event document with a new ID
       final eventRef = _firestore.collection('events').doc();
       final eventId = eventRef.id;
@@ -323,41 +395,66 @@ class PlatformIntegrationManager {
       }
       
       final userData = userDoc.data()!;
-      final List<String> savedEventIds = List<String>.from(userData['savedEvents'] ?? []);
+      final savedEvents = userData['savedEvents'];
       
-      if (savedEventIds.isEmpty) {
+      // Early return if there are no saved events
+      if (savedEvents == null || savedEvents is! List || savedEvents.isEmpty) {
+        debugPrint('No saved events found for user $userId');
         return [];
       }
+
+      // Handle both formats: arrays of IDs and arrays of event objects
+      List<Event> results = [];
+      List<String> eventIdsToFetch = [];
       
-      // Get the event documents
-      final events = await _firestore
-          .collection('events')
-          .where(FieldPath.documentId, whereIn: savedEventIds)
-          .get();
+      // First, process any complete event objects in the array
+      for (var item in savedEvents) {
+        if (item is Map<String, dynamic>) {
+          // This is a complete event object
+          try {
+            debugPrint('Processing saved event object with ID: ${item['id']}');
+            results.add(Event.fromJson(item));
+          } catch (e) {
+            debugPrint('Error parsing event from savedEvents array: $e');
+            // If we can't parse it as an event but it has an ID, add that ID to fetch later
+            if (item['id'] != null) {
+              eventIdsToFetch.add(item['id'].toString());
+            }
+          }
+        } else if (item is String) {
+          // This is just an event ID
+          eventIdsToFetch.add(item);
+        }
+      }
       
-      // Convert to Event objects
-      return events.docs.map((doc) {
-        final data = doc.data();
+      // If we have IDs to fetch, get those events
+      if (eventIdsToFetch.isNotEmpty) {
+        debugPrint('Fetching ${eventIdsToFetch.length} events by ID');
         
-        // Create Event with all required parameters
-        return Event(
-          id: doc.id,
-          title: data['title'] ?? '',
-          description: data['description'] ?? '',
-          location: data['location'] ?? 'TBD',
-          organizerEmail: data['organizerEmail'] ?? '',
-          organizerName: data['organizerName'] ?? 'Unknown Organizer',
-          category: data['category'] ?? 'Event',
-          status: data['status'] ?? 'confirmed',
-          link: data['link'] ?? '',
-          startDate: data['startDate'] != null 
-              ? (data['startDate'] as Timestamp).toDate() 
-              : DateTime.now(),
-          endDate: data['endDate'] != null 
-              ? (data['endDate'] as Timestamp).toDate() 
-              : DateTime.now().add(const Duration(hours: 2)),
-        );
-      }).toList();
+        // Firebase only allows 10 items in a whereIn query, so we may need to batch
+        for (var i = 0; i < eventIdsToFetch.length; i += 10) {
+          final end = (i + 10 < eventIdsToFetch.length) ? i + 10 : eventIdsToFetch.length;
+          final batch = eventIdsToFetch.sublist(i, end);
+          
+          final querySnapshot = await _firestore
+              .collection('events')
+              .where(FieldPath.documentId, whereIn: batch)
+              .get();
+          
+          for (var doc in querySnapshot.docs) {
+            final data = doc.data();
+            data['id'] = doc.id;
+            try {
+              results.add(Event.fromJson(data));
+            } catch (e) {
+              debugPrint('Error creating Event from Firestore: $e');
+            }
+          }
+        }
+      }
+      
+      debugPrint('Returning ${results.length} saved events for user $userId');
+      return results;
     } catch (e) {
       debugPrint('PlatformIntegrationManager: Error getting saved events for user: $e');
       return [];
@@ -501,6 +598,8 @@ class PlatformIntegrationManager {
                 endDate: data['endDate'] != null 
                     ? (data['endDate'] as Timestamp).toDate() 
                     : DateTime.now().add(const Duration(hours: 2)),
+                imageUrl: data['imageUrl'] ?? '',
+                source: EventSource.external,
               )
             );
           } catch (e) {
@@ -627,5 +726,9 @@ class PlatformIntegrationManager {
       debugPrint('PlatformIntegrationManager: Error getting space engagement scores: $e');
       return {};
     }
+  }
+
+  void dispose() {
+    _httpClient.close();
   }
 } 

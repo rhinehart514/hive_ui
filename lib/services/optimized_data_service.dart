@@ -672,7 +672,7 @@ class OptimizedDataService {
         final events = _eventCache.values.take(500).toList();
 
         // Convert to JSON-safe format
-        final eventsJsonData = events.map((event) => event.toJson()).toList();
+        final eventsJsonData = events.map((event) => event.toMap()).toList();
         final eventsJson = jsonEncode(eventsJsonData);
         await prefs.setString(_eventsKey, eventsJson);
       }

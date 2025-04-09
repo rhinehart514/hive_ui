@@ -15,6 +15,8 @@ import 'package:hive_ui/services/event_service.dart';
 import 'package:hive_ui/models/reposted_event.dart';
 import 'package:hive_ui/models/repost_content_type.dart';
 import 'package:hive_ui/features/shared/infrastructure/platform_integration_manager.dart';
+import 'dart:async'; // Import for Stream
+import 'package:rxdart/rxdart.dart'; // Import for CombineLatestStream
 
 /// Implementation of the feed repository using existing services
 /// Acts as a bridge between the new architecture and existing services
@@ -254,7 +256,7 @@ class FeedRepositoryImpl implements FeedRepository {
     _lastFeedFetchTime = null;
   }
 
-  // Implement fetchFeedEvents using the correct EventFilters class
+  // Ensure signature matches FeedRepository interface EXACTLY
   @override
   Future<Map<String, dynamic>> fetchFeedEvents({
     bool forceRefresh = false,
@@ -263,32 +265,30 @@ class FeedRepositoryImpl implements FeedRepository {
     EventFilters? filters,
     bool userInitiated = false,
   }) async {
-    debugPrint('fetchFeedEvents called on bridge implementation');
-    try {
-      // Get events from our getEvents method
-      final events = await getEvents(
-        forceRefresh: forceRefresh, 
-        limit: pageSize,
-      );
-      
-      // Apply filters if provided
-      List<Event> filteredEvents = events;
-      if (filters != null && filters.hasActiveFilters) {
-        filteredEvents = events.where((event) => filters.matches(event)).toList();
-      }
-      
-      return {
-        'events': filteredEvents,
-        'hasMore': events.length >= pageSize,
-      };
-    } catch (e) {
-      debugPrint('Error in fetchFeedEvents: $e');
-      return {
-        'events': <Event>[],
-        'hasMore': false,
-        'error': e.toString(),
-      };
+    debugPrint('fetchFeedEvents called with filters: ${filters?.toJson()}'); // Log filters
+    // TODO: Implement proper pagination and filtering logic here
+    // This method is likely used by the FeedStateNotifier/GetFeedUseCase
+    // For now, it might just call getEvents or a similar basic fetch
+
+    // Basic filtering simulation (if filters are provided)
+    List<Event> events = await getEvents(forceRefresh: forceRefresh);
+    if (filters != null && filters.hasActiveFilters) {
+        events = events.where((event) => filters.matches(event)).toList();
     }
+
+    // Basic pagination simulation
+    final startIndex = (page - 1) * pageSize;
+    final endIndex = (startIndex + pageSize < events.length) ? startIndex + pageSize : events.length;
+    final paginatedEvents = (startIndex < events.length) ? events.sublist(startIndex, endIndex) : <Event>[];
+
+    debugPrint('fetchFeedEvents: Page $page, Fetched ${events.length} total, Returning ${paginatedEvents.length}');
+
+    // Simulate pagination info
+    return {
+      'events': paginatedEvents,
+      'hasMore': endIndex < events.length, // More accurate check
+      'fromCache': !forceRefresh && _lastFeedFetchTime != null && DateTime.now().difference(_lastFeedFetchTime!) < _cacheTimeout,
+    };
   }
 
   /// Fetch events directly from spaces
@@ -551,7 +551,7 @@ class FeedRepositoryImpl implements FeedRepository {
 
       if (docSnapshot.exists) {
         final data = docSnapshot.data();
-        return data ?? {};
+        return data!;
       }
 
       return {};
@@ -619,4 +619,204 @@ class FeedRepositoryImpl implements FeedRepository {
       ),
     ];
   }
+
+  @override
+  Stream<List<Map<String, dynamic>>> getFeedStream() {
+    final now = DateTime.now();
+    final firestoreNow = Timestamp.fromDate(now);
+
+    // Stream 1: Upcoming Events
+    final eventsStream = _firestore
+        .collection('events')
+        .where('endDate', isGreaterThan: firestoreNow) // Use endDate to catch ongoing events
+        .orderBy('endDate') // Order by when they end first to keep ongoing visible
+        .limit(50) // Limit initial query size
+        .snapshots()
+        .map((snapshot) {
+      debugPrint(' FEED STREAM: Received ${snapshot.docs.length} event snapshots.');
+      final events = snapshot.docs.map((doc) {
+        try {
+          final data = _processTimestamps(doc.data());
+          // Add doc.id to data before parsing
+          data['id'] = doc.id;
+          return Event.fromJson(data);
+        } catch (e) {
+          debugPrint(' FEED STREAM: Error parsing event ${doc.id}: $e');
+          return null;
+        }
+      }).whereType<Event>().toList(); // Filter out nulls from parsing errors
+      // Secondary sort by start date
+      events.sort((a, b) => a.startDate.compareTo(b.startDate));
+      return events;
+    }).handleError((error) {
+       debugPrint(' FEED STREAM: Error in eventsStream: $error');
+       return <Event>[]; // Return empty list on error
+    });
+
+    // Stream 2: Recent Reposts (within last 24 hours for performance)
+    final repostsStream = _firestore
+        .collection('reposts')
+        .where('repostTime', isGreaterThan: Timestamp.fromDate(now.subtract(const Duration(days: 1))))
+        .orderBy('repostTime', descending: true)
+        .limit(30) // Limit initial query size
+        .snapshots()
+        .asyncMap((snapshot) async {
+          debugPrint(' FEED STREAM: Received ${snapshot.docs.length} repost snapshots.');
+          final repostFutures = snapshot.docs.map((doc) async {
+            try {
+              final data = doc.data();
+              // RepostedEvent.fromJson needs UserProfile and Event, requires async fetching
+
+              // Fetch Event data
+              final eventRef = data['eventRef'] as DocumentReference?;
+              if (eventRef == null) return null;
+              final eventSnap = await eventRef.get();
+              if (!eventSnap.exists) return null;
+              final eventData = _processTimestamps(eventSnap.data() as Map<String, dynamic>);
+              // Add event document ID
+              eventData['id'] = eventSnap.id;
+              final event = Event.fromJson(eventData);
+
+              // Filter out reposts for past events
+              if (event.endDate.isBefore(now)) {
+                return null;
+              }
+
+              // Fetch UserProfile data
+              final userRef = data['repostedByRef'] as DocumentReference?;
+              if (userRef == null) return null;
+              final userSnap = await userRef.get();
+               if (!userSnap.exists) return null;
+              final userData = _processTimestamps(userSnap.data() as Map<String, dynamic>);
+              // Add user document ID
+              userData['id'] = userSnap.id;
+              final userProfile = UserProfile.fromJson(userData);
+
+              // Create RepostedEvent (assuming a suitable factory/constructor)
+              // Note: This will cause a linter error until fromStreamData is added to RepostedEvent
+              return RepostedEvent.fromStreamData(
+                id: doc.id, // Use the repost doc id here
+                event: event,
+                repostedBy: userProfile,
+                repostTime: (data['repostTime'] as Timestamp).toDate(),
+                comment: data['comment'] as String?,
+                repostType: data['repostType'] ?? RepostContentType.standard.name,
+              );
+            } catch (e) {
+              debugPrint(' FEED STREAM: Error parsing repost ${doc.id}: $e');
+              return null;
+            }
+          });
+          final reposts = (await Future.wait(repostFutures)).whereType<RepostedEvent>().toList();
+          return reposts;
+        }).handleError((error) {
+           debugPrint(' FEED STREAM: Error in repostsStream: $error');
+           return <RepostedEvent>[]; // Return empty list on error
+        });
+
+    // TODO: Add Streams for Space Recommendations and HiveLab Items if needed live
+
+    // Combine Streams
+    return CombineLatestStream.combine2(
+      eventsStream,
+      repostsStream,
+      (List<Event> events, List<RepostedEvent> reposts) {
+        debugPrint(' FEED STREAM: Combining ${events.length} events and ${reposts.length} reposts.');
+        final List<Map<String, dynamic>> feedItems = [];
+        final Set<String> includedEventIds = {}; // Track IDs to avoid duplicates
+
+        // Add Events
+        for (final event in events) {
+          feedItems.add({
+            'type': 'event',
+            'data': event,
+            'sortKey': event.startDate.millisecondsSinceEpoch, // Sort by start date
+          });
+          includedEventIds.add(event.id);
+        }
+
+        // Add Reposts (only if original event isn't already included)
+        for (final repost in reposts) {
+          if (!includedEventIds.contains(repost.event.id)) {
+            feedItems.add({
+              'type': 'repost',
+              'data': repost, // Use the full RepostedEvent object
+              'sortKey': repost.event.startDate.millisecondsSinceEpoch, // Sort by original event start date
+            });
+          }
+        }
+
+        // Sort combined list (e.g., by start date)
+        feedItems.sort((a, b) {
+           final aKey = a['sortKey'] as int;
+           final bKey = b['sortKey'] as int;
+           return aKey.compareTo(bKey); // Ascending sort (earliest first)
+        });
+
+        debugPrint(' FEED STREAM: Combined list has ${feedItems.length} items.');
+        return feedItems;
+      },
+    ).distinct(); // Use distinct to prevent emitting same list multiple times
+  }
+
+  // Helper method to process Firestore timestamps into DateTime
+  // Ensure this exists or add it
+  Map<String, dynamic> _processTimestamps(Map<String, dynamic> data) {
+    final result = Map<String, dynamic>.from(data);
+    result.forEach((key, value) {
+      if (value is Timestamp) {
+        result[key] = value.toDate();
+      } else if (value is Map) {
+        // Recursively process nested maps
+        result[key] = _processTimestamps(value as Map<String, dynamic>);
+      } else if (value is List) {
+        // Process items in lists (check if they are maps or timestamps)
+        result[key] = value.map((item) {
+          if (item is Map) {
+            return _processTimestamps(item as Map<String, dynamic>);
+          } else if (item is Timestamp) {
+            return item.toDate();
+          }
+          return item;
+        }).toList();
+      }
+    });
+    // Explicitly convert known timestamp fields
+    const List<String> timestampKeys = [
+      'startDate', 'endDate', 'repostTime', 'createdAt', 'updatedAt', 'lastActivity'
+    ];
+    for (final key in timestampKeys) {
+      if (data[key] is Timestamp) {
+        result[key] = (data[key] as Timestamp).toDate();
+      }
+    }
+    return result;
+  }
 }
+
+// Ensure RepostedEvent has a suitable factory/constructor for stream data
+// Example:
+// extension RepostedEventStreamFactory on RepostedEvent {
+//   static RepostedEvent fromStreamData({
+//     required String id,
+//     required Event event,
+//     required UserProfile repostedBy,
+//     required DateTime repostTime,
+//     String? comment,
+//     required String repostType,
+//   }) {
+//     return RepostedEvent(
+//       id: id,
+//       event: event,
+//       repostedBy: repostedBy,
+//       repostTime: repostTime,
+//       comment: comment,
+//       contentType: RepostContentType.values.firstWhere(
+//         (e) => e.name == repostType,
+//         orElse: () => RepostContentType.standard,
+//       ),
+//       // Initialize other fields like interactionCounts, etc.
+//       interactionCounts: {}, // Default or fetch separately if needed
+//     );
+//   }
+// }

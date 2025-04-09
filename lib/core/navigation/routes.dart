@@ -18,8 +18,10 @@ class AppRoutes {
   static const String settings = '/settings';
   static const String accountSettings = '/settings/account';
   static const String privacySettings = '/settings/privacy';
+  static const String privacyPolicy = '/settings/privacy/policy';
   static const String notificationSettings = '/settings/notifications';
   static const String appearanceSettings = '/settings/appearance';
+  static const String profileVisibilitySettings = '/settings/privacy/visibility';
   
   // Repost routes
   static const String quoteRepost = '/quote-repost';
@@ -52,6 +54,7 @@ class AppRoutes {
   // Admin routes
   static const String adminVerificationRequests =
       '/admin/verification-requests';
+  static const String adminVerification = '/admin/verification';
 
   // Developer routes
   static const String developerTools = '/dev/tools';

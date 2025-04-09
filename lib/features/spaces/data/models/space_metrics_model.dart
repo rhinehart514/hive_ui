@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:hive_ui/features/spaces/domain/entities/space_metrics_entity.dart';
 
 /// Data model for space metrics
@@ -148,8 +149,7 @@ class SpaceMetricsModel {
   }
 
   /// Create a SpaceMetricsModel from JSON
-  factory SpaceMetricsModel.fromJson(
-      Map<String, dynamic> json, String spaceId) {
+  factory SpaceMetricsModel.fromJson(Map<String, dynamic> json, String spaceId) {
     return SpaceMetricsModel(
       spaceId: spaceId,
       memberCount: json['memberCount'] as int? ?? 0,
@@ -157,29 +157,111 @@ class SpaceMetricsModel {
       weeklyEvents: json['weeklyEvents'] as int? ?? 0,
       monthlyEngagements: json['monthlyEngagements'] as int? ?? 0,
       lastActivity: json['lastActivity'] != null
-          ? DateTime.parse(json['lastActivity'])
+          ? DateTime.parse(json['lastActivity'] as String)
           : DateTime.now(),
       hasNewContent: json['hasNewContent'] as bool? ?? false,
       isTrending: json['isTrending'] as bool? ?? false,
       activeMembers24h: json['activeMembers24h'] != null
-          ? List<String>.from(json['activeMembers24h'])
+          ? List<String>.from(json['activeMembers24h'] as List)
           : const [],
       activityScores: json['activityScores'] != null
-          ? Map<String, int>.from(json['activityScores'])
+          ? Map<String, int>.from(json['activityScores'] as Map)
           : const {},
       category: _parseCategoryFromString(json['category']),
       size: _parseSizeFromString(json['size']),
       engagementScore: (json['engagementScore'] as num?)?.toDouble() ?? 0.0,
       isTimeSensitive: json['isTimeSensitive'] as bool? ?? false,
       expiryDate: json['expiryDate'] != null
-          ? DateTime.parse(json['expiryDate'])
+          ? DateTime.parse(json['expiryDate'] as String)
           : null,
       connectedFriends: json['connectedFriends'] != null
-          ? List<String>.from(json['connectedFriends'])
+          ? List<String>.from(json['connectedFriends'] as List)
           : const [],
       firstActionPrompt: json['firstActionPrompt'] as String?,
       needsIntroduction: json['needsIntroduction'] as bool? ?? false,
     );
+  }
+  
+  /// Create a SpaceMetricsModel from Firestore map
+  factory SpaceMetricsModel.fromMap(String spaceId, Map<String, dynamic> map) {
+    return SpaceMetricsModel(
+      spaceId: spaceId,
+      memberCount: map['memberCount'] as int? ?? 0,
+      activeMembers: map['activeMembers'] as int? ?? 0,
+      weeklyEvents: map['weeklyEvents'] as int? ?? 0,
+      monthlyEngagements: map['monthlyEngagements'] as int? ?? 0,
+      lastActivity: map['lastActivity'] is Timestamp 
+          ? (map['lastActivity'] as Timestamp).toDate()
+          : DateTime.now(),
+      hasNewContent: map['hasNewContent'] as bool? ?? false,
+      isTrending: map['isTrending'] as bool? ?? false,
+      activeMembers24h: map['activeMembers24h'] != null
+          ? List<String>.from(map['activeMembers24h'] as List)
+          : const [],
+      activityScores: map['activityScores'] != null
+          ? Map<String, int>.from(map['activityScores'] as Map)
+          : const {},
+      category: _parseCategoryFromString(map['category']),
+      size: _parseSizeFromString(map['size']),
+      engagementScore: (map['engagementScore'] as num?)?.toDouble() ?? 0.0,
+      isTimeSensitive: map['isTimeSensitive'] as bool? ?? false,
+      expiryDate: map['expiryDate'] is Timestamp
+          ? (map['expiryDate'] as Timestamp).toDate()
+          : null,
+      connectedFriends: map['connectedFriends'] != null
+          ? List<String>.from(map['connectedFriends'] as List)
+          : const [],
+      firstActionPrompt: map['firstActionPrompt'] as String?,
+      needsIntroduction: map['needsIntroduction'] as bool? ?? false,
+    );
+  }
+  
+  /// Convert to map for Firestore
+  Map<String, dynamic> toMap() {
+    return {
+      'spaceId': spaceId,
+      'memberCount': memberCount,
+      'activeMembers': activeMembers,
+      'weeklyEvents': weeklyEvents,
+      'monthlyEngagements': monthlyEngagements,
+      'lastActivity': Timestamp.fromDate(lastActivity),
+      'hasNewContent': hasNewContent,
+      'isTrending': isTrending,
+      'activeMembers24h': activeMembers24h,
+      'activityScores': activityScores,
+      'category': _categoryToString(category),
+      'size': _sizeToString(size),
+      'engagementScore': engagementScore,
+      'isTimeSensitive': isTimeSensitive,
+      'expiryDate': expiryDate != null ? Timestamp.fromDate(expiryDate!) : null,
+      'connectedFriends': connectedFriends,
+      'firstActionPrompt': firstActionPrompt,
+      'needsIntroduction': needsIntroduction,
+    };
+  }
+  
+  /// Convert to JSON for serialization
+  Map<String, dynamic> toJson() {
+    return {
+      'spaceId': spaceId,
+      'memberCount': memberCount,
+      'activeMembers': activeMembers,
+      'weeklyEvents': weeklyEvents,
+      'monthlyEngagements': monthlyEngagements,
+      'lastActivity': lastActivity.toIso8601String(),
+      'hasNewContent': hasNewContent,
+      'isTrending': isTrending,
+      'activeMembers24h': activeMembers24h,
+      'activityScores': activityScores,
+      'category': _categoryToString(category),
+      'size': _sizeToString(size),
+      'engagementScore': engagementScore,
+      'isTimeSensitive': isTimeSensitive,
+      'expiryDate': expiryDate?.toIso8601String(),
+      'connectedFriends': connectedFriends,
+      'firstActionPrompt': firstActionPrompt,
+      'needsIntroduction': needsIntroduction,
+    };
   }
 
   /// Parse SpaceCategory from string
@@ -213,27 +295,30 @@ class SpaceMetricsModel {
       return SpaceSize.small;
     }
   }
-
-  /// Convert to JSON
-  Map<String, dynamic> toJson() {
-    return {
-      'memberCount': memberCount,
-      'activeMembers': activeMembers,
-      'weeklyEvents': weeklyEvents,
-      'monthlyEngagements': monthlyEngagements,
-      'lastActivity': lastActivity.toIso8601String(),
-      'hasNewContent': hasNewContent,
-      'isTrending': isTrending,
-      'activeMembers24h': activeMembers24h,
-      'activityScores': activityScores,
-      'category': category.toString().split('.').last,
-      'size': size.toString().split('.').last,
-      'engagementScore': engagementScore,
-      'isTimeSensitive': isTimeSensitive,
-      if (expiryDate != null) 'expiryDate': expiryDate!.toIso8601String(),
-      'connectedFriends': connectedFriends,
-      if (firstActionPrompt != null) 'firstActionPrompt': firstActionPrompt,
-      'needsIntroduction': needsIntroduction,
-    };
+  
+  /// Convert SpaceCategory to string
+  static String _categoryToString(SpaceCategory category) {
+    switch (category) {
+      case SpaceCategory.active:
+        return 'active';
+      case SpaceCategory.expanding:
+        return 'expanding';
+      case SpaceCategory.emerging:
+        return 'emerging';
+      case SpaceCategory.suggested:
+        return 'suggested';
+    }
+  }
+  
+  /// Convert SpaceSize to string
+  static String _sizeToString(SpaceSize size) {
+    switch (size) {
+      case SpaceSize.large:
+        return 'large';
+      case SpaceSize.medium:
+        return 'medium';
+      case SpaceSize.small:
+        return 'small';
+    }
   }
 }

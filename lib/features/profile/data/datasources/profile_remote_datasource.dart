@@ -30,44 +30,78 @@ class ProfileRemoteDataSource {
           .get(const GetOptions(source: Source.server));
 
       if (!docSnapshot.exists) {
-        debugPrint(
-            'ProfileRemoteDataSource: No profile found for user $userId');
+        debugPrint('ProfileRemoteDataSource: No profile found for user $userId');
         return null;
       }
 
-      final dynamic rawData = docSnapshot.data();
+      final data = docSnapshot.data();
       
-      // Check if we received a valid map
-      if (rawData == null) {
+      // Validate data
+      if (data == null) {
         debugPrint('ProfileRemoteDataSource: Null data received for user $userId');
-        return null;
+        return _createDefaultProfile(userId);
       }
-      
-      if (rawData is! Map<String, dynamic>) {
-        debugPrint('ProfileRemoteDataSource: Invalid data type received for user $userId. Expected Map<String, dynamic> but got ${rawData.runtimeType}');
-        // Try to recover by creating a minimal profile
-        return UserProfile(
-          id: userId,
-          username: 'user_$userId',
-          displayName: 'User',
-          year: '',
-          major: '',
-          residence: '',
-          eventCount: 0,
-          clubCount: 0,
-          friendCount: 0,
-          createdAt: DateTime.now(),
-          updatedAt: DateTime.now(),
-        );
+
+      try {
+        // Ensure all required fields are present and of correct type
+        final validatedData = _validateAndSanitizeData(data, userId);
+        return UserProfile.fromJson(validatedData);
+      } catch (e) {
+        debugPrint('ProfileRemoteDataSource: Data validation error: $e');
+        return _createDefaultProfile(userId);
       }
-      
-      final data = rawData as Map<String, dynamic>;
-      data['id'] = docSnapshot.id; // Ensure ID is set
-      return UserProfile.fromJson(data);
     } catch (e) {
       debugPrint('ProfileRemoteDataSource: Error getting profile: $e');
       throw Exception('Failed to get profile: $e');
     }
+  }
+
+  /// Create a default profile for recovery
+  UserProfile _createDefaultProfile(String userId) {
+    return UserProfile(
+      id: userId,
+      username: 'user_$userId',
+      displayName: 'User',
+      year: '',
+      major: '',
+      residence: '',
+      eventCount: 0,
+      spaceCount: 0,
+      friendCount: 0,
+      createdAt: DateTime.now(),
+      updatedAt: DateTime.now(),
+      interests: const [],
+    );
+  }
+
+  /// Validate and sanitize profile data
+  Map<String, dynamic> _validateAndSanitizeData(Map<String, dynamic> data, String userId) {
+    // Get the space count, with fallback to clubCount for backward compatibility
+    int spaceCount = 0;
+    if (data.containsKey('spaceCount')) {
+      spaceCount = (data['spaceCount'] as num?)?.toInt() ?? 0;
+    } else if (data.containsKey('clubCount')) {
+      spaceCount = (data['clubCount'] as num?)?.toInt() ?? 0;
+    }
+
+    final sanitized = <String, dynamic>{
+      'id': userId,
+      'username': data['username'] as String? ?? 'user_$userId',
+      'displayName': data['displayName'] as String? ?? 'User',
+      'year': data['year'] as String? ?? '',
+      'major': data['major'] as String? ?? '',
+      'residence': data['residence'] as String? ?? '',
+      'bio': data['bio'] as String? ?? '',
+      'profileImageUrl': data['profileImageUrl'] as String? ?? '',
+      'interests': (data['interests'] as List<dynamic>?)?.cast<String>() ?? <String>[],
+      'eventCount': (data['eventCount'] as num?)?.toInt() ?? 0,
+      'spaceCount': spaceCount,
+      'friendCount': (data['friendCount'] as num?)?.toInt() ?? 0,
+      'createdAt': (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
+      'updatedAt': (data['updatedAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
+    };
+
+    return sanitized;
   }
 
   /// Update a profile in Firestore
@@ -175,38 +209,18 @@ class ProfileRemoteDataSource {
       if (!snapshot.exists) return null;
 
       try {
-        final dynamic rawData = snapshot.data();
+        final data = snapshot.data();
         
-        // Check if we received valid data
-        if (rawData == null) {
+        if (data == null) {
           debugPrint('ProfileRemoteDataSource: Null data received in stream for user $userId');
-          return null;
+          return _createDefaultProfile(userId);
         }
-        
-        if (rawData is! Map<String, dynamic>) {
-          debugPrint('ProfileRemoteDataSource: Invalid data type received in stream for user $userId. Expected Map<String, dynamic> but got ${rawData.runtimeType}');
-          // Try to recover by creating a minimal profile
-          return UserProfile(
-            id: userId,
-            username: 'user_$userId',
-            displayName: 'User',
-            year: '',
-            major: '',
-            residence: '',
-            eventCount: 0,
-            clubCount: 0,
-            friendCount: 0,
-            createdAt: DateTime.now(),
-            updatedAt: DateTime.now(),
-          );
-        }
-        
-        final data = rawData as Map<String, dynamic>;
-        data['id'] = snapshot.id;
-        return UserProfile.fromJson(data);
+
+        final validatedData = _validateAndSanitizeData(data, userId);
+        return UserProfile.fromJson(validatedData);
       } catch (e) {
         debugPrint('ProfileRemoteDataSource: Error processing profile stream data: $e');
-        return null;
+        return _createDefaultProfile(userId);
       }
     });
   }

@@ -85,6 +85,7 @@ class EventCardExamplePage extends ConsumerWidget {
       category: 'Technology',
       status: 'confirmed',
       link: 'https://hive.io/events/sample-event',
+      imageUrl: 'https://picsum.photos/seed/hive-event/800/600',
       tags: const ['Technology', 'Networking', 'Social'],
       source: EventSource.club,
       visibility: 'public',
@@ -102,13 +103,14 @@ class EventCardExamplePage extends ConsumerWidget {
       major: 'Computer Science',
       residence: 'North Campus',
       eventCount: 15,
-      clubCount: 3,
+      spaceCount: 3,
       friendCount: 148,
       createdAt: DateTime.now().subtract(const Duration(days: 365)),
       updatedAt: DateTime.now(),
       profileImageUrl: 'https://i.pravatar.cc/150?img=12',
       bio: 'Building the future of campus social networking',
       isVerified: true,
+      interests: const ['Technology', 'Programming', 'Design'],
     );
   }
 } 

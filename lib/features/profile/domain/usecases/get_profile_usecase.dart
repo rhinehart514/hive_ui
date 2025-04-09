@@ -1,5 +1,5 @@
 import 'package:hive_ui/features/profile/domain/repositories/profile_repository.dart';
-import 'package:hive_ui/models/user_profile.dart';
+import 'package:hive_ui/features/profile/domain/entities/user_profile.dart';
 
 /// Use case to get a user profile
 class GetProfileUseCase {

@@ -10,6 +10,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:hive_ui/features/spaces/domain/entities/space_entity.dart';
 import 'package:hive_ui/features/spaces/domain/entities/space_metrics_entity.dart';
 import 'package:hive_ui/features/spaces/presentation/providers/spaces_repository_provider.dart';
+import 'package:hive_ui/features/spaces/presentation/providers/spaces_controller.dart' show SpaceSearchNotifier;
 
 /// Cache duration for space data
 const spaceCacheDuration = Duration(minutes: 15);
@@ -141,7 +142,7 @@ final hierarchicalSpacesProvider =
     }
 
     final totalSpaces =
-        result.values.fold<int>(0, (sum, list) => sum + list.length);
+        result.values.fold<int>(0, (total, list) => total + list.length);
     debugPrint('\nTotal spaces retrieved: $totalSpaces');
     debugPrint('========== COMPLETED HIERARCHICAL SPACES FETCH ==========\n');
 
@@ -304,7 +305,7 @@ final userSpacesProvider = FutureProvider<List<Space>>((ref) async {
       if (userId != null) {
         try {
           // Query users collection for spaces in followedSpaces field
-          final userDoc = await FirebaseFirestore.instance
+          final userDoc = await firestore
               .collection('users')
               .doc(userId)
               .get();
@@ -388,14 +389,23 @@ final userSpacesProvider = FutureProvider<List<Space>>((ref) async {
   }
 });
 
-/// Provider for trending spaces
-final trendingSpacesProvider = FutureProvider<List<Space>>((ref) async {
-  try {
-    return await SpaceService.getTrendingSpaces();
-  } catch (e) {
-    debugPrint('Error loading trending spaces: $e');
-    return [];
-  }
+/// Provider for spaces with upcoming events
+final upcomingEventsSpacesProvider = FutureProvider<List<SpaceEntity>>((ref) async {
+  final repository = ref.watch(spacesRepositoryProvider);
+  return repository.getSpacesWithUpcomingEvents();
+});
+
+/// Provider for trending spaces 
+/// Renamed to avoid conflict with space_search_provider.dart
+final allTrendingSpacesProvider = FutureProvider<List<SpaceEntity>>((ref) async {
+  final repository = ref.watch(spacesRepositoryProvider);
+  return repository.getTrendingSpaces();
+});
+
+/// Provider for a specific space by ID
+final spaceByIdProvider = FutureProvider.family<SpaceEntity?, String>((ref, id) async {
+  final repository = ref.watch(spacesRepositoryProvider);
+  return repository.getSpaceById(id);
 });
 
 /// Provider for spaces by category
@@ -428,36 +438,11 @@ final hiveExclusiveSpacesProvider = FutureProvider<List<Space>>((ref) async {
 /// Provider for the selected space
 final selectedSpaceProvider = StateProvider<Space?>((ref) => null);
 
-/// Provider for space search results
-final spaceSearchProvider =
-    StateNotifierProvider<SpaceSearchNotifier, AsyncValue<List<Space>>>((ref) {
-  return SpaceSearchNotifier();
+/// Provider for space search results - properly using the SpaceSearchNotifier from spaces_controller
+final spaceSearchResultsProvider =
+    Provider<SpaceSearchNotifier>((ref) {
+  return SpaceSearchNotifier(ref);
 });
-
-/// State notifier for handling space searches
-class SpaceSearchNotifier extends StateNotifier<AsyncValue<List<Space>>> {
-  SpaceSearchNotifier() : super(const AsyncValue.data([]));
-
-  Future<void> search(String query) async {
-    if (query.isEmpty) {
-      state = const AsyncValue.data([]);
-      return;
-    }
-
-    state = const AsyncValue.loading();
-
-    try {
-      final results = await SpaceService.searchSpacesByName(query);
-      state = AsyncValue.data(results);
-    } catch (e) {
-      state = AsyncValue.error(e, StackTrace.current);
-    }
-  }
-
-  void clear() {
-    state = const AsyncValue.data([]);
-  }
-}
 
 /// Provider to check if current user is a manager of any spaces
 final isCurrentUserManagerProvider = StateProvider<bool>((ref) => false);
@@ -656,7 +641,7 @@ class PaginatedSpacesNotifier extends StateNotifier<PaginatedSpacesState> {
     final lowercaseQuery = query.toLowerCase();
     final filteredSpaces = state.spaces.where((space) {
       return space.name.toLowerCase().contains(lowercaseQuery) ||
-          (space.description.toLowerCase().contains(lowercaseQuery) ?? false);
+          space.description.toLowerCase().contains(lowercaseQuery);
     }).toList();
 
     state = state.copyWith(
@@ -720,18 +705,19 @@ final filteredRecommendedSpacesProvider = FutureProvider<List<Space>>((ref) asyn
   }
 });
 
-/// Provider to get a specific space by ID with caching
-final spaceByIdProvider = Provider.family<AsyncValue<SpaceEntity?>, String>((ref, spaceId) {
-  final spacesNotifier = ref.watch(spacesProvider.notifier);
+/// Provider for a single space by ID
+final spaceProvider = Provider.family<AsyncValue<SpaceEntity?>, String>((ref, spaceId) {
+  // Watch the spaces map
   final spaces = ref.watch(spacesProvider);
   
-  // If space is already in cache and not expired, return it
-  if (spaces.containsKey(spaceId) && !spacesNotifier.isExpired(spaceId)) {
+  // Check if space is in the cache
+  if (spaces.containsKey(spaceId)) {
     return AsyncValue.data(spaces[spaceId]);
   }
   
-  // Otherwise, fetch it
-  return ref.watch(_fetchSpaceProvider(spaceId));
+  // Trigger a refresh and return a loading state
+  ref.read(spacesProvider.notifier).refreshSpace(spaceId);
+  return const AsyncValue.loading();
 });
 
 /// Provider for space metrics with caching
@@ -753,22 +739,9 @@ final spaceMetricsByIdProvider = Provider.family<AsyncValue<SpaceMetricsEntity>,
   return ref.watch(_fetchSpaceMetricsProvider(spaceId));
 });
 
-/// Internal provider to fetch a space from the repository
-final _fetchSpaceProvider = FutureProvider.family<SpaceEntity?, String>((ref, spaceId) async {
-  final repository = ref.watch(spaceRepositoryProvider);
-  final space = await repository.getSpaceById(spaceId);
-  
-  // If space was found, add it to the cache
-  if (space != null) {
-    ref.read(spacesProvider.notifier).addSpace(space);
-  }
-  
-  return space;
-});
-
 /// Internal provider to fetch space metrics from the repository
 final _fetchSpaceMetricsProvider = FutureProvider.family<SpaceMetricsEntity, String>((ref, spaceId) async {
-  final repository = ref.watch(spaceRepositoryProvider);
+  // Just create initial metrics since we don't use repository
   final metrics = SpaceMetricsEntity.initial(spaceId);
   
   // Add metrics to cache

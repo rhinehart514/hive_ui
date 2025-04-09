@@ -22,6 +22,14 @@ abstract class AuthRepository {
   /// Sign in with Google account
   /// Returns the authenticated user on success
   Future<AuthUser> signInWithGoogle();
+  
+  /// Sign in with Apple account
+  /// Returns the authenticated user on success
+  Future<AuthUser> signInWithApple();
+  
+  /// Sign in with Facebook account
+  /// Returns the authenticated user on success
+  Future<AuthUser> signInWithFacebook();
 
   /// Sign out the current user
   Future<void> signOut();
@@ -40,4 +48,12 @@ abstract class AuthRepository {
 
   /// Update user profile when email is verified
   Future<void> updateEmailVerificationStatus();
+  
+  /// Get available sign-in methods for a given email
+  /// Returns a list of provider IDs (e.g., 'password', 'google.com', 'apple.com')
+  Future<List<String>> getAvailableSignInMethods(String email);
+  
+  /// Link email/password to an existing account
+  /// Used when user has signed in with a social provider and wants to add password auth
+  Future<void> linkEmailPassword(String email, String password);
 }

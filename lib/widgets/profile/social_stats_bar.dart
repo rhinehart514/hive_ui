@@ -33,7 +33,7 @@ class SocialStatsBar extends StatelessWidget {
         children: [
           _buildStatItem(
             label: 'Spaces',
-            value: profile.clubCount.toString(),
+            value: profile.spaceCount.toString(),
             icon: Icons.group,
           ),
           _buildVerticalDivider(),

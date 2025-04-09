@@ -3,13 +3,13 @@ import 'package:flutter/services.dart'; // Add this import for HapticFeedback
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:auto_route/auto_route.dart';
-import 'package:hive_ui/features/spaces/presentation/providers/space_providers.dart';
+import 'package:hive_ui/features/spaces/presentation/providers/space_providers.dart' as space_providers;
 import 'package:hive_ui/features/spaces/presentation/providers/spaces_controller.dart';
 import 'package:hive_ui/features/spaces/presentation/providers/user_spaces_providers.dart' as user_providers;
 import 'package:hive_ui/features/spaces/presentation/providers/spaces_async_providers.dart';
 import 'package:hive_ui/features/spaces/domain/entities/space_entity.dart' as entities;
 import 'package:hive_ui/models/space.dart';
-import 'package:hive_ui/models/space_type.dart';
+import 'package:hive_ui/models/space_type.dart' as model_space_type;
 import 'package:hive_ui/models/space_metrics.dart';
 import 'package:hive_ui/theme/app_colors.dart';
 import 'package:hive_ui/theme/huge_icons.dart';
@@ -23,36 +23,39 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:hive_ui/core/navigation/routes.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:hive_ui/features/spaces/presentation/widgets/space_search_results.dart';
 import 'package:hive_ui/features/spaces/presentation/widgets/spaces_search_bar.dart';
 import 'package:hive_ui/features/spaces/presentation/providers/space_search_provider.dart';
 import 'package:hive_ui/extensions/glassmorphism_extension.dart';
 import 'package:hive_ui/theme/glassmorphism_guide.dart';
 import 'package:hive_ui/features/events/presentation/pages/create_event_page.dart';
-import 'package:hive_ui/features/profile/presentation/providers/profile_providers.dart'; // Import for profileProvider
-import 'package:hive_ui/features/spaces/data/datasources/spaces_firestore_datasource.dart';
+// Import for profileProvider
 import 'package:hive_ui/features/spaces/presentation/providers/space_navigation_provider.dart';
 import 'package:hive_ui/core/navigation/navigation_service.dart';
+import 'package:hive_ui/features/profile/presentation/providers/profile_providers.dart';
+import 'package:hive_ui/features/spaces/presentation/widgets/discover_spaces_content.dart';
+import 'package:hive_ui/features/spaces/presentation/widgets/my_spaces_content.dart';
+import 'package:hive_ui/features/spaces/presentation/widgets/requests_content.dart';
+import 'package:hive_ui/features/spaces/domain/entities/space_entity.dart';
 
 // Extension to convert SpaceEntity to Space
 extension SpaceEntityExt on entities.SpaceEntity {
   Space toSpace() {
     // Convert domain SpaceType to model SpaceType
-    SpaceType convertSpaceType() {
+    model_space_type.SpaceType convertSpaceType() {
       switch (spaceType) {
         case entities.SpaceType.studentOrg:
-          return SpaceType.studentOrg;
+          return model_space_type.SpaceType.studentOrg;
         case entities.SpaceType.universityOrg:
-          return SpaceType.universityOrg;
+          return model_space_type.SpaceType.universityOrg;
         case entities.SpaceType.campusLiving:
-          return SpaceType.campusLiving;
+          return model_space_type.SpaceType.campusLiving;
         case entities.SpaceType.fraternityAndSorority:
-          return SpaceType.fraternityAndSorority;
+          return model_space_type.SpaceType.fraternityAndSorority;
         case entities.SpaceType.hiveExclusive:
-          return SpaceType.hiveExclusive;
+          return model_space_type.SpaceType.hiveExclusive;
         case entities.SpaceType.other:
         default:
-          return SpaceType.other;
+          return model_space_type.SpaceType.other;
       }
     }
 
@@ -110,29 +113,20 @@ class SpacesPage extends ConsumerStatefulWidget {
   ConsumerState<SpacesPage> createState() => _SpacesPageState();
 }
 
-class _SpacesPageState extends ConsumerState<SpacesPage>
-    with TickerProviderStateMixin {
+class _SpacesPageState extends ConsumerState<SpacesPage> with SingleTickerProviderStateMixin {
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _searchFocusNode = FocusNode();
-  bool _isSearchExpanded = false;
   final Set<String> _activeFilters = <String>{};
-  bool _isJoiningSpace = false; // Keep this since it's used in the code
-  int? _lastMySpacesRefreshTime; // Track when My Spaces tab was last refreshed
-
-  // Scroll controllers
-  final ScrollController _mainScrollController = ScrollController();
-  final ScrollController _categoriesScrollController = ScrollController();
-  final ScrollController _mySpacesScrollController = ScrollController();
-
-  // Tab controller for explore/my spaces
-  TabController? _tabController;
-
+  bool _isSearchExpanded = false;
+  bool _isSearching = false;
+  bool _isJoiningSpace = false;
+  int? _lastMySpacesRefreshTime;
   String _activeCategory = 'All';
   final bool _isRefreshing = false;
   bool _isLoadingMore = false;
   int _currentPage = 1;
   final int _spacesPerPage = 20;
-
+  
   // Define space categories - condensed to most important for students
   final List<String> _categories = [
     'All',
@@ -144,6 +138,14 @@ class _SpacesPageState extends ConsumerState<SpacesPage>
     'Academics',  // New locked category
     'Circles',    // New locked category
   ];
+  
+  // Scroll controllers
+  final ScrollController _mainScrollController = ScrollController();
+  final ScrollController _categoriesScrollController = ScrollController();
+  final ScrollController _mySpacesScrollController = ScrollController();
+
+  // Tab controller for explore/my spaces
+  TabController? _tabController;
 
   // New method to build the custom spaces app bar
   PreferredSizeWidget _buildSpacesAppBar(BuildContext context) {
@@ -226,13 +228,21 @@ class _SpacesPageState extends ConsumerState<SpacesPage>
 
                   // Search bar when expanded
                   SpacesSearchBar(
-                    isSearching: _isSearchExpanded,
-                    searchController: _searchController,
-                    searchFocusNode: _searchFocusNode,
-                    onSearchClosed: () {
+                    onSearch: (query) {
+                      setState(() {
+                        _toggleSearchExpanded(true);
+                        _searchController.text = query;
+                      });
+                      // Trigger search
+                      ref.read(spaceSearchProvider.notifier).search(query);
+                    },
+                    onClear: () {
                       setState(() {
                         _toggleSearchExpanded(false);
+                        _searchController.clear();
                       });
+                      // Clear search results
+                      ref.read(spaceSearchProvider.notifier).clear();
                     },
                   ),
 
@@ -265,6 +275,7 @@ class _SpacesPageState extends ConsumerState<SpacesPage>
                       tabs: const [
                         Tab(text: 'Explore'),
                         Tab(text: 'My Spaces'),
+                        Tab(text: 'Requests'),
                       ],
                     ),
                   ),
@@ -304,7 +315,7 @@ class _SpacesPageState extends ConsumerState<SpacesPage>
     
     // Set up tab controller
     _tabController = TabController(
-      length: 2,
+      length: 3,
       vsync: this,
     );
     
@@ -406,7 +417,7 @@ class _SpacesPageState extends ConsumerState<SpacesPage>
         debugPrint('✅ Updated userProvider with ${updatedUserData.joinedClubs.length} joined clubs');
         
         // Refresh spaces providers
-        ref.invalidate(userSpacesProvider);
+        ref.invalidate(user_providers.userSpacesProvider);
         
         // Also sync from Firebase to local
         final syncUserSpaces = ref.read(user_providers.syncUserSpacesProvider);
@@ -492,8 +503,8 @@ class _SpacesPageState extends ConsumerState<SpacesPage>
       debugPrint('User data refreshed');
       
       // Then refresh the spaces providers
-      await ref.refresh(userSpacesProvider.future);
-      await ref.refresh(hierarchicalSpacesProvider.future);
+      await ref.refresh(user_providers.userSpacesProvider.future);
+      await ref.refresh(space_providers.hierarchicalSpacesProvider.future);
       await ref.refresh(trendingSpacesProvider.future);
       
       // For debugging: check what spaces we have after refresh
@@ -502,10 +513,11 @@ class _SpacesPageState extends ConsumerState<SpacesPage>
       
       // Try to wait for the user spaces to be loaded and print what we got
       Future.delayed(const Duration(seconds: 1), () {
-        final spacesAsync = ref.read(userSpacesProvider);
-        spacesAsync.whenData((spaces) {
+        final spacesAsync = ref.read(user_providers.userSpacesProvider);
+        if (spacesAsync is AsyncData<List<entities.SpaceEntity>>) {
+          final spaces = spacesAsync.value;
           debugPrint('UserSpacesProvider loaded ${spaces.length} spaces after refresh: ${spaces.map((s) => s.id).toList()}');
-        });
+        }
       });
       
       setState(() {
@@ -666,9 +678,9 @@ class _SpacesPageState extends ConsumerState<SpacesPage>
   // approach that provides a better user experience with more validation and features.
 
   // Helper to build dropdown items with icons for space types
-  DropdownMenuItem<SpaceType> _buildSpaceTypeDropdownItem(
-      SpaceType type, String text, IconData icon) {
-    return DropdownMenuItem<SpaceType>(
+  DropdownMenuItem<model_space_type.SpaceType> _buildSpaceTypeDropdownItem(
+      model_space_type.SpaceType type, String text, IconData icon) {
+    return DropdownMenuItem<model_space_type.SpaceType>(
       value: type,
       child: Row(
         children: [
@@ -700,19 +712,19 @@ class _SpacesPageState extends ConsumerState<SpacesPage>
     );
   }
 
-  String _getSpaceTypeString(SpaceType type) {
+  String _getSpaceTypeString(model_space_type.SpaceType type) {
     switch (type) {
-      case SpaceType.studentOrg:
+      case model_space_type.SpaceType.studentOrg:
         return 'student_organizations';
-      case SpaceType.universityOrg:
+      case model_space_type.SpaceType.universityOrg:
         return 'university_organizations';
-      case SpaceType.campusLiving:
+      case model_space_type.SpaceType.campusLiving:
         return 'campus_living';
-      case SpaceType.fraternityAndSorority:
+      case model_space_type.SpaceType.fraternityAndSorority:
         return 'fraternity_and_sorority';
-      case SpaceType.hiveExclusive:
+      case model_space_type.SpaceType.hiveExclusive:
         return 'hive_exclusive';
-      case SpaceType.other:
+      case model_space_type.SpaceType.other:
       default:
         return 'other';
     }
@@ -726,63 +738,68 @@ class _SpacesPageState extends ConsumerState<SpacesPage>
     }
   }
 
+  Widget _buildContent() {
+    if (_isSearching && _searchController.text.trim().isNotEmpty) {
+      return _buildSearchResults();
+    }
+    
+    if (_tabController?.index == 0) {
+      return const MySpacesContent();
+    } else if (_tabController?.index == 1) {
+      return const DiscoverSpacesContent();
+    } else {
+      return const RequestsContent();
+    }
+  }
+  
+  // Simple search results builder
+  Widget _buildSearchResults() {
+    return Center(
+      child: Text(
+        'Search results for: ${_searchController.text}',
+        style: const TextStyle(color: Colors.white),
+      ),
+    );
+  }
+  
   @override
   Widget build(BuildContext context) {
-    // Watch necessary providers
-    final spacesAsyncValue = ref.watch(spacesAsyncProvider);
-    final userSpacesAsyncValue = ref.watch(user_providers.userSpacesProvider);
+    final userProfileAsync = ref.watch(profileSyncProvider);
     
-    // Read the search state instead of setting it directly in build
-    final isSearchExpanded = ref.watch(spaceSearchActiveProvider);
-
     return Scaffold(
-      backgroundColor: AppColors.black,
-      appBar: _buildSpacesAppBar(context),
-      body: Stack(
+      backgroundColor: AppColors.dark,
+      body: Column(
         children: [
-          TabBarView(
-              controller: _tabController,
-              children: [
-              // Explore tab
-                RefreshIndicator(
-                  color: AppColors.gold,
-                  backgroundColor: Colors.black.withOpacity(0.7),
-                  onRefresh: _refreshSpaces,
-                child: _buildExploreTab(ref.watch(hierarchicalSpacesProvider)),
-                ),
-
-              // My Spaces tab
-                RefreshIndicator(
-                  color: AppColors.gold,
-                  backgroundColor: Colors.black.withOpacity(0.7),
-                  onRefresh: _refreshSpaces,
-                child: _buildMySpacesTab(ref.watch(userSpacesProvider)),
-                ),
-              ],
-            ),
-          
-          // Overlay the search results when search is active
-          if (_isSearchExpanded)
-            const Positioned(
-              top: 0,
-              left: 0,
-              right: 0,
-              bottom: 0,
-              child: SpaceSearchResults(),
+          _buildAppBar(),
+          _buildTabBar(),
+          SpacesSearchBar(
+            onSearch: (query) {
+              setState(() {
+                _searchController.text = query;
+                _isSearching = query.trim().isNotEmpty;
+              });
+            },
+            onClear: () {
+              setState(() {
+                _searchController.clear();
+                _isSearching = false;
+              });
+            },
+          ),
+          Expanded(
+            child: _buildContent(),
           ),
         ],
       ),
-      // Always create the FAB, but make it invisible if not in My Spaces tab
-      floatingActionButton: FloatingActionButton(
-        heroTag: 'spaces_page_fab',
-        backgroundColor: AppColors.gold,
-        foregroundColor: Colors.black,
-        onPressed: () => _showCreateSpaceDialog(context),
-        elevation: 4,
-        child: const Icon(Icons.add),
-      ),
-      floatingActionButtonLocation: _CustomFloatingActionButtonLocation.endFloat,
+      floatingActionButton: _buildCreateSpaceButton(userProfileAsync),
     );
+  }
+
+  void _refreshData() {
+    // Refresh all the providers we're using
+    ref.refresh(space_providers.spacesProvider);
+    ref.refresh(space_providers.hierarchicalSpacesProvider);
+    ref.refresh(searchedSpacesProvider);
   }
 
   // Update state provider synchronization for search status
@@ -835,7 +852,10 @@ class _SpacesPageState extends ConsumerState<SpacesPage>
 
         // Trending spaces section
         SliverToBoxAdapter(
-          child: _buildTrendingSpaces(ref.watch(trendingSpacesProvider)),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+            child: _buildTrendingSpaces(ref.watch(trendingSpacesProvider)),
+          ),
         ),
 
         // Recommended spaces section
@@ -856,31 +876,18 @@ class _SpacesPageState extends ConsumerState<SpacesPage>
     
     // Force a refresh of the userSpacesProvider when this tab is visible
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      if (_tabController?.index == 1) {
-        // Always refresh when tab becomes visible
-        final currentTime = DateTime.now().millisecondsSinceEpoch;
-        final lastRefreshTime = _lastMySpacesRefreshTime ?? 0;
-        final timeSinceLastRefresh = currentTime - lastRefreshTime;
-        
-        // Refresh immediately if it's been more than 5 seconds since last refresh
-        if (timeSinceLastRefresh > 5000) {
-          _lastMySpacesRefreshTime = currentTime;
-          debugPrint('Auto-refreshing My Spaces tab (${userSpaces.value?.length ?? 0} spaces)');
-          
-          // Check current user data before refresh
-          final userData = weakRef.read(userProvider);
-          debugPrint('Before refresh: User has ${userData?.joinedClubs.length ?? 0} joined clubs: ${userData?.joinedClubs}');
-          
-          // Refresh both providers to ensure data consistency
-          weakRef.invalidate(userSpacesProvider);
-          
-          // Let's explicitly fetch user data with Firebase
-          weakRef.read(userProvider.notifier).refreshUserData();
-          
-          // Don't use Future.delayed with ref - this causes the issue
-          // Store necessary data before the async operation
-        }
+      // Only refresh if it's been more than 5 minutes since the last refresh
+      final now = DateTime.now().millisecondsSinceEpoch;
+      if (_lastMySpacesRefreshTime == null ||
+          now - _lastMySpacesRefreshTime! > 5 * 60 * 1000) {
+        // We're in the context of a widget that may be unmounted, so use a WeakReference
+        final weakRef = ref;
+        Future.microtask(() {
+          if (mounted) {
+            weakRef.invalidate(user_providers.userSpacesProvider);
+            _lastMySpacesRefreshTime = now;
+          }
+        });
       }
     });
     
@@ -1370,15 +1377,24 @@ class _SpacesPageState extends ConsumerState<SpacesPage>
     );
   }
 
-  // Build trending spaces section with enhanced design
-  Widget _buildTrendingSpaces(AsyncValue<List<Space>> trendingSpaces) {
-    return trendingSpaces.when(
-      data: (spaces) {
-        // Filter spaces - only show Student Organizations and Greek Life in trending
-        final filteredSpaces = spaces.where((space) {
+  // Build trending spaces section with new adapter to handle SpaceEntity
+  Widget _buildTrendingSpaces(AsyncValue<List<SpaceEntity>> trendingSpacesAsync) {
+    return trendingSpacesAsync.when(
+      data: (trendingEntities) {
+        // Convert SpaceEntity to Space objects
+        final List<Space> trendingSpaces = trendingEntities
+            .map((entity) => entity.toSpace())
+            .toList();
+            
+        if (trendingSpaces.isEmpty) {
+          return const SizedBox.shrink();
+        }
+
+        // Filter to only include certain types
+        final filteredSpaces = trendingSpaces.where((space) {
           // Only allow StudentOrg and Fraternity/Sorority space types to appear in trending
-          return space.spaceType == SpaceType.studentOrg ||
-              space.spaceType == SpaceType.fraternityAndSorority;
+          return space.spaceType == model_space_type.SpaceType.studentOrg ||
+              space.spaceType == model_space_type.SpaceType.fraternityAndSorority;
         }).toList();
 
         if (filteredSpaces.isEmpty) {
@@ -3051,7 +3067,7 @@ class _SpacesPageState extends ConsumerState<SpacesPage>
   // Method to show event creation dialog
   void _showCreateEventDialog(BuildContext context) {
     // Check if the user has any spaces to create events in
-    final userSpacesAsync = ref.read(userSpacesProvider);
+    final userSpacesAsync = ref.read(user_providers.userSpacesProvider);
     final currentUserId = FirebaseAuth.instance.currentUser?.uid;
     
     if (currentUserId == null) {
@@ -3198,7 +3214,7 @@ class _SpacesPageState extends ConsumerState<SpacesPage>
                                             Navigator.of(context).push(
                                               MaterialPageRoute(
                                                 builder: (context) => CreateEventPage(
-                                                  selectedSpace: space,
+                                                  selectedSpace: space.toSpace(),
                                                 ),
                                               ),
                                             );
@@ -3361,6 +3377,77 @@ class _SpacesPageState extends ConsumerState<SpacesPage>
       ),
     );
   }
+
+  // Builds the app bar for the spaces page
+  Widget _buildAppBar() {
+    return AppBar(
+      backgroundColor: Colors.transparent,
+      elevation: 0,
+      title: Text(
+        'Spaces',
+        style: GoogleFonts.inter(
+          color: Colors.white,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
+      actions: [
+        IconButton(
+          icon: const Icon(Icons.notifications_outlined, color: Colors.white),
+          onPressed: () {
+            // Navigate to notifications
+            HapticFeedback.mediumImpact();
+          },
+        ),
+      ],
+    );
+  }
+
+  // Builds the tab bar for the spaces page
+  Widget _buildTabBar() {
+    return TabBar(
+      controller: _tabController,
+      indicatorColor: AppColors.gold,
+      labelColor: AppColors.gold,
+      unselectedLabelColor: Colors.white,
+      tabs: const [
+        Tab(text: 'My Spaces'),
+        Tab(text: 'Discover'),
+        Tab(text: 'Requests'),
+      ],
+    );
+  }
+
+  // Builds the floating action button for creating spaces
+  Widget _buildCreateSpaceButton(ProfileSyncState profileAsync) {
+    return FloatingActionButton(
+      backgroundColor: AppColors.gold,
+      foregroundColor: Colors.black,
+      onPressed: () {
+        // Show create space dialog or navigate to create space page
+        HapticFeedback.mediumImpact();
+        _showCreateSpaceDialog(context);
+      },
+      child: const Icon(Icons.add),
+    );
+  }
+
+  void _performSearch(String query) {
+    setState(() {
+      _isSearching = true;
+    });
+    // Use the provider directly
+    ref.read(spaceSearchProvider.notifier).search(query);
+  }
+
+  void _clearSearch() {
+    _searchController.clear();
+    setState(() {
+      _isSearching = false;
+      _isSearchExpanded = false;
+    });
+    // Use the provider directly
+    ref.read(spaceSearchProvider.notifier).clear();
+  }
 }
 
 // Keeping _SliverCategorySelectorDelegate for category selector
@@ -3370,7 +3457,7 @@ class _SliverCategorySelectorDelegate extends SliverPersistentHeaderDelegate {
 
   _SliverCategorySelectorDelegate({
     required this.child,
-    this.visible = true, // Initialize with a default value of true
+    required this.visible,
   });
 
   @override

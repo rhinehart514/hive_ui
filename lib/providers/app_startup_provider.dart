@@ -9,7 +9,6 @@ import 'package:hive_ui/services/error_handling_service.dart';
 import 'package:hive_ui/services/performance_service.dart';
 import 'package:hive_ui/services/space_service.dart';
 import 'package:hive_ui/services/analytics_service.dart';
-import 'package:hive_ui/features/messaging/injection.dart';
 import 'package:hive_ui/features/messaging/utils/messaging_initializer.dart';
 
 /// Provider responsible for handling app startup sequence and initialization

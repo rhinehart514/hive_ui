@@ -17,6 +17,18 @@ class User {
   
   /// Whether the user is verified
   final bool isVerified;
+
+  /// Whether the user is restricted from certain actions
+  final bool isRestricted;
+
+  /// The reason for the restriction (if any)
+  final String? restrictionReason;
+
+  /// The date when the restriction ends (if temporary)
+  final DateTime? restrictionEndDate;
+
+  /// The ID of the admin or system that applied the restriction
+  final String? restrictedBy;
   
   /// Constructor
   User({
@@ -26,6 +38,10 @@ class User {
     required this.profilePicture,
     this.bio = '',
     this.isVerified = false,
+    this.isRestricted = false,
+    this.restrictionReason,
+    this.restrictionEndDate,
+    this.restrictedBy,
   });
   
   /// Create a copy of this User but with the given fields replaced with the new values
@@ -36,6 +52,10 @@ class User {
     String? profilePicture,
     String? bio,
     bool? isVerified,
+    bool? isRestricted,
+    String? restrictionReason,
+    DateTime? restrictionEndDate,
+    String? restrictedBy,
   }) {
     return User(
       id: id ?? this.id,
@@ -44,6 +64,10 @@ class User {
       profilePicture: profilePicture ?? this.profilePicture,
       bio: bio ?? this.bio,
       isVerified: isVerified ?? this.isVerified,
+      isRestricted: isRestricted ?? this.isRestricted,
+      restrictionReason: restrictionReason ?? this.restrictionReason,
+      restrictionEndDate: restrictionEndDate ?? this.restrictionEndDate,
+      restrictedBy: restrictedBy ?? this.restrictedBy,
     );
   }
 } 

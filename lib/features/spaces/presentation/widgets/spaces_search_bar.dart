@@ -1,98 +1,82 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:hive_ui/theme/app_colors.dart';
-import 'package:hive_ui/features/spaces/presentation/providers/space_search_provider.dart';
 
-class SpacesSearchBar extends ConsumerWidget {
-  final VoidCallback onSearchClosed;
-  final bool isSearching;
-  final TextEditingController searchController;
-  final FocusNode searchFocusNode;
+/// A search bar widget for spaces
+class SpacesSearchBar extends StatefulWidget {
+  /// Callback when the search query changes
+  final Function(String) onSearch;
+  
+  /// Callback when the search is cleared
+  final VoidCallback onClear;
 
+  /// Constructor
   const SpacesSearchBar({
     Key? key,
-    required this.onSearchClosed,
-    required this.isSearching,
-    required this.searchController,
-    required this.searchFocusNode,
+    required this.onSearch,
+    required this.onClear,
   }) : super(key: key);
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 300),
-      height: isSearching ? 60 : 0,
+  State<SpacesSearchBar> createState() => _SpacesSearchBarState();
+}
+
+class _SpacesSearchBarState extends State<SpacesSearchBar> {
+  final TextEditingController _controller = TextEditingController();
+  
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _clearSearch() {
+    _controller.clear();
+    widget.onClear();
+    HapticFeedback.lightImpact();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppColors.black.withOpacity(0.7),
-        border: const Border(
-          bottom: BorderSide(
-            color: Colors.white10,
-            width: 0.5,
-          ),
+        color: Colors.black.withOpacity(0.3),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: Colors.white.withOpacity(0.1),
         ),
       ),
-      child: isSearching
-          ? Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: AppColors.black.withOpacity(0.3),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(
-                          color: AppColors.gold.withOpacity(0.3),
-                          width: 1,
-                        ),
-                      ),
-                      child: TextField(
-                        controller: searchController,
-                        focusNode: searchFocusNode,
-                        style: GoogleFonts.inter(
-                          color: AppColors.white,
-                          fontSize: 16,
-                        ),
-                        decoration: InputDecoration(
-                          hintText: 'Search all spaces by ID, name, or tags...',
-                          hintStyle: GoogleFonts.inter(
-                            color: AppColors.textSecondary,
-                            fontSize: 16,
-                          ),
-                          prefixIcon: const Icon(
-                            Icons.search,
-                            color: AppColors.gold,
-                            size: 20,
-                          ),
-                          border: InputBorder.none,
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 12,
-                          ),
-                        ),
-                        onChanged: (value) {
-                          // Update the search query in the provider
-                          ref.read(spaceSearchQueryProvider.notifier).state = value;
-                        },
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  IconButton(
-                    icon: const Icon(Icons.close, color: AppColors.gold),
-                    onPressed: () {
-                      HapticFeedback.selectionClick();
-                      searchController.clear();
-                      ref.read(spaceSearchQueryProvider.notifier).state = '';
-                      onSearchClosed();
-                    },
-                  ),
-                ],
-              ),
-            )
-          : const SizedBox.shrink(),
+      child: TextField(
+        controller: _controller,
+        onChanged: widget.onSearch,
+        style: GoogleFonts.inter(
+          color: Colors.white,
+        ),
+        decoration: InputDecoration(
+          hintText: 'Search spaces...',
+          hintStyle: GoogleFonts.inter(
+            color: Colors.white.withOpacity(0.5),
+          ),
+          prefixIcon: const Icon(
+            Icons.search,
+            color: Colors.white,
+          ),
+          suffixIcon: IconButton(
+            icon: const Icon(
+              Icons.clear,
+              color: Colors.white,
+            ),
+            onPressed: _clearSearch,
+          ),
+          border: InputBorder.none,
+          contentPadding: const EdgeInsets.symmetric(vertical: 12),
+        ),
+        cursorColor: AppColors.gold,
+        textInputAction: TextInputAction.search,
+        onSubmitted: widget.onSearch,
+      ),
     );
   }
 }

@@ -384,19 +384,19 @@ class _EventCardState extends State<EventCard> with SingleTickerProviderStateMix
                                       ),
                                       borderRadius: BorderRadius.circular(12),
                                     ),
-                                    child: Row(
+                                    child: const Row(
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
                                         Icon(
                                           Icons.repeat_rounded,
                                           size: 14,
-                                          color: const Color(0xFFFFD700),
+                                          color: Color(0xFFFFD700),
                                         ),
-                                        const SizedBox(width: 4),
+                                        SizedBox(width: 4),
                                         Text(
                                           "REPOST",
                                           style: TextStyle(
-                                            color: const Color(0xFFFFD700),
+                                            color: Color(0xFFFFD700),
                                             fontSize: 10,
                                             fontWeight: FontWeight.bold,
                                             fontFamily: 'Inter',

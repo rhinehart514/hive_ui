@@ -1,15 +1,6 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_ui/features/messaging/controllers/messaging_controller.dart';
-import 'package:hive_ui/features/messaging/domain/entities/message.dart' as domain;
-import 'package:hive_ui/features/messaging/domain/entities/chat_user.dart';
-import 'package:hive_ui/features/messaging/injection.dart' as injection;
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:intl/intl.dart';
-import 'package:hive_ui/theme/app_icons.dart';
-import 'package:hive_ui/features/messaging/presentation/widgets/online_status_indicator.dart';
-import 'package:hive_ui/features/messaging/presentation/widgets/typing_indicator.dart';
 import 'package:hive_ui/features/messaging/presentation/widgets/message_bubble.dart';
 import '../providers/mock_messages_provider.dart' as mock;
 import 'package:hive_ui/features/messaging/application/providers/messaging_providers.dart' as providers;

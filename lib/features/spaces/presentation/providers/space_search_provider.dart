@@ -2,6 +2,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_ui/models/space.dart';
 import 'package:hive_ui/services/space_service.dart';
 import 'package:flutter/material.dart';
+import 'package:hive_ui/features/spaces/domain/entities/space_entity.dart';
+import 'package:hive_ui/features/spaces/presentation/providers/spaces_repository_provider.dart';
 
 /// Provider for the search query string
 final spaceSearchQueryProvider = StateProvider<String>((ref) => '');
@@ -49,4 +51,56 @@ final searchedSpacesProvider = FutureProvider<List<Space>>((ref) async {
     debugPrint('Error searching spaces: $e');
     return [];
   }
+});
+
+/// Provider for searched spaces based on a query
+final searchSpacesProvider = FutureProvider.family<List<SpaceEntity>, String>((ref, query) async {
+  if (query.isEmpty) {
+    return [];
+  }
+  
+  final repository = ref.watch(spaceRepositoryProvider);
+  return repository.searchSpaces(query);
+});
+
+/// Provider for featured spaces
+final featuredSpacesProvider = FutureProvider<List<SpaceEntity>>((ref) async {
+  final repository = ref.watch(spaceRepositoryProvider);
+  return repository.getFeaturedSpaces();
+});
+
+/// Provider for newest spaces
+final newestSpacesProvider = FutureProvider<List<SpaceEntity>>((ref) async {
+  final repository = ref.watch(spaceRepositoryProvider);
+  return repository.getNewestSpaces();
+});
+
+/// Provider for trending spaces
+final trendingSpacesProvider = FutureProvider<List<SpaceEntity>>((ref) async {
+  final repository = ref.watch(spaceRepositoryProvider);
+  return repository.getTrendingSpaces();
+});
+
+/// Provider for spaces with upcoming events
+final spacesWithEventsProvider = FutureProvider<List<SpaceEntity>>((ref) async {
+  final repository = ref.watch(spaceRepositoryProvider);
+  return repository.getSpacesWithUpcomingEvents();
+});
+
+/// Provider for spaces joined by the current user
+final joinedSpacesProvider = FutureProvider<List<SpaceEntity>>((ref) async {
+  final repository = ref.watch(spaceRepositoryProvider);
+  return repository.getJoinedSpaces();
+});
+
+/// Provider for spaces where the user has pending invitations
+final invitedSpacesProvider = FutureProvider<List<SpaceEntity>>((ref) async {
+  final repository = ref.watch(spaceRepositoryProvider);
+  return repository.getInvitedSpaces();
+});
+
+/// Provider for recommended spaces for the current user
+final recommendedSpacesProvider = FutureProvider<List<SpaceEntity>>((ref) async {
+  final repository = ref.watch(spaceRepositoryProvider);
+  return repository.getRecommendedSpaces();
 }); 

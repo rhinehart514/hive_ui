@@ -2,14 +2,12 @@ import 'package:flutter/material.dart';
 import '../../models/event.dart';
 import '../../models/feed_state.dart' hide SpaceRecommendation, HiveLabItem;
 import '../../models/repost_content_type.dart';
-import '../../models/user_profile.dart';
 import '../../models/space_recommendation.dart';
 import '../../models/hive_lab_item.dart';
 import '../../features/feed/domain/models/quote_item.dart';
 import '../feed/space_recommendation_card.dart';
 import '../feed/hive_lab_card.dart';
 import '../event_card/event_card.dart';
-import '../feed/feed_event_card.dart';
 import '../feed/quote_card.dart';
 
 /// A utility class for building feed items based on their type

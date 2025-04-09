@@ -161,7 +161,7 @@ class UserSpacesRepositoryImpl implements UserSpacesRepository {
   }
 
   @override
-  Future<void> joinSpace(String userId, String spaceId) async {
+  Future<bool> joinSpace(String userId, String spaceId) async {
     try {
       // Use platform integration manager for joining space
       // This ensures the operation is consistent across the app
@@ -173,14 +173,16 @@ class UserSpacesRepositoryImpl implements UserSpacesRepository {
       if (!success) {
         throw Exception('Failed to join space through platform integration');
       }
+      
+      return true;
     } catch (e) {
       debugPrint('Error joining space: $e');
-      throw Exception('Failed to join space: $e');
+      return false;
     }
   }
 
   @override
-  Future<void> leaveSpace(String userId, String spaceId) async {
+  Future<bool> leaveSpace(String userId, String spaceId) async {
     try {
       // Update the user document to remove the space ID from followedSpaces
       await _firestore
@@ -210,9 +212,10 @@ class UserSpacesRepositoryImpl implements UserSpacesRepository {
         userId: userId,
       );
       
+      return true;
     } catch (e) {
       debugPrint('Error leaving space: $e');
-      throw Exception('Failed to leave space: $e');
+      return false;
     }
   }
 
@@ -306,5 +309,11 @@ class UserSpacesRepositoryImpl implements UserSpacesRepository {
       debugPrint('Error getting recommended spaces: $e');
       return [];
     }
+  }
+
+  @override
+  Future<String?> getCurrentUserId() {
+    // Use _auth to get the current user ID
+    return Future.value(_auth.currentUser?.uid);
   }
 } 

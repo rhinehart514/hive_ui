@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hive_ui/core/navigation/routes.dart';
@@ -7,7 +6,6 @@ import 'package:hive_ui/features/messaging/domain/entities/chat.dart';
 import 'package:hive_ui/features/messaging/application/providers/messaging_providers.dart';
 import 'package:hive_ui/features/messaging/presentation/widgets/chat_list_item.dart';
 import 'package:hive_ui/features/messaging/presentation/widgets/friend_suggestions_list.dart';
-import 'package:hive_ui/theme/app_colors.dart';
 
 /// Screen that displays all of a user's chats
 class ChatListScreen extends ConsumerWidget {

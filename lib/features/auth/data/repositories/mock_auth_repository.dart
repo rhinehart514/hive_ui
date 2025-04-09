@@ -241,6 +241,142 @@ class MockAuthRepository implements AuthRepository {
     }
   }
 
+  @override
+  Future<AuthUser> signInWithApple() async {
+    // Simulate network delay
+    if (simulateNetworkDelay) {
+      await Future.delayed(networkDelay);
+    }
+
+    // Create mock Apple user if not exists
+    const appleEmail = 'apple_user@icloud.com';
+    if (!_users.containsKey(appleEmail)) {
+      final now = DateTime.now();
+      final user = AuthUser(
+        id: 'apple-${DateTime.now().millisecondsSinceEpoch}',
+        email: appleEmail,
+        displayName: 'Apple User',
+        photoUrl: 'https://ui-avatars.com/api/?name=Apple+User',
+        isEmailVerified: true,
+        createdAt: now,
+        lastSignInTime: now,
+      );
+
+      _users[appleEmail] = _MockUserCredential(user, 'apple-password');
+    }
+
+    // Update current user
+    _currentUser = _users[appleEmail]!.user;
+    _authStateController.add(_currentUser);
+
+    return _currentUser;
+  }
+
+  @override
+  Future<AuthUser> signInWithFacebook() async {
+    // Simulate network delay
+    if (simulateNetworkDelay) {
+      await Future.delayed(networkDelay);
+    }
+
+    // Create mock Facebook user if not exists
+    const facebookEmail = 'facebook_user@example.com';
+    if (!_users.containsKey(facebookEmail)) {
+      final now = DateTime.now();
+      final user = AuthUser(
+        id: 'facebook-${DateTime.now().millisecondsSinceEpoch}',
+        email: facebookEmail,
+        displayName: 'Facebook User',
+        photoUrl: 'https://ui-avatars.com/api/?name=Facebook+User',
+        isEmailVerified: true,
+        createdAt: now,
+        lastSignInTime: now,
+      );
+
+      _users[facebookEmail] = _MockUserCredential(user, 'facebook-password');
+    }
+
+    // Update current user
+    _currentUser = _users[facebookEmail]!.user;
+    _authStateController.add(_currentUser);
+
+    return _currentUser;
+  }
+
+  @override
+  Future<List<String>> getAvailableSignInMethods(String email) async {
+    // Simulate network delay
+    if (simulateNetworkDelay) {
+      await Future.delayed(networkDelay);
+    }
+
+    final normalizedEmail = email.toLowerCase().trim();
+    
+    // For mock purposes, we'll return some common providers
+    if (_users.containsKey(normalizedEmail)) {
+      // User exists, return providers based on email domain
+      if (normalizedEmail.contains('gmail')) {
+        return ['password', 'google.com'];
+      } else if (normalizedEmail.contains('icloud') || normalizedEmail.contains('apple')) {
+        return ['password', 'apple.com'];
+      } else if (normalizedEmail.contains('facebook')) {
+        return ['password', 'facebook.com'];
+      } else {
+        return ['password'];
+      }
+    }
+    
+    // User doesn't exist, return empty list
+    return [];
+  }
+
+  @override
+  Future<void> linkEmailPassword(String email, String password) async {
+    // Simulate network delay
+    if (simulateNetworkDelay) {
+      await Future.delayed(networkDelay);
+    }
+
+    if (_currentUser.isEmpty) {
+      throw AuthException('No authenticated user found');
+    }
+    
+    final normalizedEmail = email.toLowerCase().trim();
+    
+    // Check if email is already in use by another account
+    if (_users.containsKey(normalizedEmail) && 
+        _users[normalizedEmail]!.user.id != _currentUser.id) {
+      throw AuthException('Email already in use by another account');
+    }
+    
+    // Find the current user in the map
+    final userEntry = _users.entries.firstWhere(
+      (entry) => entry.value.user.id == _currentUser.id,
+      orElse: () => MapEntry('', _MockUserCredential(_currentUser, '')),
+    );
+    
+    if (userEntry.key.isNotEmpty) {
+      // Remove the old entry
+      _users.remove(userEntry.key);
+      
+      // Create updated user
+      final updatedUser = _currentUser.copyWith(email: normalizedEmail);
+      
+      // Add with new email and password
+      _users[normalizedEmail] = _MockUserCredential(updatedUser, password);
+      
+      // Update current user
+      _currentUser = updatedUser;
+      _authStateController.add(_currentUser);
+      
+      debugPrint('Linked email/password to account: $normalizedEmail');
+    } else {
+      // This is a new user, just add them directly
+      _users[normalizedEmail] = _MockUserCredential(_currentUser, password);
+      debugPrint('Added email/password to new account: $normalizedEmail');
+    }
+  }
+
   /// Dispose resources
   void dispose() {
     _authStateController.close();

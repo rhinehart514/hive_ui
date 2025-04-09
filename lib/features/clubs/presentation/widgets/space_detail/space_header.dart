@@ -33,13 +33,14 @@ class SpaceHeader extends StatelessWidget {
     this.extraInfo,
   }) : super(key: key);
   
-  // Calculate header parameters based on scroll position
-  double get _headerHeight => 250.0;
-  double get _minHeight => 85.0;
+  // Calculate header parameters based on scroll position - optimized for smooth animation
+  // Reduced header height for mobile
+  double get _headerHeight => 220.0; // Reduced from 250 for better mobile optimization
+  double get _minHeight => 70.0; // Reduced from 85 for better mobile fit
   double get _currentHeight => (_headerHeight - scrollOffset.clamp(0.0, _headerHeight - _minHeight)).clamp(_minHeight, _headerHeight);
   double get _expandRatio => ((_currentHeight - _minHeight) / (_headerHeight - _minHeight)).clamp(0.0, 1.0);
-  double get _imageParallaxOffset => scrollOffset.clamp(0.0, _headerHeight * 0.4); // Clamped parallax effect
-  double get _blurAmount => (15.0 * (1 - _expandRatio)).clamp(0.0, 15.0); // Clamped blur amount
+  double get _imageParallaxOffset => scrollOffset.clamp(0.0, _headerHeight * 0.3); // Reduced parallax effect for better performance
+  double get _blurAmount => (12.0 * (1 - _expandRatio)).clamp(0.0, 12.0); // Reduced blur amount for better performance
   
   @override
   Widget build(BuildContext context) {
@@ -49,7 +50,8 @@ class SpaceHeader extends StatelessWidget {
     
     // Get screen metrics safely
     final mediaQuery = MediaQuery.of(context);
-    final maxTextHeight = mediaQuery.size.height * 0.1;
+    final screenWidth = mediaQuery.size.width;
+    final isSmallScreen = screenWidth < 360;
     
     return RepaintBoundary(
       child: SizedBox(
@@ -70,7 +72,8 @@ class SpaceHeader extends StatelessWidget {
                     fit: BoxFit.cover,
                     placeholder: (context, url) => _buildPlaceholderBackground(),
                     errorWidget: (context, url, error) => _buildPlaceholderBackground(),
-                    memCacheHeight: (mediaQuery.size.height * mediaQuery.devicePixelRatio).round(),
+                    // Optimize cache size based on screen size
+                    memCacheHeight: (mediaQuery.size.height * 0.5 * mediaQuery.devicePixelRatio).round(),
                     memCacheWidth: (mediaQuery.size.width * mediaQuery.devicePixelRatio).round(),
                   )
                 : _buildPlaceholderBackground(),
@@ -85,34 +88,39 @@ class SpaceHeader extends StatelessWidget {
                     end: Alignment.bottomCenter,
                     colors: [
                       Colors.black.withOpacity(0.1),
-                      Colors.black.withOpacity(0.5),
+                      Colors.black.withOpacity(0.6), // Increased opacity for better text visibility
                     ],
                   ),
                 ),
               ),
             ),
             
-            // Optimized blur effect
-            if (_blurAmount > 0.1)
+            // Optimized blur effect - only apply when needed and avoid on low-end devices
+            if (_blurAmount > 0.5) // Increased threshold to reduce unnecessary blurs
               Positioned.fill(
                 child: ClipRect(
                   child: BackdropFilter(
                     filter: ImageFilter.blur(
-                      sigmaX: _blurAmount * 0.5,
-                      sigmaY: _blurAmount * 0.5,
+                      sigmaX: _blurAmount * 0.4, // Reduced blur intensity
+                      sigmaY: _blurAmount * 0.4, // Reduced blur intensity
                     ),
                     child: const ColoredBox(color: Colors.transparent),
                   ),
                 ),
               ),
             
-            // Content with safe layout constraints
+            // Content with safe layout constraints and better padding for small screens
             Positioned.fill(
               child: AnimatedOpacity(
                 opacity: _expandRatio,
-                duration: const Duration(milliseconds: 150),
+                duration: const Duration(milliseconds: 100), // Reduced animation duration
                 child: Padding(
-                  padding: EdgeInsets.fromLTRB(20, mediaQuery.padding.top + 20, 20, 20),
+                  padding: EdgeInsets.fromLTRB(
+                    isSmallScreen ? 16 : 20, 
+                    mediaQuery.padding.top + (isSmallScreen ? 16 : 20), 
+                    isSmallScreen ? 16 : 20, 
+                    isSmallScreen ? 16 : 20
+                  ),
                   child: LayoutBuilder(
                     builder: (context, constraints) {
                       return Column(
@@ -127,7 +135,7 @@ class SpaceHeader extends StatelessWidget {
                             child: Text(
                               spaceName,
                               style: GoogleFonts.outfit(
-                                fontSize: 28,
+                                fontSize: isSmallScreen ? 24 : 28, // Adaptive font size
                                 fontWeight: FontWeight.bold,
                                 color: Colors.white,
                                 letterSpacing: -0.5,
@@ -138,8 +146,8 @@ class SpaceHeader extends StatelessWidget {
                           ),
                           const SizedBox(height: 4), // Reduced spacing
                           Container(
-                            height: 44, // Reduced fixed height
-                            margin: const EdgeInsets.only(bottom: 8),
+                            height: 40, // Reduced fixed height
+                            margin: const EdgeInsets.only(bottom: 4), // Reduced margin
                             child: Row(
                               mainAxisAlignment: MainAxisAlignment.start,
                               children: [
@@ -148,23 +156,26 @@ class SpaceHeader extends StatelessWidget {
                                     Icons.people_outline,
                                     memberCount.toString(),
                                     'Members',
+                                    isSmallScreen,
                                   ),
                                 ),
-                                const SizedBox(width: 24), // Reduced spacing
+                                SizedBox(width: isSmallScreen ? 16 : 24), // Adaptive spacing
                                 Expanded(
                                   child: _buildStatColumn(
                                     Icons.event_outlined,
                                     eventCount.toString(),
                                     'Events',
+                                    isSmallScreen,
                                   ),
                                 ),
                                 if (chatUnlocked) ...[
-                                  const SizedBox(width: 24), // Reduced spacing
+                                  SizedBox(width: isSmallScreen ? 16 : 24), // Adaptive spacing
                                   Expanded(
                                     child: _buildStatColumn(
                                       Icons.chat_bubble_outline,
                                       'Open',
                                       'Chat',
+                                      isSmallScreen,
                                     ),
                                   ),
                                 ],
@@ -179,22 +190,27 @@ class SpaceHeader extends StatelessWidget {
               ),
             ),
             
-            // Collapsed header with safe layout
+            // Collapsed header with safe layout - optimized for small screens
             Positioned(
               top: 0,
               left: 0,
               right: 0,
               child: AnimatedOpacity(
                 opacity: (1 - _expandRatio).clamp(0.0, 1.0),
-                duration: const Duration(milliseconds: 150),
+                duration: const Duration(milliseconds: 100), // Reduced animation duration
                 child: Container(
                   height: _minHeight,
-                  padding: EdgeInsets.fromLTRB(56, mediaQuery.padding.top, 16, 0),
+                  padding: EdgeInsets.fromLTRB(
+                    isSmallScreen ? 48 : 56, 
+                    mediaQuery.padding.top, 
+                    isSmallScreen ? 12 : 16, 
+                    0
+                  ),
                   child: Text(
                     spaceName,
                     style: GoogleFonts.inter(
                       color: AppColors.white,
-                      fontSize: 20,
+                      fontSize: isSmallScreen ? 18 : 20, // Adaptive font size
                       fontWeight: FontWeight.w600,
                       letterSpacing: -0.25,
                     ),
@@ -205,10 +221,10 @@ class SpaceHeader extends StatelessWidget {
               ),
             ),
             
-            // Join button with safe positioning
+            // Join button with safe positioning and better touch target
             Positioned(
-              right: 16,
-              top: mediaQuery.padding.top,
+              right: isSmallScreen ? 12 : 16,
+              top: mediaQuery.padding.top + (isSmallScreen ? 6 : 8),
               child: !isFollowing
                 ? TextButton(
                     onPressed: () {
@@ -223,37 +239,37 @@ class SpaceHeader extends StatelessWidget {
                           GlassmorphismGuide.kRadiusMd,
                         ),
                       ),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 24,
-                        vertical: 10,
+                      padding: EdgeInsets.symmetric(
+                        horizontal: isSmallScreen ? 20 : 24,
+                        vertical: isSmallScreen ? 8 : 10,
                       ),
-                      minimumSize: const Size(88, 36),
+                      minimumSize: Size(isSmallScreen ? 80 : 88, isSmallScreen ? 32 : 36),
                     ),
                     child: Text(
                       'Join',
                       style: GoogleFonts.inter(
                         fontWeight: FontWeight.w600,
-                        fontSize: 16,
+                        fontSize: isSmallScreen ? 14 : 16, // Adaptive font size
                       ),
                     ),
                   )
                 : const SizedBox.shrink(),
             ),
             
-            // Back button with safe positioning
+            // Back button with safe positioning and better touch target
             Positioned(
-              left: 8,
-              top: mediaQuery.padding.top,
+              left: isSmallScreen ? 4 : 8,
+              top: mediaQuery.padding.top + (isSmallScreen ? 2 : 0),
               child: IconButton(
                 icon: const Icon(Icons.arrow_back, color: AppColors.white),
                 onPressed: () {
                   HapticFeedback.lightImpact();
                   Navigator.of(context).pop();
                 },
-                splashRadius: 24,
-                constraints: const BoxConstraints(
-                  minWidth: 48,
-                  minHeight: 48,
+                splashRadius: isSmallScreen ? 20 : 24,
+                constraints: BoxConstraints(
+                  minWidth: isSmallScreen ? 40 : 48,
+                  minHeight: isSmallScreen ? 40 : 48,
                 ),
               ),
             ),
@@ -263,8 +279,8 @@ class SpaceHeader extends StatelessWidget {
     );
   }
   
-  // Build a stat column with icon, value and label - optimized for reuse
-  Widget _buildStatColumn(IconData icon, String value, String label) {
+  // Build a stat column with icon, value and label - optimized for mobile and reuse
+  Widget _buildStatColumn(IconData icon, String value, String label, bool isSmallScreen) {
     return Column(
       mainAxisSize: MainAxisSize.min,
       mainAxisAlignment: MainAxisAlignment.center,
@@ -272,13 +288,13 @@ class SpaceHeader extends StatelessWidget {
         Icon(
           icon,
           color: AppColors.white,
-          size: 18, // Slightly reduced size
+          size: isSmallScreen ? 16 : 18, // Adaptive icon size
         ),
         const SizedBox(height: 2), // Reduced spacing
         Text(
           value,
           style: GoogleFonts.outfit(
-            fontSize: 14, // Slightly reduced font size
+            fontSize: isSmallScreen ? 12 : 14, // Adaptive font size
             fontWeight: FontWeight.w600,
             color: AppColors.white,
           ),
@@ -288,7 +304,7 @@ class SpaceHeader extends StatelessWidget {
         Text(
           label,
           style: GoogleFonts.inter(
-            fontSize: 11, // Slightly reduced font size
+            fontSize: isSmallScreen ? 10 : 11, // Adaptive font size
             color: AppColors.white.withOpacity(0.7),
           ),
           maxLines: 1,

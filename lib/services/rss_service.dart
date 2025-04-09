@@ -679,7 +679,7 @@ class RssService {
   static Future<void> _saveEventsToCache(List<Event> events) async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final eventsList = events.map((event) => event.toJson()).toList();
+      final eventsList = events.map((event) => event.toMap()).toList();
       await prefs.setString(_eventsCacheKey, jsonEncode(eventsList));
       await prefs.setInt(
           _eventsTimestampKey, DateTime.now().millisecondsSinceEpoch);
@@ -1163,6 +1163,7 @@ class RssService {
             link: _getElementText(item, 'link') ?? '',
             originalTitle: title,
             imageUrl: imageUrl,
+            source: EventSource.external,
           );
 
           events.add(event);
@@ -1453,7 +1454,7 @@ class RssService {
       final firestore = FirebaseFirestore.instance;
 
       // Add last_modified field when updating
-      final eventData = event.toJson();
+      final eventData = event.toMap();
       eventData['last_modified'] = FieldValue.serverTimestamp();
 
       await firestore

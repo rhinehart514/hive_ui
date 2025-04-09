@@ -66,15 +66,15 @@ class _GenerateTestMessagingDataScreenState
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
+        const Row(
           children: [
             Icon(
               Icons.settings,
               color: AppColors.gold,
               size: 24,
             ),
-            const SizedBox(width: 8),
-            const Text(
+            SizedBox(width: 8),
+            Text(
               'Advanced Messaging Test Options',
               style: TextStyle(
                 color: Colors.white,

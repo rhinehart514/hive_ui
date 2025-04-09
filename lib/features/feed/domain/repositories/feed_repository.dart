@@ -62,4 +62,7 @@ abstract class FeedRepository {
     List<String>? friendIds,
     List<String>? boostedEventIds,
   });
+
+  /// Get a stream of combined feed items (events, reposts, recommendations, etc.)
+  Stream<List<Map<String, dynamic>>> getFeedStream();
 }

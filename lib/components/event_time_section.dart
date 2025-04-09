@@ -164,8 +164,8 @@ class _EventTimeSectionState extends State<EventTimeSection> {
       context,
       MaterialPageRoute(
         builder: (context) => EventDetailsPage(
+          eventId: event.id,
           event: event,
-          heroTag: 'event-card-${event.id}',
         ),
       ),
     );

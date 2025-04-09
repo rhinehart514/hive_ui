@@ -60,7 +60,7 @@ class SharedPreferencesOnboardingDataSource
         firstName: userProfile.displayName.split(' ').first,
         lastName: userProfile.displayName.split(' ').skip(1).join(' '),
         year: userProfile.year,
-        field: userProfile.major,
+        major: userProfile.major,
         residence: userProfile.residence,
         accountTier: userProfile.accountTier,
         interests: userProfile.interests ?? [],

@@ -7,7 +7,12 @@ class LeaveSpaceUseCase {
   LeaveSpaceUseCase(this.repository);
 
   /// Execute the use case to leave a space
-  Future<void> execute(String spaceId) {
-    return repository.leaveSpace(spaceId);
+  /// 
+  /// [spaceId] The ID of the space to leave
+  /// [userId] Optional user ID to leave on behalf of. If not provided, uses the current user.
+  /// 
+  /// Returns true if successful, false otherwise.
+  Future<bool> execute(String spaceId, {String? userId}) {
+    return repository.leaveSpace(spaceId, userId: userId);
   }
 }

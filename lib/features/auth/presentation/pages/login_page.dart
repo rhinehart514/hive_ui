@@ -9,6 +9,7 @@ import 'package:hive_ui/features/auth/presentation/components/auth/login_form.da
 import 'package:hive_ui/features/auth/presentation/components/auth/password_reset_sheet.dart';
 import 'package:hive_ui/features/auth/presentation/components/auth/social_auth_button.dart';
 import 'package:hive_ui/theme/app_colors.dart';
+import 'package:hive_ui/services/user_preferences_service.dart';
 
 /// Login page for the application
 /// Refactored to use modular components for better maintainability
@@ -51,15 +52,25 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     // Brief delay to allow the success message to be seen
     Future.delayed(const Duration(milliseconds: 500), () {
       if (mounted) {
-        // Add navigation feedback based on destination
+        // Check if there's a stored redirect path from social auth
+        final redirectPath = UserPreferencesService.getSocialAuthRedirectPath();
+        
+        // Apply navigation feedback based on destination
         NavigationTransitions.applyNavigationFeedback(
           type: needsOnboarding
               ? NavigationFeedbackType.modalOpen
               : NavigationFeedbackType.pageTransition,
         );
 
-        // Navigate based on user onboarding status
-        context.go(needsOnboarding ? '/onboarding' : '/home');
+        // Clear the stored redirect path after using it
+        if (redirectPath.isNotEmpty) {
+          UserPreferencesService.clearSocialAuthRedirectPath();
+          // Navigate to the stored redirect path
+          context.go(redirectPath);
+        } else {
+          // Navigate based on user onboarding status (default behavior)
+          context.go(needsOnboarding ? '/onboarding' : '/home');
+        }
       }
     });
   }
@@ -117,6 +128,9 @@ class _LoginPageState extends ConsumerState<LoginPage> {
 
   @override
   Widget build(BuildContext context) {
+    // Get the returnTo parameter from the route if it exists
+    final String? returnToPath = GoRouterState.of(context).uri.queryParameters['return_to'];
+    
     return Scaffold(
       backgroundColor: AppColors.black,
       appBar: AppBarBuilder.buildAuthAppBar(
@@ -230,6 +244,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
               // Google Sign In Button
               SocialAuthButton(
                 provider: SocialAuthProvider.google,
+                returnToPath: returnToPath,
                 onAuthResult: (success, message, needsOnboarding) {
                   if (success) {
                     _handleAuthResult(success, message, needsOnboarding);

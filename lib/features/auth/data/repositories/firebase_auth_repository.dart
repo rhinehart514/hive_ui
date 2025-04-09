@@ -1,20 +1,31 @@
+import 'dart:convert';
+import 'package:crypto/crypto.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart'
     show debugPrint, kIsWeb, TargetPlatform, defaultTargetPlatform;
 import 'package:hive_ui/features/auth/domain/entities/auth_user.dart';
 import 'package:hive_ui/features/auth/domain/repositories/auth_repository.dart';
 import 'package:google_sign_in/google_sign_in.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:hive_ui/services/user_preferences_service.dart';
 import 'package:hive_ui/models/user_profile.dart';
 import 'package:hive_ui/services/optimized_club_adapter.dart';
+import 'package:sign_in_with_apple/sign_in_with_apple.dart';
+import 'package:flutter_facebook_auth/flutter_facebook_auth.dart';
+import 'package:encrypt/encrypt.dart' as encrypt;
+import 'package:firebase_core/firebase_core.dart';
+import 'package:hive_ui/firebase_options.dart';
+import 'package:hive_ui/firebase_init_tracker.dart';
+import 'package:hive_ui/features/auth/data/repositories/social_auth_helpers.dart';
 
 /// Firebase implementation of the AuthRepository
 class FirebaseAuthRepository implements AuthRepository {
-  // Firebase instances - using late for better initialization control
-  late final FirebaseAuth _firebaseAuth;
-  late final GoogleSignIn? _googleSignIn;
-  late final FirebaseFirestore _firestore;
+  // Firebase instances - make _firebaseAuth final as it's required
+  final FirebaseAuth _firebaseAuth;
+  final GoogleSignIn? _googleSignIn;
+  // Make _firestore final as it's now required
+  final FirebaseFirestore _firestore;
+  final FacebookAuth? _facebookAuth;
 
   // Cache for reducing unnecessary database reads/writes
   AuthUser? _cachedUser;
@@ -24,27 +35,39 @@ class FirebaseAuthRepository implements AuthRepository {
   static const Duration _userCacheDuration = Duration(minutes: 5);
   static const String _usersCollection = 'users';
 
-  /// Creates a new FirebaseAuthRepository with optional dependencies for testing
-  FirebaseAuthRepository({
-    FirebaseAuth? firebaseAuth,
-    GoogleSignIn? googleSignIn,
-    FirebaseFirestore? firestore,
-  }) {
-    // Initialize Firebase Auth
-    _firebaseAuth = firebaseAuth ?? FirebaseAuth.instance;
+  // Encryption related variables
+  late final String _keyName;
+  late final String _ivName;
+  late final encrypt.Encrypter _encrypter;
+  late final encrypt.IV _iv;
 
-    // Initialize Google Sign In only on supported platforms
+  /// Creates a new FirebaseAuthRepository.
+  /// Requires FirebaseAuth and FirebaseFirestore instances.
+  FirebaseAuthRepository({
+    required FirebaseAuth firebaseAuth,
+    // Make firestore required
+    required FirebaseFirestore firestore,
+    GoogleSignIn? googleSignIn,
+    FacebookAuth? facebookAuth,
+  }) : 
+    _firebaseAuth = firebaseAuth, 
+    // Initialize required _firestore directly
+    _firestore = firestore,
+    // Keep other initializations (remove fallback for _firestore)
     _googleSignIn = googleSignIn ??
         (kIsWeb ||
                 defaultTargetPlatform == TargetPlatform.android ||
                 defaultTargetPlatform == TargetPlatform.iOS
             ? GoogleSignIn()
-            : null);
-
-    // Initialize Firestore
-    _firestore = firestore ?? FirebaseFirestore.instance;
-
-    // Set up auth state listener to invalidate cache
+            : null),
+    _facebookAuth = facebookAuth ??
+        (kIsWeb ||
+                defaultTargetPlatform == TargetPlatform.android ||
+                defaultTargetPlatform == TargetPlatform.iOS
+            ? FacebookAuth.instance
+            : null)
+  {
+    // Set up auth state listener using the provided _firebaseAuth
     _setupAuthStateListener();
   }
 
@@ -78,6 +101,8 @@ class FirebaseAuthRepository implements AuthRepository {
       // Use metadata for timestamps, or fallback to current time
       createdAt: creationTime ?? DateTime.now(),
       lastSignInTime: lastSignInTime ?? DateTime.now(),
+      // Add provider information
+      providers: user.providerData.map((userInfo) => userInfo.providerId).toList(),
     );
   }
 
@@ -108,6 +133,9 @@ class FirebaseAuthRepository implements AuthRepository {
       String email, String password) async {
     try {
       debugPrint('Starting email/password sign in');
+      
+      // Ensure Firebase is initialized
+      _ensureFirebaseInitialized();
 
       // Windows-specific error handling for PigeonUserDetails issue
       try {
@@ -164,6 +192,9 @@ class FirebaseAuthRepository implements AuthRepository {
   Future<AuthUser> createUserWithEmailPassword(
       String email, String password) async {
     try {
+      // Ensure Firebase is initialized
+      _ensureFirebaseInitialized();
+
       // Input validation
       if (email.isEmpty || !email.contains('@')) {
         throw 'Please enter a valid email address';
@@ -241,17 +272,18 @@ class FirebaseAuthRepository implements AuthRepository {
   Future<AuthUser> signInWithGoogle() async {
     try {
       if (_googleSignIn == null) {
-        throw 'Google Sign-In is not supported on this platform';
+        throw 'Google sign-in is not available on this platform';
       }
 
-      // Start Google sign-in flow
-      final googleUser = await _googleSignIn!.signIn();
+      // Sign in with Google and get authentication details
+      final googleUser = await _googleSignIn.signIn();
       if (googleUser == null) {
         throw 'Google sign-in was cancelled';
       }
 
-      // Get auth details from request
       final googleAuth = await googleUser.authentication;
+
+      // Create a credential for Firebase using Google tokens
       final credential = GoogleAuthProvider.credential(
         accessToken: googleAuth.accessToken,
         idToken: googleAuth.idToken,
@@ -265,6 +297,24 @@ class FirebaseAuthRepository implements AuthRepository {
         throw 'Failed to complete Google sign-in';
       }
 
+      // Get additional user information from Google
+      final Map<String, dynamic> socialData = {
+        'displayName': googleUser.displayName,
+        'email': googleUser.email,
+        'photoUrl': googleUser.photoUrl,
+        'provider': 'google.com',
+        // Add any other fields specific to Google that you want to use
+      };
+
+      // Merge the social profile data with the user's profile
+      await SocialAuthHelper.mergeSocialProfileData(
+        user: user,
+        socialData: socialData,
+        firestore: _firestore,
+        createUserProfile: _createUserProfile,
+        saveUserProfileLocally: _saveUserProfileLocally,
+      );
+      
       // Update last login time without blocking
       _updateUserLoginTime(user.uid);
       
@@ -283,6 +333,160 @@ class FirebaseAuthRepository implements AuthRepository {
         throw 'Google sign-in was cancelled';
       }
       throw 'Could not complete Google sign-in. Please try again.';
+    }
+  }
+  
+  @override
+  Future<AuthUser> signInWithApple() async {
+    try {
+      // Check platform support
+      if (!(kIsWeb || defaultTargetPlatform == TargetPlatform.iOS || 
+           (defaultTargetPlatform == TargetPlatform.android && 
+            await SignInWithApple.isAvailable()))) {
+        throw 'Apple Sign-In is not supported on this platform';
+      }
+      
+      // Generate nonce for Apple Sign In
+      final rawNonce = _generateNonce();
+      final nonce = _sha256ofString(rawNonce);
+      
+      // Request Apple credential
+      final appleCredential = await SignInWithApple.getAppleIDCredential(
+        scopes: [
+          AppleIDAuthorizationScopes.email,
+          AppleIDAuthorizationScopes.fullName,
+        ],
+        nonce: nonce,
+      );
+      
+      // Create OAuthCredential
+      final oauthCredential = OAuthProvider('apple.com').credential(
+        idToken: appleCredential.identityToken,
+        rawNonce: rawNonce,
+      );
+      
+      // Sign in with Firebase
+      final userCredential = await _firebaseAuth.signInWithCredential(oauthCredential);
+      final user = userCredential.user;
+      
+      if (user == null) {
+        throw 'Failed to complete Apple sign-in';
+      }
+      
+      // Prepare social data from Apple
+      String fullName = '';
+      if (appleCredential.givenName != null) fullName += appleCredential.givenName!;
+      if (appleCredential.familyName != null) {
+        if (fullName.isNotEmpty) fullName += ' ';
+        fullName += appleCredential.familyName!;
+      }
+      
+      final Map<String, dynamic> socialData = {
+        'displayName': fullName.isNotEmpty ? fullName : user.displayName,
+        'email': appleCredential.email ?? user.email,
+        'photoUrl': user.photoURL,
+        'provider': 'apple.com',
+        'firstName': appleCredential.givenName,
+        'lastName': appleCredential.familyName,
+      };
+      
+      // Merge social profile data
+      await SocialAuthHelper.mergeSocialProfileData(
+        user: user,
+        socialData: socialData,
+        firestore: _firestore,
+        createUserProfile: _createUserProfile,
+        saveUserProfileLocally: _saveUserProfileLocally,
+      );
+      
+      // Update last login time
+      _updateUserLoginTime(user.uid);
+      
+      // Return the mapped user
+      final authUser = _mapFirebaseUserToAuthUser(user);
+      _cachedUser = authUser;
+      _lastUserCheck = DateTime.now();
+      
+      return authUser;
+    } catch (e) {
+      debugPrint('Error during Apple sign-in: $e');
+      
+      // Handle specific known exceptions
+      if (e.toString().contains('canceled')) {
+        throw 'Apple sign-in was cancelled';
+      }
+      
+      // For all other exceptions
+      throw 'Could not complete Apple sign-in. Please try again.';
+    }
+  }
+  
+  @override
+  Future<AuthUser> signInWithFacebook() async {
+    try {
+      if (_facebookAuth == null) {
+        throw 'Facebook Sign-In is not supported on this platform';
+      }
+      
+      // Login with Facebook
+      final loginResult = await _facebookAuth.login();
+      
+      if (loginResult.status != LoginStatus.success) {
+        throw 'Facebook sign-in was cancelled or failed';
+      }
+      
+      // Get access token
+      final accessToken = loginResult.accessToken;
+      if (accessToken == null || accessToken.token.isEmpty) {
+        throw 'Failed to get Facebook access token';
+      }
+      
+      // Create credential
+      final credential = FacebookAuthProvider.credential(accessToken.token);
+      
+      // Sign in with Firebase
+      final userCredential = await _firebaseAuth.signInWithCredential(credential);
+      final user = userCredential.user;
+      
+      if (user == null) {
+        throw 'Failed to complete Facebook sign-in';
+      }
+      
+      // Get additional user profile data
+      final userData = await _facebookAuth.getUserData();
+      
+      final Map<String, dynamic> socialData = {
+        'displayName': userData['name'],
+        'email': userData['email'] ?? user.email,
+        'photoUrl': userData['picture']?['data']?['url'] ?? user.photoURL,
+        'provider': 'facebook.com',
+        // Add any other Facebook-specific fields you want
+      };
+      
+      // Merge social profile data
+      await SocialAuthHelper.mergeSocialProfileData(
+        user: user,
+        socialData: socialData,
+        firestore: _firestore,
+        createUserProfile: _createUserProfile,
+        saveUserProfileLocally: _saveUserProfileLocally,
+      );
+      
+      // Update last login time
+      _updateUserLoginTime(user.uid);
+      
+      // Return the mapped user
+      final authUser = _mapFirebaseUserToAuthUser(user);
+      _cachedUser = authUser;
+      _lastUserCheck = DateTime.now();
+      
+      return authUser;
+    } catch (e) {
+      debugPrint('Error during Facebook sign-in: $e');
+      if (e.toString().contains('cancelled')) {
+        throw 'Facebook sign-in was cancelled';
+      }
+      throw 'Could not complete Facebook sign-in. Please try again.';
     }
   }
 
@@ -313,6 +517,7 @@ class FirebaseAuthRepository implements AuthRepository {
       await Future.wait([
         _firebaseAuth.signOut(),
         if (_googleSignIn != null) _googleSignIn.signOut(),
+        if (_facebookAuth != null) _facebookAuth.logOut(),
       ]);
     } catch (e) {
       debugPrint('Error during sign out: $e');
@@ -370,7 +575,9 @@ class FirebaseAuthRepository implements AuthRepository {
             'bio': '',
             // Ensure all fields from UserProfile model are included with proper types
             'clubAffiliation': '',
-            'clubRole': ''
+            'clubRole': '',
+            // Add provider information
+            'providers': user.providerData.map((info) => info.providerId).toList(),
           };
 
           // Set the document with merge option
@@ -387,7 +594,7 @@ class FirebaseAuthRepository implements AuthRepository {
             await Future.delayed(retryDelay);
           } else {
             debugPrint('Final attempt failed. Error creating profile: $e');
-            throw e;
+            rethrow;
           }
         }
       }
@@ -407,6 +614,10 @@ class FirebaseAuthRepository implements AuthRepository {
       // Don't await this operation - it's not critical for auth flow
       _firestore.collection(_usersCollection).doc(userId).update({
         'lastLogin': FieldValue.serverTimestamp(),
+        // Also update providers list if needed
+        'providers': FieldValue.arrayUnion(
+          _firebaseAuth.currentUser?.providerData.map((info) => info.providerId).toList() ?? []
+        ),
       }).catchError((e) {
         debugPrint('Non-critical error updating login time: $e');
       });
@@ -432,7 +643,7 @@ class FirebaseAuthRepository implements AuthRepository {
         major: 'Undecided',
         residence: 'Off Campus',
         eventCount: 0,
-        clubCount: 0,
+        spaceCount: 0,
         friendCount: 0,
         createdAt: DateTime.now(),
         updatedAt: DateTime.now(),
@@ -462,6 +673,21 @@ class FirebaseAuthRepository implements AuthRepository {
     return AccountTier.public;
   }
 
+  /// Generate a random string for OAuth nonce
+  String _generateNonce([int length = 32]) {
+    const charset = '0123456789ABCDEFGHIJKLMNOPQRSTUVXYZabcdefghijklmnopqrstuvwxyz-._';
+    final random = DateTime.now().millisecondsSinceEpoch.toString();
+    return List.generate(length, (i) => charset[int.parse(random[i % random.length]) % charset.length])
+        .join();
+  }
+
+  /// Returns the SHA-256 hash of the input string as a hex string
+  String _sha256ofString(String input) {
+    final bytes = utf8.encode(input);
+    final digest = sha256.convert(bytes);
+    return digest.toString();
+  }
+
   /// Map Firebase Auth exceptions to user-friendly messages
   String _mapFirebaseAuthExceptionToMessage(FirebaseAuthException e) {
     switch (e.code) {
@@ -487,6 +713,8 @@ class FirebaseAuthRepository implements AuthRepository {
         return 'Network error. Please check your connection';
       case 'popup-closed-by-user':
         return 'Sign-in was cancelled';
+      case 'account-exists-with-different-credential':
+        return 'An account already exists with a different sign-in method';
       default:
         return e.message ?? 'Authentication failed';
     }
@@ -496,10 +724,9 @@ class FirebaseAuthRepository implements AuthRepository {
   Future<void> sendPasswordResetEmail(String email) async {
     try {
       await _firebaseAuth.sendPasswordResetEmail(email: email);
-    } on FirebaseAuthException catch (e) {
-      throw _mapFirebaseAuthExceptionToMessage(e);
     } catch (e) {
-      throw 'Failed to send password reset email. Please try again.';
+      debugPrint('Error in password reset: $e');
+      rethrow;
     }
   }
 
@@ -582,6 +809,84 @@ class FirebaseAuthRepository implements AuthRepository {
     } catch (e) {
       debugPrint('Error updating email verification status: $e');
       throw 'Failed to update verification status: ${e.toString()}';
+    }
+  }
+  
+  @override
+  Future<List<String>> getAvailableSignInMethods(String email) async {
+    try {
+      return await _firebaseAuth.fetchSignInMethodsForEmail(email);
+    } on FirebaseAuthException catch (e) {
+      debugPrint('Firebase error getting sign in methods: ${e.code} - ${e.message}');
+      throw _mapFirebaseAuthExceptionToMessage(e);
+    } catch (e) {
+      debugPrint('Error getting sign in methods: $e');
+      throw 'Failed to get available sign-in methods';
+    }
+  }
+  
+  @override
+  Future<void> linkEmailPassword(String email, String password) async {
+    try {
+      final user = _firebaseAuth.currentUser;
+      if (user == null) {
+        throw 'No user logged in';
+      }
+      
+      // Create email credential
+      final credential = EmailAuthProvider.credential(
+        email: email,
+        password: password,
+      );
+      
+      // Link credential to account
+      await user.linkWithCredential(credential);
+      
+      // Update profile
+      await _firestore.collection(_usersCollection).doc(user.uid).update({
+        'email': email,
+        'providers': FieldValue.arrayUnion(['password']),
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+      
+      // Refresh cached user
+      _cachedUser = _mapFirebaseUserToAuthUser(user);
+      _lastUserCheck = DateTime.now();
+    } on FirebaseAuthException catch (e) {
+      debugPrint('Firebase error linking email/password: ${e.code} - ${e.message}');
+      throw _mapFirebaseAuthExceptionToMessage(e);
+    } catch (e) {
+      debugPrint('Error linking email/password: $e');
+      throw 'Failed to link email and password to your account';
+    }
+  }
+
+  void _ensureFirebaseInitialized() {
+    try {
+      // First check if we already know Firebase is initialized via our global tracker
+      if (FirebaseInitTracker.isInitialized) {
+        return; // Firebase is already initialized via our proper initialization path
+      }
+      
+      // Check if Firebase is already initialized
+      if (Firebase.apps.isEmpty) {
+        debugPrint('WARNING: Firebase not initialized before auth operation. Initializing now...');
+        // We shouldn't reach this point normally, but as a safety measure, initialize Firebase
+        Firebase.initializeApp(
+          options: DefaultFirebaseOptions.currentPlatform,
+        );
+        
+        // Update tracker
+        FirebaseInitTracker.isInitialized = true;
+        FirebaseInitTracker.needsInitialization = false;
+      } else {
+        // Firebase is initialized but tracker wasn't updated
+        FirebaseInitTracker.isInitialized = true;
+        FirebaseInitTracker.needsInitialization = false;
+      }
+    } catch (e) {
+      debugPrint('Error checking Firebase initialization status: $e');
+      throw 'Firebase initialization error. Please restart the app and try again.';
     }
   }
 }

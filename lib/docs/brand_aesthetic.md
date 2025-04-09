@@ -569,3 +569,109 @@ When implementing features according to this aesthetic:
    - Implement clear visual press states for all interactive elements.
    - Use haptic feedback consistently according to guidelines.
    - Ensure micro-interactions are subtle and purposeful.
+
+## Special Components
+
+### Signal Strip
+
+The Signal Strip is a horizontally-scrollable component that appears at the top of the feed, providing narrative context and highlighting activity.
+
+#### Usage Guidelines
+
+- **Placement**: Always at the top of the feed, below the app bar
+- **Height**: Fixed 125dp height for consistency
+- **Scroll Physics**: Use `BouncingScrollPhysics()` for iOS-like feel
+- **Card Width**: 280dp for optimal information density
+- **Visual Weight**: Use glassmorphism for a premium, lightweight feel
+- **Color System**: Each content type has its own distinct color
+- **Time Limitation**: Set expiration times for time-sensitive content
+- **Prioritization**: Display highest priority content first
+
+```dart
+// Standard implementation
+SignalStrip(
+  height: 125.0,
+  padding: const EdgeInsets.symmetric(horizontal: 16.0),
+  maxCards: 5,
+  showHeader: true,
+  useGlassEffect: true,
+  glassOpacity: 0.15,
+  onCardTap: (content) {
+    // Handle tap based on content type
+    switch (content.type) {
+      case SignalType.lastNight:
+        // Navigate to event recap
+        break;
+      case SignalType.topEvent:
+        // Navigate to event details
+        break;
+      // Handle other types...
+    }
+  },
+)
+```
+
+#### Signal Content Types
+
+| Type | Purpose | Color | Icon |
+|------|---------|-------|------|
+| `lastNight` | Events from previous night | Purple | `nightlife` |
+| `topEvent` | Top event happening today | Yellow (Accent) | `event` |
+| `trySpace` | Recommended space to try | Blue | `group` |
+| `hiveLab` | HiveLab activity teaser | Green | `science` |
+| `underratedGem` | Surprising events that gained popularity | Amber | `star` |
+| `universityNews` | Official university news | Red | `campaign` |
+| `communityUpdate` | Community milestones and stats | Teal | `emoji_events` |
+
+### HiveLab FAB
+
+The HiveLab FAB is a floating action button that provides access to experimental features, feedback mechanisms, and collaborative opportunities.
+
+#### Usage Guidelines
+
+- **Placement**: Lower right corner, above the navigation bar
+- **Expansion**: Expands upward when tapped, displaying a menu
+- **Color**: Yellow (Accent) in collapsed state, transitions to black when expanded
+- **Visual Weight**: Clear separation from background using Level 2 elevation
+- **Content Priority**: Display actions by priority (highest first)
+- **Verification Status**: Indicate which actions require Verified+ status
+
+```dart
+// Standard implementation
+HiveLabFAB(
+  onActionSelected: (action) {
+    // Handle the selected action
+    switch (action.type) {
+      case HiveLabActionType.ideaSubmission:
+        // Navigate to idea submission page
+        break;
+      case HiveLabActionType.feedback:
+        // Show feedback form
+        break;
+      // Handle other action types...
+    }
+  },
+  initialMode: HiveLabFABMode.collapsed,
+  hidePreferredActions: false,
+  maxActions: 4,
+  elevated: true,
+)
+```
+
+#### Menu Visual Style
+
+- **Background**: Semi-transparent glass effect (10px blur)
+- **Border**: Subtle white border (15% opacity, 0.5 width)
+- **Header**: "HiveLab" label in accent yellow
+- **Width**: Fixed 280dp width for menu panel
+- **Spacing**: 12dp vertical padding between action items
+- **Icons**: Colored icons to distinguish action types
+- **V+ Indicator**: Small gold badge for premium actions
+
+#### Animation Guidelines
+
+- **Open**: 350ms duration, `Curves.easeOutQuint` curve
+- **Close**: 250ms duration, `Curves.easeInQuad` curve 
+- **Haptic**: Selection click on open/close, medium impact on action selection
+- **Transition**: Fade + slide up for menu items
+- **Icon**: Smooth transition from lab to close icon

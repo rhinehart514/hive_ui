@@ -9,6 +9,9 @@ import 'package:hive_ui/features/auth/domain/usecases/abandon_onboarding_usecase
 import 'package:hive_ui/features/auth/domain/services/auth_analytics_service.dart';
 import 'package:hive_ui/services/admin_service.dart';
 import 'package:flutter/foundation.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:hive_ui/firebase_options.dart';
+import 'package:hive_ui/firebase_init_tracker.dart';
 
 /// Controller class for handling authentication operations using the domain use cases
 class AuthController extends StateNotifier<AsyncValue<void>> {
@@ -53,29 +56,14 @@ class AuthController extends StateNotifier<AsyncValue<void>> {
   Future<void> signInWithEmailPassword(String email, String password) async {
     state = const AsyncValue.loading();
     try {
-      await _signInUseCase(SignInParams(email: email, password: password));
-
-      // Track successful login
-      await _analyticsService.trackLogin(
-        method: 'email_password',
-        additionalParams: {
-          'email_domain': email.split('@').last,
-        },
-      );
-
+      // First ensure Firebase is initialized
+      await _ensureFirebaseInitialized();
+      
+      // Then sign in
+      await _authRepository.signInWithEmailPassword(email, password);
       state = const AsyncValue.data(null);
     } catch (e, stack) {
-      // Track auth error
-      final errorCode = e.toString().contains('firebase_auth')
-          ? e.toString().split('/')[1].split(']')[0]
-          : 'unknown_error';
-
-      await _analyticsService.trackAuthError(
-        method: 'email_password',
-        errorCode: errorCode,
-        errorMessage: e.toString(),
-      );
-
+      debugPrint('Error in sign in process: $e');
       state = AsyncValue.error(e, stack);
       rethrow;
     }
@@ -86,60 +74,56 @@ class AuthController extends StateNotifier<AsyncValue<void>> {
       String email, String password) async {
     state = const AsyncValue.loading();
     try {
-      // Track signup attempt
-      await _analyticsService.trackEvent(
-        'signup_attempt',
-        parameters: {
-          'email_domain': email.split('@').last,
-          'platform': defaultTargetPlatform.toString(),
-        },
-      );
-
-      await _signUpUseCase(SignUpParams(email: email, password: password));
-
-      // Track successful signup
-      await _analyticsService.trackSignUp(
-        method: 'email_password',
-        additionalParams: {
-          'email_domain': email.split('@').last,
-          'platform': defaultTargetPlatform.toString(),
-          'status': 'success',
-        },
-      );
-
-      // Send email verification
-      try {
-        await _sendEmailVerificationUseCase();
-      } catch (e) {
-        debugPrint('Failed to send verification email: $e');
-        // Don't rethrow - we still want to complete signup
-      }
-
+      // First ensure Firebase is initialized
+      await _ensureFirebaseInitialized();
+      
+      // Then create the user
+      await _authRepository.createUserWithEmailPassword(email, password);
       state = const AsyncValue.data(null);
     } catch (e, stack) {
-      String errorCode;
-      String errorMessage;
+      debugPrint('Error in account creation process: $e');
+      state = AsyncValue.error(e, stack);
+      rethrow;
+    }
+  }
 
-      if (e.toString().contains('firebase_auth')) {
-        errorCode = e.toString().split('/')[1].split(']')[0];
-        errorMessage = _getReadableErrorMessage(errorCode);
-      } else {
-        errorCode = 'unknown_error';
-        errorMessage = e.toString();
+  /// Ensure Firebase is properly initialized before auth operations
+  Future<void> _ensureFirebaseInitialized() async {
+    try {
+      // Check if Firebase is already properly initialized according to our tracker
+      if (FirebaseInitTracker.isInitialized) {
+        debugPrint('Firebase already initialized according to tracker');
+        return;
       }
-
-      // Track auth error
-      await _analyticsService.trackAuthError(
-        method: 'signup_email_password',
-        errorCode: errorCode,
-        errorMessage: errorMessage,
-        additionalParams: {
-          'platform': defaultTargetPlatform.toString(),
-        },
-      );
-
-      state = AsyncValue.error(errorMessage, stack);
-      throw errorMessage;
+      
+      // If not, check if it's initialized but tracker doesn't know
+      if (Firebase.apps.isNotEmpty) {
+        // Update tracker and continue
+        FirebaseInitTracker.isInitialized = true;
+        FirebaseInitTracker.needsInitialization = false;
+        debugPrint('Firebase was initialized but tracker was not updated - fixed');
+        return;
+      }
+      
+      // If we get here, Firebase is truly not initialized
+      if (defaultTargetPlatform != TargetPlatform.windows) {
+        debugPrint('WARNING: Firebase not initialized in AuthController! Initializing now...');
+        // Initialize Firebase and wait for completion
+        await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+        
+        // Verify initialization succeeded
+        if (Firebase.apps.isEmpty) {
+          throw 'Firebase initialization failed';
+        }
+        
+        // Update tracker
+        FirebaseInitTracker.isInitialized = true;
+        FirebaseInitTracker.needsInitialization = false;
+        debugPrint('Firebase initialized successfully from AuthController');
+      }
+    } catch (e) {
+      debugPrint('Error initializing Firebase in AuthController: $e');
+      throw 'Could not initialize Firebase. Please restart the app and try again.';
     }
   }
 

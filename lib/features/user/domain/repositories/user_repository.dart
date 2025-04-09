@@ -22,4 +22,12 @@ abstract class UserRepository {
   
   /// Unfollow a user
   Future<bool> unfollowUser(String userId);
+
+  /// Update a user's restriction status
+  Future<void> updateUserRestriction(String userId, {
+    required bool isRestricted,
+    String? reason,
+    DateTime? endDate,
+    String? restrictedBy,
+  });
 } 

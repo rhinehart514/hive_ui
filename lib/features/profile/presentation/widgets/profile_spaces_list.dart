@@ -6,7 +6,6 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:hive_ui/models/user_profile.dart';
 import 'package:hive_ui/theme/app_colors.dart';
 import 'package:hive_ui/features/spaces/domain/entities/space_entity.dart' hide SpaceType;
-import 'package:hive_ui/features/spaces/presentation/providers/user_spaces_providers.dart' as user_providers;
 import 'package:hive_ui/features/spaces/presentation/providers/space_providers.dart' as space_providers;
 import 'package:hive_ui/features/spaces/presentation/providers/spaces_async_providers.dart';
 import 'package:hive_ui/features/profile/presentation/providers/profile_providers.dart';

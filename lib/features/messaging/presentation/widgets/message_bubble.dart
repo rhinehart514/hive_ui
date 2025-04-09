@@ -1,12 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:timeago/timeago.dart' as timeago;
 import 'package:hive_ui/features/messaging/domain/entities/message.dart';
-import 'package:hive_ui/features/messaging/application/providers/messaging_providers.dart';
 import 'package:hive_ui/features/messaging/presentation/widgets/message_delivery_indicator.dart';
-import 'package:hive_ui/features/messaging/presentation/widgets/message_reactions.dart';
-import 'package:hive_ui/features/messaging/presentation/widgets/user_avatar.dart';
 import 'package:hive_ui/theme/app_colors.dart';
 
 /// Displays a message bubble in the chat
@@ -511,7 +507,7 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
             const SizedBox(height: 4),
             Text(
               label,
-              style: TextStyle(
+              style: const TextStyle(
                 fontSize: 10,
                 color: Colors.white70,
               ),
@@ -526,7 +522,7 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.grey.shade900,
-      shape: RoundedRectangleBorder(
+      shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(
           top: Radius.circular(16),
         ),
@@ -534,11 +530,11 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
       builder: (context) {
         return Container(
           height: 300,
-          padding: EdgeInsets.all(16),
+          padding: const EdgeInsets.all(16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
+              const Text(
                 'Add Reaction',
                 style: TextStyle(
                   fontSize: 16,
@@ -546,7 +542,7 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
                   color: Colors.white,
                 ),
               ),
-              SizedBox(height: 16),
+              const SizedBox(height: 16),
               Wrap(
                 spacing: 12,
                 runSpacing: 12,
@@ -573,7 +569,7 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
       onTap: () {
         Navigator.pop(context);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
+          const SnackBar(
             content: Text('Reaction system coming soon'),
           ),
         );
@@ -589,7 +585,7 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
         child: Center(
           child: Text(
             emoji,
-            style: TextStyle(fontSize: 24),
+            style: const TextStyle(fontSize: 24),
           ),
         ),
       ),

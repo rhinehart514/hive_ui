@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:hive_ui/features/events/domain/repositories/event_repository.dart';
 import 'package:hive_ui/models/event.dart';
+import 'package:hive_ui/models/attendance_record.dart';
 import 'package:hive_ui/services/firebase_monitor.dart';
 
 /// Implementation of the EventRepository using Firestore as data source
@@ -278,6 +279,7 @@ class EventRepositoryImpl implements EventRepository {
     
     // Commit the batch
     await batch.commit();
+    FirebaseMonitor.recordRead();
     debugPrint('🔍 REPOSITORY: Test events created successfully');
   }
   
@@ -403,7 +405,7 @@ class EventRepositoryImpl implements EventRepository {
       final List<Event> events = [];
       for (final doc in snapshot.docs) {
         try {
-          final data = doc.data() as Map<String, dynamic>;
+          final data = doc.data();
           data['id'] = doc.id;
           
           // Process timestamps and convert to DateTime
@@ -442,7 +444,7 @@ class EventRepositoryImpl implements EventRepository {
       final List<Event> events = [];
       for (final doc in snapshot.docs) {
         try {
-          final data = doc.data() as Map<String, dynamic>;
+          final data = doc.data();
           data['id'] = doc.id;
           
           // Process timestamps and convert to DateTime
@@ -458,6 +460,257 @@ class EventRepositoryImpl implements EventRepository {
     } catch (e) {
       debugPrint('Error getting events for followed spaces: $e');
       return [];
+    }
+  }
+  
+  @override
+  Future<bool> boostEvent(String eventId, String userId) async {
+    try {
+      // Get the current event to ensure it exists
+      final eventDoc = await _firestore.collection('events').doc(eventId).get();
+      if (!eventDoc.exists) {
+        debugPrint('❌ REPOSITORY: Boost failed - Event $eventId does not exist');
+        return false;
+      }
+
+      // Check user permissions (implement role-based check here if needed)
+      // For now, assuming userId is already verified to have Verified+ status
+      
+      // Update the event with boost information
+      await _firestore.collection('events').doc(eventId).update({
+        'isBoosted': true,
+        'boostTimestamp': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+        'lastModifiedBy': userId,
+      });
+      
+      // Add boost record for tracking/auditability
+      await _firestore
+          .collection('events')
+          .doc(eventId)
+          .collection('boosts')
+          .add({
+        'boosterId': userId,
+        'timestamp': FieldValue.serverTimestamp(),
+      });
+      
+      debugPrint('✅ REPOSITORY: Event $eventId boosted successfully by $userId');
+      return true;
+    } catch (e) {
+      debugPrint('❌ REPOSITORY: Error boosting event $eventId: $e');
+      return false;
+    }
+  }
+
+  @override
+  Future<bool> setEventHoneyMode(String eventId, String userId) async {
+    try {
+      // Get the current event to ensure it exists and get spaceId
+      final eventDoc = await _firestore.collection('events').doc(eventId).get();
+      if (!eventDoc.exists) {
+        debugPrint('❌ REPOSITORY: Honey Mode failed - Event $eventId does not exist');
+        return false;
+      }
+      
+      final eventData = eventDoc.data() as Map<String, dynamic>;
+      final spaceId = eventData['spaceId'] as String?;
+      
+      if (spaceId == null) {
+        debugPrint('❌ REPOSITORY: Honey Mode failed - Event $eventId has no spaceId');
+        return false;
+      }
+      
+      // Check if honey mode is available for this space
+      final isAvailable = await isHoneyModeAvailable(spaceId);
+      if (!isAvailable) {
+        debugPrint('❌ REPOSITORY: Honey Mode failed - Space $spaceId has already used Honey Mode this month');
+        return false;
+      }
+      
+      // Update the event with honey mode information
+      await _firestore.collection('events').doc(eventId).update({
+        'isHoneyMode': true,
+        'honeyModeTimestamp': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+        'lastModifiedBy': userId,
+      });
+      
+      // Record honey mode usage for the space for the current month
+      final now = DateTime.now();
+      final yearMonth = '${now.year}-${now.month.toString().padLeft(2, '0')}';
+      
+      await _firestore
+          .collection('spaces')
+          .doc(spaceId)
+          .collection('honeyModeUsage')
+          .doc(yearMonth)
+          .set({
+        'used': true,
+        'eventId': eventId,
+        'timestamp': FieldValue.serverTimestamp(),
+        'activatedBy': userId,
+      });
+      
+      debugPrint('✅ REPOSITORY: Honey Mode activated for event $eventId by $userId');
+      return true;
+    } catch (e) {
+      debugPrint('❌ REPOSITORY: Error setting Honey Mode for event $eventId: $e');
+      return false;
+    }
+  }
+
+  @override
+  Future<bool> isHoneyModeAvailable(String spaceId) async {
+    try {
+      // Get the space document
+      final spaceDoc = await _firestore.collection('spaces').doc(spaceId).get();
+      FirebaseMonitor.recordRead();
+      
+      if (!spaceDoc.exists) {
+        return false;
+      }
+      
+      final spaceData = spaceDoc.data() as Map<String, dynamic>;
+      
+      // Check if the space has honey mode allocations available
+      final int honeyModeUsed = spaceData['honeyModeUsed'] ?? 0;
+      final int honeyModeAllocation = spaceData['honeyModeAllocation'] ?? 1; // Default 1 per month
+      
+      return honeyModeUsed < honeyModeAllocation;
+    } catch (e) {
+      debugPrint('❌ REPOSITORY: Error checking honey mode availability: $e');
+      return false;
+    }
+  }
+  
+  @override
+  Future<bool> recordAttendance(String eventId, AttendanceRecord attendanceRecord) async {
+    try {
+      debugPrint('🔍 REPOSITORY: Recording attendance for event $eventId by user ${attendanceRecord.userId}');
+      
+      // Get the current event document
+      final eventDoc = await _firestore.collection('events').doc(eventId).get();
+      FirebaseMonitor.recordRead();
+      
+      if (!eventDoc.exists) {
+        debugPrint('❌ REPOSITORY: Event $eventId not found');
+        return false;
+      }
+      
+      final eventData = eventDoc.data() as Map<String, dynamic>;
+      
+      // Get the current attendance map or create a new one
+      Map<String, dynamic> attendanceMap = eventData['attendance'] ?? {};
+      
+      // Add the new attendance record
+      attendanceMap[attendanceRecord.userId] = attendanceRecord.toJson();
+      
+      // Update the event document with the new attendance map
+      await _firestore.collection('events').doc(eventId).update({
+        'attendance': attendanceMap,
+      });
+      FirebaseMonitor.recordRead();
+      
+      // Also record this attendance in a separate collection for analytics
+      await _firestore.collection('event_attendance').add({
+        'eventId': eventId,
+        'userId': attendanceRecord.userId,
+        'timestamp': FieldValue.serverTimestamp(),
+        'verificationMethod': attendanceRecord.verificationMethod.toString().split('.').last,
+        'verificationData': attendanceRecord.verificationData,
+      });
+      FirebaseMonitor.recordRead();
+      
+      debugPrint('✅ REPOSITORY: Successfully recorded attendance for event $eventId');
+      return true;
+    } catch (e) {
+      debugPrint('❌ REPOSITORY: Error recording attendance: $e');
+      return false;
+    }
+  }
+  
+  @override
+  Future<bool> validateCheckInCode(String eventId, String code) async {
+    try {
+      debugPrint('🔍 REPOSITORY: Validating check-in code for event $eventId');
+      
+      // Get the event's check-in code from Firestore
+      final codeDoc = await _firestore
+          .collection('event_check_in_codes')
+          .where('eventId', isEqualTo: eventId)
+          .where('isActive', isEqualTo: true)
+          .orderBy('createdAt', descending: true)
+          .limit(1)
+          .get();
+      FirebaseMonitor.recordRead();
+      
+      if (codeDoc.docs.isEmpty) {
+        debugPrint('❌ REPOSITORY: No active check-in code found for event $eventId');
+        return false;
+      }
+      
+      final codeData = codeDoc.docs.first.data();
+      final storedCode = codeData['code'] as String?;
+      
+      // Check if the code has expired
+      final createdAt = (codeData['createdAt'] as Timestamp).toDate();
+      final expiresInMinutes = codeData['expiresInMinutes'] as int? ?? 15;
+      
+      final now = DateTime.now();
+      final expirationTime = createdAt.add(Duration(minutes: expiresInMinutes));
+      
+      if (now.isAfter(expirationTime)) {
+        debugPrint('❌ REPOSITORY: Check-in code for event $eventId has expired');
+        return false;
+      }
+      
+      // Compare with the provided code
+      return storedCode == code;
+    } catch (e) {
+      debugPrint('❌ REPOSITORY: Error validating check-in code: $e');
+      return false;
+    }
+  }
+  
+  @override
+  Future<String> generateCheckInCode(String eventId, String generatedBy) async {
+    try {
+      debugPrint('🔍 REPOSITORY: Generating check-in code for event $eventId');
+      
+      // First, deactivate any existing codes for this event
+      final existingCodes = await _firestore
+          .collection('event_check_in_codes')
+          .where('eventId', isEqualTo: eventId)
+          .where('isActive', isEqualTo: true)
+          .get();
+      FirebaseMonitor.recordRead();
+      
+      final batch = _firestore.batch();
+      for (final doc in existingCodes.docs) {
+        batch.update(doc.reference, {'isActive': false});
+      }
+      await batch.commit();
+      FirebaseMonitor.recordRead();
+      
+      // Generate a new code (6-digit number)
+      final code = (100000 + (DateTime.now().millisecondsSinceEpoch % 900000)).toString();
+      
+      // Store the new code
+      await _firestore.collection('event_check_in_codes').add({
+        'eventId': eventId,
+        'code': code,
+        'createdAt': FieldValue.serverTimestamp(),
+        'createdBy': generatedBy,
+        'isActive': true,
+        'expiresInMinutes': 15, // Code expires after 15 minutes
+      });
+      FirebaseMonitor.recordRead();
+      
+      debugPrint('✅ REPOSITORY: Successfully generated check-in code for event $eventId');
+      return code;
+    } catch (e) {
+      debugPrint('❌ REPOSITORY: Error generating check-in code: $e');
+      throw Exception('Failed to generate check-in code: $e');
     }
   }
   

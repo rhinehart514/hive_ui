@@ -3,15 +3,113 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_ui/models/space_recommendation.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:hive_ui/firebase_init_tracker.dart';
+import 'package:hive_ui/main.dart' show appInitializationProvider;
+import 'package:firebase_core/firebase_core.dart';
 
-/// Provider for space recommendations state
+/// Provider for space recommendations state with initialization safety
 final spaceRecommendationsProvider = StateNotifierProvider<SpaceRecommendationsNotifier, AsyncValue<List<SpaceRecommendation>>>((ref) {
-  return SpaceRecommendationsNotifier(
-    firestore: FirebaseFirestore.instance,
-    auth: FirebaseAuth.instance,
+  // Listen to app initialization status to ensure Firebase is ready
+  final appInitialized = ref.watch(appInitializationProvider);
+  
+  return appInitialized.when(
+    data: (_) {
+      // Create the notifier with proper Firebase instances when initialized
+      if (FirebaseInitTracker.isInitialized || Firebase.apps.isNotEmpty) {
+        debugPrint('Creating SpaceRecommendationsNotifier with real Firebase');
+        return SpaceRecommendationsNotifier(
+          firestore: FirebaseFirestore.instance,
+          auth: FirebaseAuth.instance,
+        );
+      } else {
+        debugPrint('Firebase not initialized for SpaceRecommendationsNotifier. Using placeholder.');
+        return _PlaceholderSpaceRecommendationsNotifier();
+      }
+    },
+    loading: () {
+      debugPrint('App still initializing. Using placeholder SpaceRecommendationsNotifier.');
+      return _PlaceholderSpaceRecommendationsNotifier();
+    },
+    error: (error, _) {
+      debugPrint('App initialization error: $error. Using placeholder SpaceRecommendationsNotifier.');
+      return _PlaceholderSpaceRecommendationsNotifier();
+    },
   );
 });
+
+/// Placeholder implementation for when Firebase is not initialized
+class _PlaceholderSpaceRecommendationsNotifier extends StateNotifier<AsyncValue<List<SpaceRecommendation>>> implements SpaceRecommendationsNotifier {
+  _PlaceholderSpaceRecommendationsNotifier() : super(AsyncValue.data(_getDefaultRecommendations()));
+  
+  @override
+  FirebaseFirestore get _firestore => throw UnimplementedError();
+  
+  @override
+  FirebaseAuth get _auth => throw UnimplementedError();
+  
+  DateTime? _lastFetchTimeValue = null;
+  
+  @override
+  DateTime? get _lastFetchTime => _lastFetchTimeValue;
+  
+  @override
+  set _lastFetchTime(DateTime? value) {
+    _lastFetchTimeValue = value;
+  }
+  
+  @override
+  Future<void> refresh() async {
+    // No-op for placeholder
+    state = AsyncValue.data(_getDefaultRecommendations());
+  }
+  
+  @override
+  Future<void> _loadRecommendations() async {
+    // No-op for placeholder
+  }
+  
+  @override
+  Future<List<SpaceRecommendation>> _getRecommendations() async {
+    return _getDefaultRecommendations();
+  }
+  
+  @override
+  List<SpaceRecommendation> _getRandomRecommendations() {
+    return _getDefaultRecommendations();
+  }
+  
+  /// Static method to get default recommendations
+  static List<SpaceRecommendation> _getDefaultRecommendations() {
+    return [
+      const SpaceRecommendation(
+        id: 'cs-dept',
+        name: 'CS Department',
+        description: 'Latest updates from Computer Science',
+        imageUrl: 'https://firebasestorage.googleapis.com/v0/b/hive-flutter.appspot.com/o/placeholder%2Fcs_dept.jpg?alt=media',
+        category: 'Academic',
+        memberCount: 450,
+      ),
+      const SpaceRecommendation(
+        id: 'tech-club',
+        name: 'Tech Club',
+        description: 'Join fellow tech enthusiasts',
+        imageUrl: 'https://firebasestorage.googleapis.com/v0/b/hive-flutter.appspot.com/o/placeholder%2Ftech_club.jpg?alt=media',
+        category: 'Social',
+        memberCount: 200,
+      ),
+      const SpaceRecommendation(
+        id: 'ai-lab',
+        name: 'AI Research Lab',
+        description: 'Exploring the future of AI',
+        imageUrl: 'https://firebasestorage.googleapis.com/v0/b/hive-flutter.appspot.com/o/placeholder%2Fai_lab.jpg?alt=media',
+        category: 'Research',
+        memberCount: 150,
+      ),
+    ];
+  }
+}
 
 /// Notifier class for managing space recommendations state
 class SpaceRecommendationsNotifier extends StateNotifier<AsyncValue<List<SpaceRecommendation>>> {
@@ -214,7 +312,7 @@ class SpaceRecommendationsNotifier extends StateNotifier<AsyncValue<List<SpaceRe
   /// Get random space recommendations when user is not logged in or there's an error
   List<SpaceRecommendation> _getRandomRecommendations() {
     return [
-      SpaceRecommendation(
+      const SpaceRecommendation(
         id: 'cs-dept',
         name: 'CS Department',
         description: 'Latest updates from Computer Science',
@@ -222,7 +320,7 @@ class SpaceRecommendationsNotifier extends StateNotifier<AsyncValue<List<SpaceRe
         category: 'Academic',
         memberCount: 450,
       ),
-      SpaceRecommendation(
+      const SpaceRecommendation(
         id: 'tech-club',
         name: 'Tech Club',
         description: 'Join fellow tech enthusiasts',
@@ -230,7 +328,7 @@ class SpaceRecommendationsNotifier extends StateNotifier<AsyncValue<List<SpaceRe
         category: 'Social',
         memberCount: 200,
       ),
-      SpaceRecommendation(
+      const SpaceRecommendation(
         id: 'ai-lab',
         name: 'AI Research Lab',
         description: 'Exploring the future of AI',

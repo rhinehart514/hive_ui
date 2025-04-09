@@ -25,7 +25,7 @@ class SpaceTabs extends StatelessWidget {
         // Tab Bar
         Container(
           height: 48,
-          decoration: BoxDecoration(
+          decoration: const BoxDecoration(
             color: AppColors.cardBackground,
             border: Border(
               bottom: BorderSide(

@@ -29,7 +29,7 @@ class HiveLabCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              Icon(Icons.science, color: AppColors.gold),
+              const Icon(Icons.science, color: AppColors.gold),
               const SizedBox(width: 8),
               Text(
                 'HIVE LAB',

@@ -11,9 +11,11 @@ import 'package:hive_ui/widgets/profile/profile_info_overlay.dart'
 import 'dart:io';
 import 'package:flutter/services.dart'; // For haptic feedback
 import 'package:hive_ui/features/profile/presentation/widgets/profile_photo_sheet.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:hive_ui/widgets/profile/verification_dialog.dart';
 
 /// A widget that displays the profile header with image, info, and action buttons
-class ProfileHeader extends StatelessWidget {
+class ProfileHeader extends ConsumerWidget {
   /// The user profile to display
   final UserProfile profile;
 
@@ -50,6 +52,24 @@ class ProfileHeader extends StatelessWidget {
   /// Callback when add tags is tapped
   final VoidCallback? onAddTagsTapped;
 
+  /// User's first name
+  final String firstName;
+  
+  /// User's last name
+  final String lastName;
+  
+  /// User's class level
+  final String? classLevel;
+  
+  /// User's field of study
+  final String? fieldOfStudy;
+  
+  /// User's residential status
+  final String? residentialStatus;
+  
+  /// User's verification status
+  final VerificationStatus verificationStatus;
+
   const ProfileHeader({
     super.key,
     required this.profile,
@@ -64,10 +84,16 @@ class ProfileHeader extends StatelessWidget {
     required this.onMessage,
     required this.onShareProfile,
     this.onAddTagsTapped,
+    required this.firstName,
+    required this.lastName,
+    this.classLevel,
+    this.fieldOfStudy,
+    this.residentialStatus,
+    this.verificationStatus = VerificationStatus.none,
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     // Adapt height based on screen size
     final screenSize = MediaQuery.of(context).size;
     final isSmallScreen = screenSize.width < 600;
@@ -129,7 +155,7 @@ class ProfileHeader extends StatelessWidget {
                     }
                   },
                   builder: (context, candidateData, rejectedData) {
-                    return Container(
+                    return SizedBox(
                       width: double.infinity,
                       height: imageHeight,
                       child: ClipRRect(
@@ -216,7 +242,7 @@ class ProfileHeader extends StatelessWidget {
                 bottom: 0,
                 child: info_overlay.ProfileInfoOverlay(
                   profile: profile,
-                  onVerifiedPlusTap: onVerifiedPlusTap,
+                  onVerifiedPlusTap: isCurrentUser ? () => _showVerificationDialog(context) : onVerifiedPlusTap,
                 ),
               ),
 
@@ -627,5 +653,25 @@ class ProfileHeader extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  /// Show verification dialog when badge is tapped
+  void _showVerificationDialog(BuildContext context) {
+    HapticFeedback.selectionClick();
+    
+    showVerificationDialog(
+      context,
+      currentStatus: profile.isVerifiedPlus 
+          ? VerificationStatus.verifiedPlus 
+          : profile.isVerified 
+              ? VerificationStatus.verified 
+              : VerificationStatus.none,
+    ).then((value) {
+      // Handle any actions after dialog is closed if needed
+      if (value == true) {
+        // User initiated verification process
+        debugPrint('User initiated verification process');
+      }
+    });
   }
 }

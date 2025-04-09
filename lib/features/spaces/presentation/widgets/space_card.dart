@@ -6,9 +6,11 @@ import 'package:hive_ui/features/spaces/domain/entities/space_entity.dart';
 import 'package:hive_ui/features/spaces/presentation/controllers/spaces_controller.dart';
 import 'package:hive_ui/theme/app_colors.dart';
 import 'package:go_router/go_router.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:hive_ui/core/event_bus/app_event_bus.dart';
 
 /// A reusable card to display a space
-class SpaceCard extends ConsumerWidget {
+class SpaceCard extends ConsumerStatefulWidget {
   final SpaceEntity space;
   final VoidCallback? onTap;
   final bool showJoinButton;
@@ -21,18 +23,133 @@ class SpaceCard extends ConsumerWidget {
   }) : super(key: key);
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final controller = ref.read(spacesControllerProvider.notifier);
+  ConsumerState<SpaceCard> createState() => _SpaceCardState();
+}
+
+class _SpaceCardState extends ConsumerState<SpaceCard> {
+  // Track local join state for optimistic updates
+  late bool _isJoined;
+  bool _isJoining = false;
+  
+  @override
+  void initState() {
+    super.initState();
+    _isJoined = widget.space.isJoined;
+  }
+  
+  @override
+  void didUpdateWidget(SpaceCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Update local state if the space join status changes externally
+    if (oldWidget.space.isJoined != widget.space.isJoined && !_isJoining) {
+      _isJoined = widget.space.isJoined;
+    }
+  }
+  
+  // Handle joining a space with optimistic updates
+  Future<void> _handleJoinSpace() async {
+    final userId = FirebaseAuth.instance.currentUser?.uid;
+    if (userId == null) return;
+    
+    // Apply haptic feedback
+    HapticFeedback.mediumImpact();
+    
+    // Store previous state for rollback if needed
+    final previousState = _isJoined;
+    
+    try {
+      // Mark as joining to prevent state conflicts
+      setState(() {
+        _isJoining = true;
+        _isJoined = true; // Optimistically update UI
+      });
+      
+      // Emit event for other listeners
+      AppEventBus().emit(
+        SpaceMembershipChangedEvent(
+          spaceId: widget.space.id,
+          userId: userId,
+          isJoining: true,
+        ),
+      );
+      
+      // Perform actual backend operation
+      final controller = ref.read(spacesControllerProvider.notifier);
+      final success = await controller.joinSpace(widget.space.id);
+      
+      if (!success) {
+        // If the operation failed, revert the optimistic update
+        if (mounted) {
+          setState(() {
+            _isJoined = previousState;
+            _isJoining = false;
+          });
+          
+          // Emit corrective event
+          AppEventBus().emit(
+            SpaceMembershipChangedEvent(
+              spaceId: widget.space.id,
+              userId: userId,
+              isJoining: false,
+            ),
+          );
+          
+          // Show error message
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Failed to join space. Please try again.'),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+      } else {
+        // Operation succeeded
+        if (mounted) {
+          setState(() {
+            _isJoining = false;
+          });
+        }
+      }
+    } catch (e) {
+      // Handle errors and revert optimistic update
+      if (mounted) {
+        setState(() {
+          _isJoined = previousState;
+          _isJoining = false;
+        });
+        
+        // Emit corrective event
+        AppEventBus().emit(
+          SpaceMembershipChangedEvent(
+            spaceId: widget.space.id,
+            userId: userId,
+            isJoining: false,
+          ),
+        );
+        
+        // Show error message
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error joining space: ${e.toString()}'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final theme = Theme.of(context);
     
     // Check if this space was created by the current user
-    final bool isCreatedByUser = space.customData['isCreatedByUser'] == true;
+    final bool isCreatedByUser = widget.space.customData['isCreatedByUser'] == true;
 
     return GestureDetector(
       onTap: () {
-        if (onTap != null) {
+        if (widget.onTap != null) {
           HapticFeedback.lightImpact();
-          onTap!();
+          widget.onTap!();
         }
       },
       child: Container(
@@ -79,13 +196,13 @@ class SpaceCard extends ConsumerWidget {
                         decoration: BoxDecoration(
                           color: isCreatedByUser
                               ? AppColors.gold.withOpacity(0.15)
-                              : space.primaryColor.withOpacity(0.15),
+                              : widget.space.primaryColor.withOpacity(0.15),
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: Center(
                           child: Icon(
-                            space.icon,
-                            color: isCreatedByUser ? AppColors.gold : space.primaryColor,
+                            widget.space.icon,
+                            color: isCreatedByUser ? AppColors.gold : widget.space.primaryColor,
                             size: 24,
                           ),
                         ),
@@ -93,7 +210,7 @@ class SpaceCard extends ConsumerWidget {
                       const SizedBox(width: 12),
                       Expanded(
                         child: Text(
-                          space.name,
+                          widget.space.name,
                           style: GoogleFonts.inter(
                             color: AppColors.white,
                             fontSize: 18,
@@ -115,7 +232,7 @@ class SpaceCard extends ConsumerWidget {
                           HapticFeedback.lightImpact();
                           // Navigate to our improved space detail view
                           GoRouter.of(context).push(
-                            '/spaces/detail?id=${Uri.encodeComponent(space.id)}&type=space',
+                            '/spaces/detail?id=${Uri.encodeComponent(widget.space.id)}&type=space',
                           );
                         },
                         tooltip: 'View improved space detail',
@@ -127,7 +244,7 @@ class SpaceCard extends ConsumerWidget {
 
                   // Space description
                   Text(
-                    space.description,
+                    widget.space.description,
                     style: GoogleFonts.inter(
                       color: AppColors.textSecondary,
                       fontSize: 14,
@@ -145,27 +262,24 @@ class SpaceCard extends ConsumerWidget {
                     children: [
                       _buildMetricItem(
                         Icons.people_outline,
-                        '${space.metrics.memberCount}',
+                        '${widget.space.metrics.memberCount}',
                         'Members',
                       ),
                       const SizedBox(width: 16),
                       _buildMetricItem(
                         Icons.calendar_today_outlined,
-                        '${space.metrics.weeklyEvents}',
+                        '${widget.space.metrics.weeklyEvents}',
                         'Weekly Events',
                       ),
                     ],
                   ),
 
                   // Join button
-                  if (showJoinButton && !space.isJoined)
+                  if (widget.showJoinButton && !_isJoined)
                     Padding(
                       padding: const EdgeInsets.only(top: 16),
                       child: TextButton(
-                        onPressed: () {
-                          HapticFeedback.mediumImpact();
-                          controller.joinSpace(space.id);
-                        },
+                        onPressed: _isJoining ? null : _handleJoinSpace,
                         style: TextButton.styleFrom(
                           foregroundColor: isCreatedByUser ? AppColors.gold : AppColors.yellow,
                           minimumSize: const Size(0, 48),
@@ -183,15 +297,24 @@ class SpaceCard extends ConsumerWidget {
                             },
                           ),
                         ),
-                        child: Text(
-                          'Join Space',
-                          style: GoogleFonts.inter(
-                            color: isCreatedByUser ? AppColors.gold : AppColors.yellow,
-                            fontSize: 14,
-                            fontWeight: FontWeight.w500,
-                            letterSpacing: 0.1,
-                          ),
-                        ),
+                        child: _isJoining
+                            ? const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  valueColor: AlwaysStoppedAnimation<Color>(AppColors.gold),
+                                ),
+                              )
+                            : Text(
+                                'Join Space',
+                                style: GoogleFonts.inter(
+                                  color: isCreatedByUser ? AppColors.gold : AppColors.yellow,
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w500,
+                                  letterSpacing: 0.1,
+                                ),
+                              ),
                       ),
                     ),
                 ],

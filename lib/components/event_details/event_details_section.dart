@@ -22,6 +22,11 @@ class EventDetailsSection extends StatelessWidget {
     this.onOrganizerTap,
   }) : super(key: key);
 
+  // Helper method to check if event was created by a club
+  bool _isClubCreated() {
+    return event.source == EventSource.club;
+  }
+
   @override
   Widget build(BuildContext context) {
     return SlideTransition(
@@ -71,9 +76,9 @@ class EventDetailsSection extends StatelessWidget {
               if (event.organizerName.isNotEmpty)
                 _buildInfoSection(
                   title: 'Organizer',
-                  icon: event.isClubCreated ? Icons.groups : Icons.person,
+                  icon: _isClubCreated() ? Icons.groups : Icons.person,
                   content: _buildOrganizer(),
-                  onTap: event.isClubCreated ? onOrganizerTap : null,
+                  onTap: _isClubCreated() ? onOrganizerTap : null,
                 ),
 
               // Category
@@ -225,7 +230,7 @@ class EventDetailsSection extends StatelessWidget {
   /// Build organizer section with contact info if available
   Widget _buildOrganizer() {
     final bool hasEmail = event.organizerEmail.isNotEmpty;
-    final bool isClub = event.isClubCreated;
+    final bool isClub = _isClubCreated();
 
     return Container(
       padding: const EdgeInsets.all(16),

@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:hive_ui/models/user_profile.dart';
 import 'package:hive_ui/providers/activity_provider.dart';
 import 'package:hive_ui/widgets/profile/activity_item.dart';
+import 'package:hive_ui/widgets/profile/activity_stats_card.dart';
 
 /// Widget that displays the activity feed tab on the profile page
 class ActivityFeedTab extends ConsumerWidget {
@@ -36,22 +37,20 @@ class ActivityFeedTab extends ConsumerWidget {
                 return _buildEmptyState(context);
               }
 
-              return ListView.builder(
+              return ListView(
                 padding: const EdgeInsets.only(top: 16),
-                itemCount: activities.length,
                 physics: const BouncingScrollPhysics(),
-                shrinkWrap: true,
-                addAutomaticKeepAlives: false,
-                addRepaintBoundaries: false,
-                itemBuilder: (context, index) {
-                  if (index >= activities.length) {
-                    return const SizedBox.shrink();
-                  }
-                  final activity = activities[index];
-                  return ActivityItem(
-                      key: ValueKey('activity-${activity.id}'),
-                      activity: activity);
-                },
+                children: [
+                  // Activity stats card at the top
+                  ActivityStatsCard(profile: profile),
+                  const SizedBox(height: 24),
+                  
+                  // Activity feed items
+                  ...activities.map((activity) => ActivityItem(
+                    key: ValueKey('activity-${activity.id}'),
+                    activity: activity,
+                  )).toList(),
+                ],
               );
             },
             loading: () => const Center(
@@ -79,6 +78,10 @@ class ActivityFeedTab extends ConsumerWidget {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
+          // Show stats card even when there's no activity
+          ActivityStatsCard(profile: profile),
+          const SizedBox(height: 48),
+          
           Icon(
             Icons.hourglass_empty,
             size: 64,

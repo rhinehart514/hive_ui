@@ -52,9 +52,19 @@ class FirebaseAnalyticsService {
     }
     
     try {
+      // Ensure correct type for parameters
+      Map<String, Object>? typedParams;
+      if (parameters != null && parameters.isNotEmpty) {
+         typedParams = Map<String, Object>.fromEntries(
+          parameters.entries
+            .where((entry) => entry.value != null) // Filter out null values
+            .map((entry) => MapEntry(entry.key, entry.value as Object)),
+        );
+      }
+
       await _analytics.logEvent(
         name: name,
-        parameters: parameters,
+        parameters: (typedParams?.isNotEmpty ?? false) ? typedParams : null,
       );
     } catch (e) {
       debugPrint('Error logging analytics event: $e');

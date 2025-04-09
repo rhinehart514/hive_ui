@@ -8,6 +8,8 @@ import 'package:hive_ui/utils/realtime_db_windows_fix.dart';
 /// This service handles typing indicators, online status, and message delivery status
 class RealtimeMessagingService {
   final FirebaseDatabase _database;
+  // Stream controllers that need to be disposed
+  final List<StreamController> _controllers = [];
 
   // Root paths in Realtime Database
   static const String _typingPath = 'typing';
@@ -47,7 +49,7 @@ class RealtimeMessagingService {
   /// Updates the typing status of a user in a chat
   Future<void> updateTypingStatus(String chatId, String userId, bool isTyping) async {
     try {
-      return await RealtimeDbWindowsFix.runOperation(() async {
+      return await RealtimeDbWindowsFix.safeOperation<void>(() async {
         final ref = _database.ref('$_typingPath/$chatId/$userId');
         
         if (isTyping) {
@@ -101,7 +103,7 @@ class RealtimeMessagingService {
   /// Updates a user's online status
   Future<void> updateOnlineStatus(String userId, bool isOnline) async {
     try {
-      return await RealtimeDbWindowsFix.runOperation(() async {
+      return await RealtimeDbWindowsFix.safeOperation<void>(() async {
         final ref = _database.ref('$_onlinePath/$userId');
         
         if (isOnline) {
@@ -136,6 +138,8 @@ class RealtimeMessagingService {
     
     // Create a controller to merge multiple streams
     final controller = StreamController<Map<String, bool>>.broadcast();
+    _controllers.add(controller); // Track for disposal
+    
     final onlineStatus = <String, bool>{};
     
     // Listen to each user's online status
@@ -151,7 +155,9 @@ class RealtimeMessagingService {
           onlineStatus[userId] = false;
         }
         
-        controller.add(Map<String, bool>.from(onlineStatus));
+        if (!controller.isClosed) {
+          controller.add(Map<String, bool>.from(onlineStatus));
+        }
       }, onError: (error) {
         debugPrint('Error in online status stream for $userId: $error');
       });
@@ -163,7 +169,7 @@ class RealtimeMessagingService {
   /// Gets a single user's online status
   Future<bool> getUserOnlineStatus(String userId) async {
     try {
-      return await RealtimeDbWindowsFix.runOperation(() async {
+      return await RealtimeDbWindowsFix.safeOperation<bool>(() async {
         final ref = _database.ref('$_onlinePath/$userId/online');
         final snapshot = await ref.get();
         
@@ -172,7 +178,7 @@ class RealtimeMessagingService {
         }
         
         return false;
-      });
+      }, defaultValue: false) ?? false;
     } catch (e) {
       debugPrint('Error getting user online status: $e');
       return false;
@@ -182,7 +188,7 @@ class RealtimeMessagingService {
   /// Gets a user's last active timestamp
   Future<DateTime?> getUserLastActive(String userId) async {
     try {
-      return await RealtimeDbWindowsFix.runOperation(() async {
+      return await RealtimeDbWindowsFix.safeOperation<DateTime?>(() async {
         final ref = _database.ref('$_onlinePath/$userId/lastActive');
         final snapshot = await ref.get();
         
@@ -191,7 +197,7 @@ class RealtimeMessagingService {
         }
         
         return null;
-      });
+      }, defaultValue: null);
     } catch (e) {
       debugPrint('Error getting user last active: $e');
       return null;
@@ -207,7 +213,7 @@ class RealtimeMessagingService {
     MessageDeliveryStatus status,
   ) async {
     try {
-      return await RealtimeDbWindowsFix.runOperation(() async {
+      return await RealtimeDbWindowsFix.safeOperation<void>(() async {
         final ref = _database.ref('$_deliveryPath/$messageId/$receiverId');
         
         await ref.set({
@@ -247,13 +253,24 @@ class RealtimeMessagingService {
 
   /// Cleanup method to call when disposing the service
   void dispose() {
-    // Nothing to dispose at the moment
+    // Close all stream controllers
+    for (final controller in _controllers) {
+      if (!controller.isClosed) {
+        controller.close();
+      }
+    }
+    _controllers.clear();
   }
 }
 
-/// Enum representing message delivery status
+/// Enum representing the delivery status of a message
 enum MessageDeliveryStatus {
-  sent,       // Message sent to server
-  delivered,  // Message delivered to recipient's device
-  read        // Message read by recipient
+  /// Message has been sent but not yet delivered
+  sent,
+  
+  /// Message has been delivered to the recipient's device
+  delivered,
+  
+  /// Message has been seen by the recipient
+  seen,
 } 

@@ -2,6 +2,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_ui/models/space.dart';
 import 'package:hive_ui/models/space_type.dart';
 import 'package:hive_ui/services/space_service.dart';
+import 'package:hive_ui/features/spaces/presentation/providers/space_search_provider.dart' as search_provider;
+
+// Re-export the search provider
+export 'package:hive_ui/features/spaces/presentation/providers/space_search_provider.dart' show searchSpacesProvider;
 
 /// Provider for all spaces by type
 final spacesByTypeProvider =
@@ -41,11 +45,4 @@ final spacesByEventsProvider =
 });
 
 /// Provider for searching spaces by name
-final spaceSearchProvider =
-    FutureProvider.family<List<Space>, String>((ref, searchTerm) async {
-  try {
-    return await SpaceService.searchSpacesByName(searchTerm);
-  } catch (e) {
-    return [];
-  }
-});
+final spacesByNameSearchProvider = search_provider.searchSpacesProvider;

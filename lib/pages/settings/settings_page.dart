@@ -3,11 +3,9 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:go_router/go_router.dart';
-import 'package:flutter/foundation.dart';
 import 'package:hive_ui/theme/app_colors.dart';
 import 'package:hive_ui/theme/huge_icons.dart';
 import 'package:hive_ui/features/auth/providers/auth_providers.dart';
-import 'package:hive_ui/core/navigation/routes.dart';
 import 'package:hive_ui/utils/glass_effect.dart';
 import 'package:hive_ui/providers/settings_provider.dart'
     show settingsProvider, SettingsState, AppTheme;

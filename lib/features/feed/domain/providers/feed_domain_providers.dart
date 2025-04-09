@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:hive_ui/features/feed/data/repositories/feed_repository_impl.dart';
+import 'package:hive_ui/features/feed/data/repositories/feed_repository_impl.dart' as repoImpl;
 import 'package:hive_ui/features/feed/domain/repositories/feed_repository.dart';
 import 'package:hive_ui/features/feed/domain/usecases/get_feed_use_case.dart';
 import 'package:hive_ui/models/event.dart';
@@ -13,10 +13,18 @@ import 'package:hive_ui/services/interactions/interaction_service.dart';
 import 'package:hive_ui/models/space_recommendation_simple.dart';
 import 'package:hive_ui/models/hive_lab_item_simple.dart';
 import 'package:hive_ui/models/hive_lab_item.dart' as lab_models;
+import 'package:firebase_auth/firebase_auth.dart';
 
 /// Provider for the feed repository
 final feedRepositoryProvider = Provider<FeedRepository>((ref) {
-  return FeedRepositoryImpl();
+  return repoImpl.FeedRepositoryImpl();
+});
+
+/// Stream Provider for the live feed data
+/// Provides a stream of combined feed items (Events, Reposts, etc.)
+final feedStreamProvider = StreamProvider<List<Map<String, dynamic>>>((ref) {
+  final repository = ref.watch(feedRepositoryProvider);
+  return repository.getFeedStream();
 });
 
 /// Provider for the feed use case
@@ -92,7 +100,7 @@ class FeedStateNotifier extends StateNotifier<FeedState> {
       final List<Event> events = result['events'] as List<Event>;
 
       // Generate personalized feed using the repository
-      final personalizedEvents = await _generatePersonalizedFeed(events);
+      await _generatePersonalizedFeed(events);
 
       // Fetch space recommendations
       final recommendedSpaces = await _fetchSpaceRecommendations();
@@ -203,8 +211,7 @@ class FeedStateNotifier extends StateNotifier<FeedState> {
       );
 
       // Generate personalized feed with the new events
-      final personalizedEvents = await _generatePersonalizedFeed(combinedEvents);
-      state = state.copyWith(events: personalizedEvents);
+      await _generatePersonalizedFeed(combinedEvents);
     } catch (e) {
       debugPrint('Error in loadMoreEvents: $e');
       // Reset to loaded state but keep existing events
@@ -241,36 +248,21 @@ class FeedStateNotifier extends StateNotifier<FeedState> {
       final isAuthenticated = _ref.watch(isAuthenticatedProvider);
 
       if (!isAuthenticated || events.isEmpty) {
+        // Return original order if not authenticated or no events
         return events;
       }
 
-      // Get current user for personalization
-      final currentUser = _ref.read(currentUserProvider);
-      if (currentUser == null) {
-        return events;
-      }
-
-      // Prioritize events based on user preferences using the repository
+      // Use the use case for prioritization
+      // It likely handles fetching user preferences internally
       return _getFeedUseCase.prioritizeEvents(
-        events: events,
-        // These could be fetched from a user preferences repository
-        userInterests: null, // Will be fetched from Firebase by repository
-        joinedSpaceIds: null, // Will be fetched from Firebase by repository
+          events: events,
+          // Parameters like userInterests, joinedSpaceIds might be fetched
+          // internally by the use case or repository, or passed from state if available.
+          // Assuming internal fetching for now based on previous repository code.
       );
     } catch (e) {
-      debugPrint('Error in _generatePersonalizedFeed: $e');
-      return events;
-    }
-  }
-
-  /// Fetch space recommendations
-  Future<List<RecommendedSpace>> _fetchSpaceRecommendations() async {
-    try {
-      // Use use case to get space recommendations
-      return _getFeedUseCase.getSpaceRecommendations();
-    } catch (e) {
-      debugPrint('Error in _fetchSpaceRecommendations: $e');
-      return [];
+      debugPrint('Error generating personalized feed: $e');
+      return events; // Return original order on error
     }
   }
 
@@ -278,21 +270,33 @@ class FeedStateNotifier extends StateNotifier<FeedState> {
   void _logFeedViewInteraction() {
     try {
       // Check if user is authenticated
-      final authState = _ref.watch(isAuthenticatedProvider);
+      final isAuthenticated = _ref.watch(isAuthenticatedProvider);
+      final userId = FirebaseAuth.instance.currentUser?.uid; // Get userId directly
 
-      // Only track interactions for authenticated users
-      if (authState) {
-        final user = _ref.read(currentUserProvider);
-
+      if (isAuthenticated && userId != null) {
         InteractionService.logInteraction(
-          userId: user.id, // User is non-null here since we already checked authentication
-          entityId: 'feed',
-          entityType: EntityType.event,
-          action: InteractionAction.view,
+          userId: userId, // Use the fetched userId
+          entityId: 'feed', // Generic target for feed view
+          entityType: EntityType.event, // Or a more specific type if applicable
+          action: InteractionAction.view, 
+          // Add other required parameters based on InteractionService.logInteraction definition
+          // If 'id' is required, maybe it should be null or a generated UUID?
+          // If 'timestamp' is required, use DateTime.now()
         );
-      }
+      } 
     } catch (e) {
-      debugPrint('Error logging feed view: $e');
+       debugPrint('Error logging feed view interaction: $e');
+    }
+  }
+
+  /// Fetch space recommendations from repository
+  Future<List<RecommendedSpace>> _fetchSpaceRecommendations() async {
+    try {
+      final feedRepository = _ref.read(feedRepositoryProvider);
+      return await feedRepository.fetchSpaceRecommendations();
+    } catch (e) {
+      debugPrint('Error fetching space recommendations: $e');
+      return [];
     }
   }
 

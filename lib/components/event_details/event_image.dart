@@ -32,11 +32,17 @@ class EventImage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return OptimizedImage(
-      imageUrl: event.safeImageUrl,
+      imageUrl: _getSafeImageUrl(),
       fit: fit,
       width: width,
       height: height,
       borderRadius: borderRadius,
     );
+  }
+
+  // Helper method to get a safe image URL
+  String _getSafeImageUrl() {
+    // Return the image URL if it exists and is not empty, otherwise return an empty string
+    return event.imageUrl.isNotEmpty ? event.imageUrl : '';
   }
 }

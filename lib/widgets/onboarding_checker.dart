@@ -90,8 +90,14 @@ class OnboardingChecker extends ConsumerWidget {
         // Use Future.microtask to avoid build phase navigation errors
         Future.microtask(() {
           try {
+            // Check if we should add a skip parameter
+            final shouldSkipPreferences = _shouldAddSkipParameter(currentContext);
+            final redirectPath = shouldSkipPreferences 
+                ? '/onboarding?skip=true' 
+                : '/onboarding';
+                
             // Use the captured context for navigation
-            currentContext.go('/onboarding');
+            currentContext.go(redirectPath);
           } catch (e) {
             debugPrint('Navigation error during onboarding check: $e');
           } finally {
@@ -110,5 +116,19 @@ class OnboardingChecker extends ConsumerWidget {
   bool _isAuthRoute(String route) {
     // Routes that shouldn't trigger onboarding redirect
     return route == '/' || route == '/sign-in' || route == '/create-account';
+  }
+
+  /// Determine if we should add a skip parameter based on user context
+  bool _shouldAddSkipParameter(BuildContext context) {
+    // Check if the user is coming from a specific flow that should skip preferences
+    // For now, we'll implement a simple check based on the current route
+    final currentLocation = GoRouterState.of(context).matchedLocation;
+    
+    // Skip preferences if the user is coming from a deep link, app invitation, 
+    // or has been in the app for a very short time
+    return currentLocation == '/' ||
+           currentLocation.startsWith('/link/') ||
+           currentLocation.startsWith('/invite/') ||
+           currentLocation.contains('share=');
   }
 }

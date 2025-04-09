@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:hive_ui/features/messaging/domain/entities/message.dart';
 import 'package:hive_ui/features/messaging/application/providers/messaging_providers.dart';
 import 'package:hive_ui/theme/app_colors.dart';
 
@@ -51,7 +50,7 @@ class MessageThreadPreview extends ConsumerWidget {
             Flexible(
               child: threadParentAsync.when(
                 data: (message) => Text(
-                  '${replyCount} ${replyCount == 1 ? 'reply' : 'replies'} to "${_truncateMessage(message?.content ?? 'message')}"',
+                  '$replyCount ${replyCount == 1 ? 'reply' : 'replies'} to "${_truncateMessage(message?.content ?? 'message')}"',
                   style: TextStyle(
                     fontSize: 12,
                     color: Colors.white.withOpacity(0.8),
@@ -60,14 +59,14 @@ class MessageThreadPreview extends ConsumerWidget {
                   overflow: TextOverflow.ellipsis,
                 ),
                 loading: () => Text(
-                  '${replyCount} ${replyCount == 1 ? 'reply' : 'replies'} to thread',
+                  '$replyCount ${replyCount == 1 ? 'reply' : 'replies'} to thread',
                   style: TextStyle(
                     fontSize: 12,
                     color: Colors.white.withOpacity(0.8),
                   ),
                 ),
                 error: (_, __) => Text(
-                  '${replyCount} ${replyCount == 1 ? 'reply' : 'replies'} to thread',
+                  '$replyCount ${replyCount == 1 ? 'reply' : 'replies'} to thread',
                   style: TextStyle(
                     fontSize: 12,
                     color: Colors.white.withOpacity(0.8),

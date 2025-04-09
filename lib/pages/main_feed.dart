@@ -10,21 +10,16 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../models/event.dart';
-import '../models/reposted_event.dart';
 import '../models/feed_state.dart';
 import '../models/repost_content_type.dart';
 import '../theme/app_colors.dart';
-import '../theme/huge_icons.dart';
 import '../widgets/hive_app_bar.dart';
 import '../services/event_service.dart';
 import '../controllers/feed_controller.dart';
 import '../providers/feed_provider.dart';
 import '../providers/profile_provider.dart';
 import '../providers/reposted_events_provider.dart';
-import '../pages/quote_repost_page.dart';
-import '../utils/feed_item_builder.dart';
-import '../widgets/event_card.dart';
-import '../models/user_profile.dart';
+import '../widgets/feed_list_wrapper.dart';
 
 /// A simplified feed page that guarantees content will be displayed
 /// Optimized for mobile devices
@@ -355,7 +350,7 @@ class _MainFeedState extends ConsumerState<MainFeed> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: HiveAppBar(
+      appBar: const HiveAppBar(
         title: 'Feed',
         showBackButton: false,
       ),
@@ -475,69 +470,16 @@ class _MainFeedState extends ConsumerState<MainFeed> {
       }
     }
     
-    // Show feed with prioritized content and integrated cards
-    return ListView.builder(
-      controller: _scrollController,
-      physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
-      itemCount: combinedFeed.length + 1, // +1 for load more indicator
-      itemBuilder: (context, index) {
-        // Show loading indicator at the end
-        if (index == combinedFeed.length) {
-          if (feedState.isLoadingMore) {
-            return const Padding(
-              padding: EdgeInsets.symmetric(vertical: 16.0),
-              child: Center(child: CircularProgressIndicator(color: AppColors.gold)),
-            );
-          } else if (feedState.hasMoreEvents) {
-            return Padding(
-              padding: const EdgeInsets.symmetric(vertical: 16.0),
-              child: Center(
-                child: TextButton(
-                  onPressed: () {
-                    ref.read(feedControllerProvider).loadMoreEvents();
-                  },
-                  child: const Text('Load More', style: TextStyle(color: AppColors.gold)),
-                ),
-              ),
-            );
-          } else {
-            return const SizedBox(height: 60); // Bottom padding
-          }
-        }
-        
-        // Get the feed item
-        final item = combinedFeed[index];
-        final typeString = item['type'] as String;
-        final data = item['data'];
-        
-        // Handle different types of feed items
-        if (typeString == 'space_recommendation') {
-          return _buildSpaceRecommendationCard(data as SpaceRecommendation);
-        } else if (typeString == 'hive_lab') {
-          return _buildHiveLabCard(data as HiveLabItem);
-        } else {
-          // For regular feed items, use the existing builder
-          final itemType = FeedItemBuilder.stringToFeedItemType(typeString);
-          
-          // Check if this event has real-time updates (for debugging only)
-          if (data is Event) {
-            if (_changedRsvps.contains(data.id)) {
-              debugPrint('🔄 Rendering with RSVP update: ${data.id}');
-            }
-            if (_changedReposts.contains(data.id)) {
-              debugPrint('🔄 Rendering with repost update: ${data.id}');
-            }
-          }
-          
-          return FeedItemBuilder.buildFeedItem(
-            type: itemType,
-            item: data,
-            onTap: _navigateToEventDetails,
-            onRsvp: _handleRsvpToEvent,
-            onRepost: _handleRepost,
-          );
-        }
-      },
+    // Use our new FeedListWrapper to fix ParentDataWidget issues
+    return FeedListWrapper(
+      feedItems: combinedFeed,
+      isLoadingMore: feedState.isLoadingMore,
+      hasMoreEvents: feedState.hasMoreEvents,
+      scrollController: _scrollController,
+      onLoadMore: _loadMoreData,
+      onNavigateToEventDetails: _navigateToEventDetails,
+      onRsvpToEvent: _handleRsvpToEvent,
+      onRepost: _handleRepost,
     );
   }
   
@@ -574,9 +516,9 @@ class _MainFeedState extends ConsumerState<MainFeed> {
           Container(
             height: 160,
             width: double.infinity,
-            decoration: BoxDecoration(
+            decoration: const BoxDecoration(
               color: AppColors.grey800,
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+              borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
             ),
           ),
           Padding(
@@ -899,7 +841,7 @@ class _MainFeedState extends ConsumerState<MainFeed> {
         children: [
           Row(
             children: [
-              Icon(Icons.science, color: AppColors.gold),
+              const Icon(Icons.science, color: AppColors.gold),
               const SizedBox(width: 8),
               Text(
                 'HIVE LAB',
@@ -1064,11 +1006,11 @@ class _MainFeedState extends ConsumerState<MainFeed> {
             
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
-                content: Row(
+                content: const Row(
                   children: [
-                    const Icon(Icons.repeat_rounded, color: Colors.white),
-                    const SizedBox(width: 8),
-                    const Text('Event reposted'),
+                    Icon(Icons.repeat_rounded, color: Colors.white),
+                    SizedBox(width: 8),
+                    Text('Event reposted'),
                   ],
                 ),
                 backgroundColor: AppColors.gold.withOpacity(0.8),
@@ -1100,11 +1042,11 @@ class _MainFeedState extends ConsumerState<MainFeed> {
             // Quote repost was created, show success feedback
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
-                content: Row(
+                content: const Row(
                   children: [
-                    const Icon(Icons.format_quote_rounded, color: Colors.white),
-                    const SizedBox(width: 8),
-                    const Text('Quote shared'),
+                    Icon(Icons.format_quote_rounded, color: Colors.white),
+                    SizedBox(width: 8),
+                    Text('Quote shared'),
                   ],
                 ),
                 backgroundColor: AppColors.gold.withOpacity(0.8),

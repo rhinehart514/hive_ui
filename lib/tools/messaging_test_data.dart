@@ -10,7 +10,7 @@ class MessagingTestData {
   static final FirebaseAuth _auth = FirebaseAuth.instance;
   static final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   static final FirebaseDatabase _database = FirebaseDatabase.instance;
-  static final Uuid _uuid = const Uuid();
+  static const Uuid _uuid = Uuid();
   
   /// Initialize the testing tool
   static Future<void> initialize() async {
@@ -1018,7 +1018,7 @@ class MessagingTestData {
       // Use random unsplash images
       final categories = ['campus', 'study', 'coffee', 'library', 'nature', 'technology'];
       final category = categories[DateTime.now().microsecond % categories.length];
-      final dimensions = '800x600';
+      const dimensions = '800x600';
       final randomId = DateTime.now().millisecondsSinceEpoch % 1000;
       
       return 'https://source.unsplash.com/random/$dimensions/?$category&sig=$randomId';

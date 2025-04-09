@@ -102,10 +102,7 @@ class FeedService {
               final hasMore = page * pageSize < filteredEvents.length;
 
               // Log batch information
-              debugPrint('Loaded batch $page (size: $pageSize) from cache. ' +
-                  'Total events: ${filteredEvents.length}, ' +
-                  'Batch events: ${paginatedEvents.length}, ' +
-                  'Has more: $hasMore');
+              debugPrint('Loaded batch $page (size: $pageSize) from cache. ' 'Total events: ${filteredEvents.length}, ' 'Batch events: ${paginatedEvents.length}, ' 'Has more: $hasMore');
 
               return {
                 'events': paginatedEvents,
@@ -261,10 +258,7 @@ class FeedService {
       final hasMore = page * pageSize < filteredEvents.length;
 
       // Log batch information
-      debugPrint('Loaded batch $page (size: $pageSize) from network. ' +
-          'Total events: ${filteredEvents.length}, ' +
-          'Batch events: ${paginatedEvents.length}, ' +
-          'Has more: $hasMore');
+      debugPrint('Loaded batch $page (size: $pageSize) from network. ' 'Total events: ${filteredEvents.length}, ' 'Batch events: ${paginatedEvents.length}, ' 'Has more: $hasMore');
 
       return {
         'events': paginatedEvents,
@@ -307,7 +301,7 @@ class FeedService {
       if (!isUpcoming) {
         // Log details about filtered events
         final hoursAgo = now.difference(event.endDate).inHours;
-        debugPrint('⚠️ Filtering out past event: "${event.title}" - ended ${hoursAgo} hours ago at ${event.endDate}');
+        debugPrint('⚠️ Filtering out past event: "${event.title}" - ended $hoursAgo hours ago at ${event.endDate}');
       } else {
         // For upcoming events, calculate and log how soon they are
         final hoursUntilStart = event.startDate.difference(now).inHours;
@@ -315,10 +309,10 @@ class FeedService {
         
         if (hoursUntilStart <= 0) {
           // Event is happening now
-          debugPrint('✅ Keeping currently happening event: "${event.title}" - started ${-hoursUntilStart} hours ago, ends in ${hoursUntilEnd} hours');
+          debugPrint('✅ Keeping currently happening event: "${event.title}" - started ${-hoursUntilStart} hours ago, ends in $hoursUntilEnd hours');
         } else {
           // Event is in the future
-          debugPrint('✅ Keeping upcoming event: "${event.title}" - starts in ${hoursUntilStart} hours, ends in ${hoursUntilEnd} hours');
+          debugPrint('✅ Keeping upcoming event: "${event.title}" - starts in $hoursUntilStart hours, ends in $hoursUntilEnd hours');
         }
       }
       
@@ -449,7 +443,7 @@ class FeedService {
   static Future<void> _updateCache(List<Event> events) async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final eventsJson = events.map((e) => e.toJson()).toList();
+      final eventsJson = events.map((e) => e.toMap()).toList();
 
       await prefs.setString(_feedCacheKey, json.encode({'events': eventsJson}));
       await prefs.setString(

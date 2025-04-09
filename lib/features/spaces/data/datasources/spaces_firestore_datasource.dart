@@ -1,9 +1,11 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:hive_ui/features/spaces/data/datasources/spaces_data_source.dart';
 import 'package:hive_ui/features/spaces/data/models/space_model.dart';
 import 'package:hive_ui/features/spaces/data/models/space_metrics_model.dart';
 import 'package:hive_ui/features/spaces/domain/entities/space_entity.dart';
+import 'package:hive_ui/features/spaces/domain/entities/space_member_entity.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:hive_ui/models/event.dart';
 import 'dart:convert';
@@ -11,7 +13,7 @@ import 'dart:async';
 import 'dart:math';
 
 /// Firebase Firestore data source for spaces
-class SpacesFirestoreDataSource {
+class SpacesFirestoreDataSource implements SpacesDataSource {
   /// Firestore collection reference for spaces
   final CollectionReference _spacesCollection =
       FirebaseFirestore.instance.collection('spaces');
@@ -33,10 +35,12 @@ class SpacesFirestoreDataSource {
   static DateTime? _lastFirestoreSync;
 
   /// Get all spaces from Firestore with optional caching
+  @override
   Future<List<SpaceModel>> getAllSpaces({
     bool forceRefresh = false,
-    bool includePrivate = false, // Default to not including private spaces
-    bool includeJoined = true, // Default to showing joined spaces
+    bool includePrivate = false,
+    bool includeJoined = true,
+    String? userId,
   }) async {
     try {
       if (_spaceCache.isNotEmpty && !forceRefresh) {
@@ -140,6 +144,7 @@ class SpacesFirestoreDataSource {
   }
 
   /// Get a space by ID with optional space type
+  @override
   Future<SpaceModel?> getSpaceById(String id, {String? spaceType}) async {
     // Check memory cache first
     if (_spaceCache.containsKey(id)) {
@@ -223,6 +228,7 @@ class SpacesFirestoreDataSource {
   }
 
   /// Get spaces by category
+  @override
   Future<List<SpaceModel>> getSpacesByCategory(String category) async {
     try {
       // First load all spaces
@@ -239,15 +245,18 @@ class SpacesFirestoreDataSource {
   }
 
   /// Get all spaces joined by the current user
-  Future<List<SpaceModel>> getJoinedSpaces() async {
+  /// If userId is provided, gets spaces joined by that user instead
+  @override
+  Future<List<SpaceModel>> getJoinedSpaces({String? userId}) async {
     try {
-      final currentUser = FirebaseAuth.instance.currentUser;
-      if (currentUser == null) {
+      // Use provided userId or current user
+      final uid = userId ?? FirebaseAuth.instance.currentUser?.uid;
+      if (uid == null) {
         return [];
       }
 
       // Get the user document
-      final userDoc = await _usersCollection.doc(currentUser.uid).get();
+      final userDoc = await _usersCollection.doc(uid).get();
       
       if (!userDoc.exists) {
         return [];
@@ -277,13 +286,15 @@ class SpacesFirestoreDataSource {
   }
 
   /// Get recommended spaces for the current user
-  Future<List<SpaceModel>> getRecommendedSpaces() async {
+  /// If userId is provided, gets recommendations for that user instead
+  @override
+  Future<List<SpaceModel>> getRecommendedSpaces({String? userId}) async {
     try {
       // Get all public spaces (no private spaces)
       final allSpaces = await getAllSpaces(includePrivate: false);
 
       // Get joined spaces
-      final joinedSpaces = await getJoinedSpaces();
+      final joinedSpaces = await getJoinedSpaces(userId: userId);
       final joinedSpaceIds = joinedSpaces.map((space) => space.id).toSet();
 
       // Filter out already joined spaces
@@ -305,6 +316,7 @@ class SpacesFirestoreDataSource {
   }
 
   /// Search spaces by query text
+  @override
   Future<List<SpaceModel>> searchSpaces(String query) async {
     if (query.isEmpty) {
       return [];
@@ -334,15 +346,17 @@ class SpacesFirestoreDataSource {
   }
 
   /// Join a space
-  Future<void> joinSpace(String spaceId) async {
+  @override
+  Future<void> joinSpace(String spaceId, {String? userId}) async {
     try {
-      final currentUser = FirebaseAuth.instance.currentUser;
-      if (currentUser == null) {
+      // Use provided userId or current user
+      final uid = userId ?? FirebaseAuth.instance.currentUser?.uid;
+      if (uid == null) {
         throw Exception('User not authenticated');
       }
 
       // Update the user document to add space to followedSpaces
-      await _usersCollection.doc(currentUser.uid).update({
+      await _usersCollection.doc(uid).update({
         'followedSpaces': FieldValue.arrayUnion([spaceId]),
         'updatedAt': FieldValue.serverTimestamp(),
       });
@@ -376,6 +390,7 @@ class SpacesFirestoreDataSource {
           updatedAt: DateTime.now(),
           spaceType: updatedSpace.spaceType,
           eventIds: updatedSpace.eventIds,
+          hiveExclusive: updatedSpace.hiveExclusive,
         );
       }
     } catch (e) {
@@ -385,15 +400,17 @@ class SpacesFirestoreDataSource {
   }
 
   /// Leave a space
-  Future<void> leaveSpace(String spaceId) async {
+  @override
+  Future<void> leaveSpace(String spaceId, {String? userId}) async {
     try {
-      final currentUser = FirebaseAuth.instance.currentUser;
-      if (currentUser == null) {
+      // Use provided userId or current user
+      final uid = userId ?? FirebaseAuth.instance.currentUser?.uid;
+      if (uid == null) {
         throw Exception('User not authenticated');
       }
 
       // Update the user document to remove space from followedSpaces
-      await _usersCollection.doc(currentUser.uid).update({
+      await _usersCollection.doc(uid).update({
         'followedSpaces': FieldValue.arrayRemove([spaceId]),
         'updatedAt': FieldValue.serverTimestamp(),
       });
@@ -427,6 +444,7 @@ class SpacesFirestoreDataSource {
           updatedAt: DateTime.now(),
           spaceType: updatedSpace.spaceType,
           eventIds: updatedSpace.eventIds,
+          hiveExclusive: updatedSpace.hiveExclusive,
         );
       }
     } catch (e) {
@@ -436,15 +454,17 @@ class SpacesFirestoreDataSource {
   }
 
   /// Check if the current user has joined a space
-  Future<bool> hasJoinedSpace(String spaceId) async {
+  @override
+  Future<bool> hasJoinedSpace(String spaceId, {String? userId}) async {
     try {
-      final currentUser = FirebaseAuth.instance.currentUser;
-      if (currentUser == null) {
+      // Use provided userId or current user
+      final uid = userId ?? FirebaseAuth.instance.currentUser?.uid;
+      if (uid == null) {
         return false;
       }
 
       // Check if the space ID is in user's followedSpaces
-      final userDoc = await _usersCollection.doc(currentUser.uid).get();
+      final userDoc = await _usersCollection.doc(uid).get();
 
       if (!userDoc.exists) {
         return false;
@@ -468,6 +488,7 @@ class SpacesFirestoreDataSource {
   }
 
   /// Get spaces with upcoming events
+  @override
   Future<List<SpaceModel>> getSpacesWithUpcomingEvents() async {
     try {
       // Get current timestamp
@@ -495,6 +516,7 @@ class SpacesFirestoreDataSource {
   }
 
   /// Get trending spaces
+  @override
   Future<List<SpaceModel>> getTrendingSpaces() async {
     try {
       // Query trending spaces
@@ -625,6 +647,7 @@ class SpacesFirestoreDataSource {
   }
 
   /// Check if a space name already exists
+  @override
   Future<bool> isSpaceNameTaken(String name) async {
     try {
       final normalizedName = name.trim().toLowerCase();
@@ -667,6 +690,7 @@ class SpacesFirestoreDataSource {
   /// This method creates a new space with the specified parameters and
   /// automatically sets up the creator as an admin and moderator.
   /// It also creates the initial space metrics and joins the creator to the space.
+  @override
   Future<SpaceModel> createSpace({
     required String name,
     required String description,
@@ -796,6 +820,7 @@ class SpacesFirestoreDataSource {
   }
 
   /// Get events associated with a space
+  @override
   Future<List<Event>> getSpaceEvents(String spaceId) async {
     try {
       debugPrint('🔍 Fetching events for space: $spaceId');
@@ -898,5 +923,71 @@ class SpacesFirestoreDataSource {
     if (sourceStr == 'user') return EventSource.user;
     if (sourceStr == 'club') return EventSource.club;
     return EventSource.external;
+  }
+
+  /// Get the chat ID associated with a space
+  /// Returns null if no chat exists for this space
+  @override
+  Future<String?> getSpaceChatId(String spaceId) async {
+    try {
+      final querySnapshot = await FirebaseFirestore.instance
+          .collection('chats')
+          .where('spaceId', isEqualTo: spaceId)
+          .limit(1)
+          .get();
+      
+      if (querySnapshot.docs.isEmpty) {
+        debugPrint('No chat found for space $spaceId');
+        return null;
+      }
+      
+      debugPrint('Found chat ID for space $spaceId: ${querySnapshot.docs.first.id}');
+      return querySnapshot.docs.first.id;
+    } catch (e) {
+      debugPrint('Error getting space chat ID: $e');
+      return null;
+    }
+  }
+  
+  /// Get details for a specific space member
+  /// Returns null if the member is not found
+  @override
+  Future<SpaceMemberEntity?> getSpaceMember(String spaceId, String memberId) async {
+    try {
+      // Check if the member document exists in the space's members collection
+      final docSnapshot = await FirebaseFirestore.instance
+          .collection('spaces/$spaceId/members')
+          .doc(memberId)
+          .get();
+          
+      if (!docSnapshot.exists) {
+        debugPrint('Member $memberId not found in space $spaceId');
+        return null;
+      }
+      
+      // Convert to SpaceMemberEntity
+      final data = docSnapshot.data() as Map<String, dynamic>;
+      
+      // Get the role from the document or default to 'member'
+      final role = data['role'] as String? ?? 'member';
+      
+      // Get the display name from the document or default to null
+      final displayName = data['displayName'] as String?;
+      
+      // Get the timestamp or default to now
+      final joinedAtTimestamp = data['joinedAt'] as Timestamp? ?? Timestamp.now();
+      
+      debugPrint('Found member $memberId in space $spaceId with role: $role');
+      return SpaceMemberEntity(
+        id: docSnapshot.id,
+        userId: memberId,
+        role: role,
+        displayName: displayName,
+        joinedAt: joinedAtTimestamp.toDate(),
+      );
+    } catch (e) {
+      debugPrint('Error getting space member: $e');
+      return null;
+    }
   }
 }

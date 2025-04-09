@@ -297,8 +297,8 @@ class _OptimizedEventListState extends ConsumerState<OptimizedEventList> {
       context,
       MaterialPageRoute(
         builder: (context) => EventDetailsPage(
+          eventId: event.id,
           event: event,
-          heroTag: 'event_${event.id}',
         ),
       ),
     );

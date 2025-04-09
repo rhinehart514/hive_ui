@@ -3,11 +3,12 @@ import 'dart:io';
 import '../entities/space.dart';
 import '../entities/space_entity.dart' as entity;
 import '../entities/space_metrics_entity.dart';
-import '../repositories/space_repository.dart';
+import '../repositories/spaces_repository.dart';
+import 'package:flutter/foundation.dart';
 
 /// Use case for creating a new space
 class CreateSpaceUseCase {
-  final SpaceRepository _spaceRepository;
+  final SpacesRepository _spaceRepository;
   
   /// Constructor
   CreateSpaceUseCase(this._spaceRepository);
@@ -16,6 +17,9 @@ class CreateSpaceUseCase {
   Future<bool> execute({
     required Space space,
     File? coverImage,
+    SpacePrivacy privacy = SpacePrivacy.public,
+    SpaceType spaceType = SpaceType.community,
+    List<String> tags = const [],
   }) async {
     // Business logic validation
     if (space.name.isEmpty) {
@@ -31,39 +35,65 @@ class CreateSpaceUseCase {
     }
     
     // Check if the space name is available
-    final isNameAvailable = await _spaceRepository.isSpaceNameAvailable(space.name);
-    if (!isNameAvailable) {
+    final isNameTaken = await _spaceRepository.isSpaceNameTaken(space.name);
+    if (isNameTaken) {
       throw Exception('Space name is already taken');
     }
     
-    // Convert Space to SpaceEntity
-    final spaceEntity = _convertToSpaceEntity(space);
+    // Convert Space to SpaceEntity for parameter extraction
+    final spaceEntity = _convertToSpaceEntity(
+      space, 
+      privacy: privacy, 
+      spaceType: spaceType, 
+      tags: tags
+    );
     
-    // Create the space
-    return await _spaceRepository.createSpace(spaceEntity, coverImage: coverImage);
+    // Create the space using the new interface
+    try {
+      await _spaceRepository.createSpace(
+        name: spaceEntity.name,
+        description: spaceEntity.description,
+        iconCodePoint: spaceEntity.iconCodePoint,
+        spaceType: spaceEntity.spaceType,
+        tags: spaceEntity.tags,
+        isPrivate: spaceEntity.isPrivate,
+        creatorId: spaceEntity.admins.isNotEmpty ? spaceEntity.admins.first : '',
+        isHiveExclusive: spaceEntity.hiveExclusive,
+        coverImage: coverImage,
+      );
+      return true;
+    } catch (e) {
+      debugPrint('Error creating space: $e');
+      return false;
+    }
   }
   
   /// Helper method to convert Space to SpaceEntity
-  entity.SpaceEntity _convertToSpaceEntity(Space space) {
+  entity.SpaceEntity _convertToSpaceEntity(
+    Space space, {
+    required SpacePrivacy privacy,
+    required SpaceType spaceType,
+    required List<String> tags,
+  }) {
     // Convert privacy enum to boolean
-    final isPrivate = space.privacy == SpacePrivacy.private;
+    final isPrivate = privacy == SpacePrivacy.private;
     
     // Set appropriate space type
-    entity.SpaceType spaceType;
-    switch (space.type) {
+    entity.SpaceType entitySpaceType;
+    switch (spaceType) {
       case SpaceType.academic:
-        spaceType = entity.SpaceType.studentOrg;
+        entitySpaceType = entity.SpaceType.studentOrg;
         break;
       case SpaceType.club:
-        spaceType = entity.SpaceType.universityOrg;
+        entitySpaceType = entity.SpaceType.universityOrg;
         break;
       case SpaceType.hiveExclusive:
-        spaceType = entity.SpaceType.hiveExclusive;
+        entitySpaceType = entity.SpaceType.hiveExclusive;
         break;
       case SpaceType.community:
       case SpaceType.event:
       default:
-        spaceType = entity.SpaceType.other;
+        entitySpaceType = entity.SpaceType.other;
         break;
     }
     
@@ -72,16 +102,16 @@ class CreateSpaceUseCase {
       name: space.name,
       description: space.description,
       iconCodePoint: 0xe491, // Default icon code
-      imageUrl: space.coverImageUrl,
-      bannerUrl: space.coverImageUrl,
+      imageUrl: space.imageUrl,
+      bannerUrl: space.imageUrl,
       metrics: SpaceMetricsEntity.empty(),
-      tags: space.tags,
+      tags: tags,
       isPrivate: isPrivate,
       admins: [space.ownerId],
       createdAt: space.createdAt,
       updatedAt: DateTime.now(),
-      spaceType: spaceType,
-      hiveExclusive: space.type == SpaceType.hiveExclusive,
+      spaceType: entitySpaceType,
+      hiveExclusive: spaceType == SpaceType.hiveExclusive,
     );
   }
 } 

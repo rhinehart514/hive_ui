@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_ui/features/messaging/application/providers/messaging_providers.dart';
-import 'package:hive_ui/theme/app_colors.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 
 /// A user avatar widget with optional online status indicator

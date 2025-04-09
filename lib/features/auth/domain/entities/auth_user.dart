@@ -25,6 +25,9 @@ class AuthUser {
   /// Last sign-in timestamp
   final DateTime lastSignInTime;
 
+  /// List of authentication providers the user has connected
+  final List<String> providers;
+
   /// Creates an AuthUser instance
   const AuthUser({
     required this.id,
@@ -34,6 +37,7 @@ class AuthUser {
     required this.isEmailVerified,
     required this.createdAt,
     required this.lastSignInTime,
+    this.providers = const [],
   });
 
   /// Creates an empty user for unauthenticated state
@@ -51,6 +55,12 @@ class AuthUser {
   /// Check if this is an authenticated user
   bool get isNotEmpty => !isEmpty;
 
+  /// Returns true if the user is connected with the specified provider
+  bool hasProvider(String providerId) => providers.contains(providerId);
+  
+  /// Returns true if the user has multiple authentication methods
+  bool get hasMultipleProviders => providers.length > 1;
+
   /// Creates a copy of this user with the given fields replaced with new values
   AuthUser copyWith({
     String? id,
@@ -60,6 +70,7 @@ class AuthUser {
     bool? isEmailVerified,
     DateTime? createdAt,
     DateTime? lastSignInTime,
+    List<String>? providers,
   }) {
     return AuthUser(
       id: id ?? this.id,
@@ -69,6 +80,7 @@ class AuthUser {
       isEmailVerified: isEmailVerified ?? this.isEmailVerified,
       createdAt: createdAt ?? this.createdAt,
       lastSignInTime: lastSignInTime ?? this.lastSignInTime,
+      providers: providers ?? this.providers,
     );
   }
 }

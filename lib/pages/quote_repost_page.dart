@@ -12,7 +12,6 @@ import '../providers/reposted_events_provider.dart';
 import '../services/interactions/interaction_service.dart';
 import '../models/interactions/interaction.dart';
 import '../components/optimized_image.dart';
-import '../utils/auth_utils.dart';
 import 'package:hive_ui/features/auth/providers/auth_providers.dart';
 
 /// Page for creating a quote repost

@@ -3,233 +3,320 @@ import 'dart:io';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_ui/features/auth/domain/repositories/auth_repository.dart';
 import 'package:hive_ui/features/auth/presentation/providers/auth_provider.dart';
-import 'package:hive_ui/features/spaces/domain/entities/space.dart' as domain_space;
 import 'package:hive_ui/features/spaces/domain/entities/space_entity.dart';
-import 'package:hive_ui/features/spaces/domain/entities/space_metrics_entity.dart';
-import 'package:hive_ui/features/spaces/domain/repositories/space_repository.dart';
+import 'package:hive_ui/features/spaces/domain/entities/space_member_entity.dart';
 import 'package:hive_ui/features/spaces/domain/repositories/spaces_repository.dart';
 import 'package:hive_ui/features/spaces/domain/usecases/create_space_usecase.dart';
 import 'package:hive_ui/features/spaces/presentation/providers/spaces_repository_provider.dart';
 import 'package:hive_ui/models/event.dart';
 
-/// Adapter class to bridge between SpacesRepository and SpaceRepository interfaces
-class SpaceRepositoryAdapter implements SpaceRepository {
+/// Adapter class to bridge between SpacesRepository interfaces
+/// @deprecated Consider using SpacesRepository directly
+class SpaceRepositoryAdapter implements SpacesRepository {
   final SpacesRepository _spacesRepository;
   
   SpaceRepositoryAdapter(this._spacesRepository);
   
+  // Forward all methods to the spacesRepository
+  
   @override
-  Future<bool> createSpace(SpaceEntity space, {File? coverImage}) async {
-    try {
-      await _spacesRepository.createSpace(
-        name: space.name,
-        description: space.description,
-        spaceType: space.spaceType,
-        tags: space.tags,
-        isPrivate: space.isPrivate,
-        iconCodePoint: space.iconCodePoint,
-        creatorId: space.admins.isNotEmpty ? space.admins.first : '',
-        isHiveExclusive: space.hiveExclusive,
-      );
-      return true;
-    } catch (e) {
-      return false;
-    }
+  Future<List<SpaceEntity>> getAllSpaces({
+    bool forceRefresh = false,
+    bool includePrivate = false,
+    bool includeJoined = true,
+  }) {
+    return _spacesRepository.getAllSpaces(
+      forceRefresh: forceRefresh,
+      includePrivate: includePrivate,
+      includeJoined: includeJoined,
+    );
+  }
+
+  @override
+  Future<SpaceEntity?> getSpaceById(String id, {String? spaceType}) {
+    return _spacesRepository.getSpaceById(id, spaceType: spaceType);
   }
   
   @override
-  Future<SpaceEntity?> getSpaceById(String spaceId, {String? spaceType}) async {
-    try {
-      // Pass the spaceType to the underlying repository if it supports it
-      return await _spacesRepository.getSpaceById(spaceId);
-    } catch (e) {
-      return null;
-    }
+  Future<List<SpaceEntity>> getSpacesByCategory(String category) {
+    return _spacesRepository.getSpacesByCategory(category);
   }
   
   @override
-  Future<List<SpaceEntity>> getUserSpaces(String userId) async {
-    try {
-      // SpacesRepository doesn't have a method that takes userId, 
-      // using getJoinedSpaces() as a fallback
-      return await _spacesRepository.getJoinedSpaces();
-    } catch (e) {
-      return [];
-    }
+  Future<List<SpaceEntity>> getJoinedSpaces({String? userId}) {
+    return _spacesRepository.getJoinedSpaces(userId: userId);
   }
   
   @override
-  Future<List<SpaceEntity>> getInvitedSpaces(String userId) async {
-    // Not directly supported by SpacesRepository, return empty list
-    return [];
+  Future<List<SpaceEntity>> getInvitedSpaces({String? userId}) {
+    return _spacesRepository.getInvitedSpaces(userId: userId);
   }
   
   @override
-  Future<List<SpaceEntity>> getTrendingSpaces() async {
-    try {
-      return await _spacesRepository.getTrendingSpaces();
-    } catch (e) {
-      return [];
-    }
+  Future<List<SpaceEntity>> getRecommendedSpaces({String? userId}) {
+    return _spacesRepository.getRecommendedSpaces(userId: userId);
   }
   
   @override
-  Future<List<SpaceEntity>> getRecommendedSpaces(String userId) async {
-    try {
-      // Ignoring userId parameter since the underlying repository 
-      // doesn't support it
-      return await _spacesRepository.getRecommendedSpaces();
-    } catch (e) {
-      return [];
-    }
+  Future<List<SpaceEntity>> searchSpaces(String query) {
+    return _spacesRepository.searchSpaces(query);
   }
   
   @override
-  Future<bool> joinSpace(String spaceId, String userId) async {
-    try {
-      // SpacesRepository's joinSpace doesn't take userId
-      await _spacesRepository.joinSpace(spaceId);
-      return true;
-    } catch (e) {
-      return false;
-    }
+  Future<bool> joinSpace(String spaceId, {String? userId}) {
+    return _spacesRepository.joinSpace(spaceId, userId: userId);
   }
   
   @override
-  Future<bool> leaveSpace(String spaceId, String userId) async {
-    try {
-      // SpacesRepository's leaveSpace doesn't take userId
-      await _spacesRepository.leaveSpace(spaceId);
-      return true;
-    } catch (e) {
-      return false;
-    }
+  Future<bool> leaveSpace(String spaceId, {String? userId}) {
+    return _spacesRepository.leaveSpace(spaceId, userId: userId);
   }
   
   @override
-  Future<bool> updateSpace(SpaceEntity space, {File? coverImage}) async {
-    // Not directly supported by SpacesRepository
-    // In a real implementation, you would call a method to update the space
-    return false;
+  Future<bool> hasJoinedSpace(String spaceId, {String? userId}) {
+    return _spacesRepository.hasJoinedSpace(spaceId, userId: userId);
   }
   
   @override
-  Future<bool> deleteSpace(String spaceId) async {
-    // Not directly supported by SpacesRepository
-    // In a real implementation, you would call a method to delete the space
-    return false;
+  Future<List<SpaceEntity>> getSpacesWithUpcomingEvents() {
+    return _spacesRepository.getSpacesWithUpcomingEvents();
   }
   
   @override
-  Future<bool> isSpaceNameAvailable(String name) async {
-    final isTaken = await _spacesRepository.isSpaceNameTaken(name);
-    return !isTaken;
+  Future<List<SpaceEntity>> getTrendingSpaces({int limit = 20}) {
+    return _spacesRepository.getTrendingSpaces(/* limit: limit */);
   }
   
   @override
-  Future<List<SpaceEntity>> searchSpaces(String query) async {
-    try {
-      return await _spacesRepository.searchSpaces(query);
-    } catch (e) {
-      return [];
-    }
-  }
-  
-  @override
-  Future<bool> inviteUsers(String spaceId, List<String> userIds) async {
-    // Not directly supported by SpacesRepository
-    return false;
-  }
-  
-  @override
-  Future<bool> removeInvites(String spaceId, List<String> userIds) async {
-    // Not directly supported by SpacesRepository
-    return false;
-  }
-  
-  @override
-  Future<bool> addAdmin(String spaceId, String userId) async {
-    // Not directly supported by SpacesRepository
-    return false;
-  }
-  
-  @override
-  Future<bool> removeAdmin(String spaceId, String userId) async {
-    // Not directly supported by SpacesRepository
-    return false;
-  }
-  
-  @override
-  Future<bool> createSpaceEvent(String spaceId, String eventId, String creatorId) async {
-    // Not directly supported by SpacesRepository
-    return false;
-  }
-  
-  @override
-  Future<SpaceMetrics> getSpaceMetrics(String spaceId) async {
-    // Not directly supported by SpacesRepository
-    return const SpaceMetrics(
-      memberCount: 0,
-      eventCount: 0,
-      activeMembers: 0,
+  Future<SpaceEntity> createSpace({
+    required String name,
+    required String description,
+    required int iconCodePoint,
+    required SpaceType spaceType,
+    required List<String> tags,
+    required bool isPrivate,
+    required String creatorId,
+    required bool isHiveExclusive,
+    File? coverImage,
+    DateTime? lastActivityAt,
+  }) {
+    return _spacesRepository.createSpace(
+      name: name,
+      description: description,
+      iconCodePoint: iconCodePoint,
+      spaceType: spaceType,
+      tags: tags,
+      isPrivate: isPrivate,
+      creatorId: creatorId,
+      isHiveExclusive: isHiveExclusive,
+      coverImage: coverImage,
+      lastActivityAt: lastActivityAt,
     );
   }
   
   @override
-  Future<List<String>> getUserInterests(String userId) async {
-    // Not directly supported by SpacesRepository
-    return [];
+  Future<SpaceEntity> updateSpace(SpaceEntity space) {
+    return _spacesRepository.updateSpace(space);
   }
   
   @override
-  Future<bool> updateSpaceVerification(String spaceId, bool isVerified) async {
-    // Not directly supported by SpacesRepository
-    return false;
+  Future<String> uploadBannerImage(String spaceId, File bannerImage) {
+    return _spacesRepository.uploadBannerImage(spaceId, bannerImage);
   }
   
   @override
-  Future<List<Event>> getSpaceEvents(String spaceId) async {
-    try {
-      // Get events from the space's events subcollection
-      final events = await _spacesRepository.getSpaceEvents(spaceId);
-      
-      // Convert to Event objects and sort by start date
-      final List<Event> eventsList = events.map((eventData) {
-        return Event(
-          id: eventData.id,
-          title: eventData.title,
-          description: eventData.description,
-          startDate: eventData.startDate,
-          endDate: eventData.endDate,
-          location: eventData.location,
-          organizerEmail: eventData.organizerEmail,
-          organizerName: eventData.organizerName,
-          category: eventData.category,
-          status: eventData.status,
-          link: eventData.link,
-          imageUrl: eventData.imageUrl,
-          source: eventData.source,
-          createdBy: eventData.createdBy,
-          lastModified: eventData.lastModified,
-          visibility: eventData.visibility,
-          attendees: eventData.attendees ?? [],
-          spaceId: spaceId, // Set the spaceId for the event
-        );
-      }).toList();
+  Future<String> uploadProfileImage(String spaceId, File profileImage) {
+    return _spacesRepository.uploadProfileImage(spaceId, profileImage);
+  }
+  
+  @override
+  Future<bool> isSpaceNameTaken(String name) {
+    return _spacesRepository.isSpaceNameTaken(name);
+  }
+  
+  @override
+  Future<List<Event>> getSpaceEvents(String spaceId) {
+    return _spacesRepository.getSpaceEvents(spaceId);
+  }
+  
+  @override
+  Future<bool> inviteUsers(String spaceId, List<String> userIds) {
+    return _spacesRepository.inviteUsers(spaceId, userIds);
+  }
+  
+  @override
+  Future<bool> removeInvites(String spaceId, List<String> userIds) {
+    return _spacesRepository.removeInvites(spaceId, userIds);
+  }
+  
+  @override
+  Future<bool> addAdmin(String spaceId, String userId) {
+    return _spacesRepository.addAdmin(spaceId, userId);
+  }
+  
+  @override
+  Future<bool> removeAdmin(String spaceId, String userId) {
+    return _spacesRepository.removeAdmin(spaceId, userId);
+  }
+  
+  @override
+  Future<List<String>> getSpaceMembers(String spaceId) {
+    return _spacesRepository.getSpaceMembers(spaceId);
+  }
+  
+  @override
+  Future<SpaceMemberEntity?> getSpaceMember(String spaceId, String memberId) {
+    return _spacesRepository.getSpaceMember(spaceId, memberId);
+  }
+  
+  @override
+  Future<SpaceMetrics> getSpaceMetrics(String spaceId) {
+    return _spacesRepository.getSpaceMetrics(spaceId);
+  }
+  
+  @override
+  Future<bool> updateSpaceVerification(String spaceId, bool isVerified) {
+    return _spacesRepository.updateSpaceVerification(spaceId, isVerified);
+  }
+  
+  @override
+  Future<String?> createSpaceChat(String spaceId, String spaceName, {String? imageUrl}) {
+    return _spacesRepository.createSpaceChat(spaceId, spaceName, imageUrl: imageUrl);
+  }
+  
+  @override
+  Future<String?> getSpaceChatId(String spaceId) {
+    return _spacesRepository.getSpaceChatId(spaceId);
+  }
+  
+  // Implement missing methods from SpacesRepository
+  
+  @override
+  Future<bool> addModerator(String spaceId, String userId) {
+    return _spacesRepository.addModerator(spaceId, userId);
+  }
+  
+  @override
+  Future<bool> removeModerator(String spaceId, String userId) {
+    return _spacesRepository.removeModerator(spaceId, userId);
+  }
+  
+  @override
+  Future<bool> updateLifecycleState(
+    String spaceId,
+    SpaceLifecycleState lifecycleState, {
+    DateTime? lastActivityAt,
+  }) {
+    return _spacesRepository.updateLifecycleState(
+      spaceId,
+      lifecycleState,
+      lastActivityAt: lastActivityAt,
+    );
+  }
+  
+  @override
+  Future<bool> updateClaimStatus(
+    String spaceId,
+    SpaceClaimStatus claimStatus, {
+    String? claimId,
+  }) {
+    return _spacesRepository.updateClaimStatus(
+      spaceId,
+      claimStatus,
+      claimId: claimId,
+    );
+  }
 
-      // Sort events by start date
-      eventsList.sort((a, b) => a.startDate.compareTo(b.startDate));
-      
-      return eventsList;
-    } catch (e) {
-      print('Error fetching space events: $e');
-      return [];
-    }
+  @override
+  Future<List<SpaceMemberEntity>> getSpaceMembersWithDetails(String spaceId) {
+    return _spacesRepository.getSpaceMembersWithDetails(spaceId);
   }
+  
+  @override
+  Future<bool> submitLeadershipClaim({
+    required String spaceId,
+    required String userId,
+    required String userName,
+    required String email,
+    required String reason,
+    required String credentials,
+  }) {
+    return _spacesRepository.submitLeadershipClaim(
+      spaceId: spaceId,
+      userId: userId,
+      userName: userName,
+      email: email,
+      reason: reason,
+      credentials: credentials,
+    );
+  }
+  
+  @override
+  Future<bool> updateSpaceMemberRole(
+    String spaceId,
+    String userId,
+    String role,
+  ) {
+    return _spacesRepository.updateSpaceMemberRole(spaceId, userId, role);
+  }
+
+  // --- Add Stubs for Missing Methods ---
+
+  @override
+  Future<void> requestToJoinSpace(String spaceId, String userId) {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<List<String>> getJoinRequests(String spaceId) {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<bool> approveJoinRequest(String spaceId, String userIdToApprove) {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<bool> denyJoinRequest(String spaceId, String userIdToDeny) {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<bool> initiateSpaceArchive(String spaceId, String initiatorId) {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<String> voteForSpaceArchive(String spaceId, String voterId, bool approve) {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<Map<String, dynamic>> getSpaceArchiveStatus(String spaceId) {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<List<SpaceEntity>> getFeaturedSpaces({int limit = 20}) {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<List<SpaceEntity>> getNewestSpaces({int limit = 20}) {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<bool> updateSpaceActivity(String spaceId) {
+    throw UnimplementedError();
+  }
+
+  // --- End Stubs ---
 }
 
 /// Provider for the SpaceRepository adapter
-final spaceRepositoryAdapterProvider = Provider<SpaceRepository>((ref) {
+final spaceRepositoryAdapterProvider = Provider<SpacesRepository>((ref) {
   final spacesRepository = ref.watch(spacesRepositoryProvider);
   return SpaceRepositoryAdapter(spacesRepository);
 });

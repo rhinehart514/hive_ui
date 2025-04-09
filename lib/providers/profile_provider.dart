@@ -362,7 +362,7 @@ class ProfileNotifier extends StateNotifier<ProfileState> {
 
       // Update in Firestore
       await _firestore.collection('users').doc(currentUser.uid).update({
-        'savedEvents': updatedEvents.map((e) => e.toJson()).toList(),
+        'savedEvents': updatedEvents.map((e) => e.toMap()).toList(),
         'eventCount': FieldValue.increment(1),
         'updatedAt': FieldValue.serverTimestamp(),
       });
@@ -372,7 +372,7 @@ class ProfileNotifier extends StateNotifier<ProfileState> {
         state = state.copyWith(
           profile: state.profile!.copyWith(
             savedEvents: updatedEvents,
-            eventCount: (state.profile!.eventCount ?? 0) + 1,
+            eventCount: (state.profile!.eventCount + 1),
           ),
           isLoading: false,
         );
@@ -407,7 +407,7 @@ class ProfileNotifier extends StateNotifier<ProfileState> {
 
       // Update in Firestore
       await _firestore.collection('users').doc(currentUser.uid).update({
-        'savedEvents': updatedEvents.map((e) => e.toJson()).toList(),
+        'savedEvents': updatedEvents.map((e) => e.toMap()).toList(),
         'eventCount': FieldValue.increment(-1),
         'updatedAt': FieldValue.serverTimestamp(),
       });
@@ -417,7 +417,7 @@ class ProfileNotifier extends StateNotifier<ProfileState> {
         state = state.copyWith(
           profile: state.profile!.copyWith(
             savedEvents: updatedEvents,
-            eventCount: (state.profile!.eventCount ?? 1) - 1,
+            eventCount: (state.profile!.eventCount - 1),
           ),
           isLoading: false,
         );
@@ -816,6 +816,8 @@ class EventsNotifier extends StateNotifier<AsyncValue<List<Event>>> {
           category: 'Technology',
           status: 'confirmed',
           link: 'https://ubhacking.com',
+          imageUrl: 'assets/images/events/hackathon.jpg',
+          source: EventSource.external,
         ),
         Event(
           id: '2',
@@ -829,6 +831,8 @@ class EventsNotifier extends StateNotifier<AsyncValue<List<Event>>> {
           category: 'Career',
           status: 'confirmed',
           link: 'https://buffalo.edu/careers',
+          imageUrl: 'assets/images/events/career_fair.jpg',
+          source: EventSource.external,
         ),
       ];
       state = AsyncValue.data(events);

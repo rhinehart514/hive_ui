@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:intl/intl.dart';
 import '../../models/event.dart';
 import '../../models/user_profile.dart';
 import '../../models/repost_content_type.dart';
@@ -14,10 +15,9 @@ import '../../components/optimized_image.dart';
 import 'repost_options_card.dart';
 import 'package:go_router/go_router.dart';
 import '../../providers/feed_provider.dart';
-import '../../theme/app_icons.dart';
 import '../../services/feed/feed_analytics.dart';
-import '../../utils/auth_utils.dart';
-import 'package:intl/intl.dart';
+import '../../components/moderation/report_button.dart';
+import '../../features/moderation/domain/entities/content_report_entity.dart';
 
 /// A premium event card component that follows HIVE's brand aesthetic:
 /// - Black/white core with layered visual depth
@@ -53,6 +53,9 @@ class HiveEventCard extends ConsumerStatefulWidget {
   /// Called when the user reposts the event
   final Function(Event, String?, RepostContentType)? onRepost;
   
+  /// Called when the user reports the event
+  final Function(Event)? onReport;
+  
   /// Whether the user follows the club associated with this event
   final bool followsClub;
   
@@ -74,6 +77,7 @@ class HiveEventCard extends ConsumerStatefulWidget {
     this.onTap,
     this.onRsvp,
     this.onRepost,
+    this.onReport,
     this.followsClub = false,
     this.todayBoosts = const [],
     this.isQuoted = false,
@@ -211,42 +215,45 @@ class _HiveEventCardState extends ConsumerState<HiveEventCard>
     if (widget.onRsvp != null) {
       HapticFeedback.mediumImpact();
       
-      // Play animation
-      _animationController.forward().then((_) {
-        _animationController.reverse();
-      });
+      // Store previous state for possible rollback
+      final previousRsvpState = _isRsvped;
       
-      // Update local state immediately for responsive feel
-      final newRsvpState = !_isRsvped;
-      setState(() {
-        _isRsvped = newRsvpState;
-      });
-      
-      // Save RSVP status to backend
       try {
-        // Make sure we pass the event ID and the new state
-        final success = await EventService.rsvpToEvent(
-          widget.event.id, 
-          newRsvpState,
-        );
+        // Play animation
+        _animationController.forward().then((_) {
+          _animationController.reverse();
+        });
         
-        if (!success && mounted) {
-          // If backend update failed, revert UI state
-          setState(() {
-            _isRsvped = !newRsvpState;
-          });
-        }
+        // Update local state immediately for responsive feel
+        setState(() {
+          _isRsvped = !_isRsvped;
+        });
+        
+        // Call the callback with the event - this should trigger the backend update
+        await widget.onRsvp!(widget.event);
       } catch (e) {
         // If there's an error, revert the local state
         if (mounted) {
+          debugPrint('Error in _handleRsvp: $e - reverting UI state');
           setState(() {
-            _isRsvped = !newRsvpState;
+            _isRsvped = previousRsvpState;
           });
+          
+          // Revert animation if needed
+          if (_animationController.status == AnimationStatus.completed) {
+            _animationController.reverse();
+          }
+          
+          // Show error message
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Text('Failed to update RSVP status'),
+              backgroundColor: Colors.red.shade900,
+              duration: const Duration(seconds: 2),
+            ),
+          );
         }
       }
-      
-      // Call the callback with the event
-      widget.onRsvp!(widget.event);
     }
   }
   
@@ -290,185 +297,208 @@ class _HiveEventCardState extends ConsumerState<HiveEventCard>
     });
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final now = DateTime.now();
-    final eventDate = widget.event.startDate;
-    final dateFormatter = DateFormat('MMM d');
-    final timeFormatter = DateFormat('h:mm a');
-
-    return Container(
-      margin: const EdgeInsets.symmetric(vertical: 8),
-      decoration: BoxDecoration(
-        color: Colors.black,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: Colors.white.withOpacity(0.1),
-          width: 0.5,
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Repost header if applicable
-          if (widget.isRepost && widget.repostedBy != null)
-            Padding(
-              padding: const EdgeInsets.all(12),
-              child: Row(
-                children: [
-                  Text(
-                    '${widget.repostedBy!.displayName} reposted',
-                    style: GoogleFonts.inter(
-                      color: Colors.white.withOpacity(0.7),
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                  if (widget.repostTimestamp != null)
-                    Text(
-                      ' · ${_formatTimeAgo(widget.repostTimestamp!)}',
-                      style: GoogleFonts.inter(
-                        color: Colors.white.withOpacity(0.5),
-                        fontSize: 14,
-                      ),
-                    ),
-                ],
-              ),
-            ),
-
-          // Event content
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Date header
-                Text(
-                  dateFormatter.format(eventDate).toUpperCase(),
-                  style: GoogleFonts.inter(
-                    color: Colors.white,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: 0.5,
-                  ),
-                ),
-                const SizedBox(height: 8),
-
-                // Event title
-                Text(
-                  widget.event.title,
-                  style: GoogleFonts.inter(
-                    color: Colors.white,
-                    fontSize: 20,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: 12),
-
-                // Time and location
-                Row(
-                  children: [
-                    Icon(
-                      Icons.access_time,
-                      size: 16,
-                      color: Colors.white.withOpacity(0.7),
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      '${timeFormatter.format(widget.event.startDate)} - ${timeFormatter.format(widget.event.endDate)}',
-                      style: GoogleFonts.inter(
-                        color: Colors.white.withOpacity(0.7),
-                        fontSize: 14,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Icon(
-                      Icons.location_on,
-                      size: 16,
-                      color: Colors.white.withOpacity(0.7),
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      widget.event.location,
-                      style: GoogleFonts.inter(
-                        color: Colors.white.withOpacity(0.7),
-                        fontSize: 14,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-
-                // RSVP button and actions
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    // RSVP Button
-                    TextButton(
-                      onPressed: _handleRsvp,
-                      style: TextButton.styleFrom(
-                        backgroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                      ),
-                      child: Text(
-                        'RSVP',
-                        style: GoogleFonts.inter(
-                          color: Colors.black,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                    // Circular indicator/action button
-                    Container(
-                      width: 40,
-                      height: 40,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                          color: AppColors.gold.withOpacity(0.5),
-                          width: 2,
-                        ),
-                      ),
-                      child: IconButton(
-                        icon: Icon(
-                          Icons.more_horiz,
-                          color: AppColors.gold,
-                          size: 20,
-                        ),
-                        onPressed: _handleRepost,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
+  // Handle report button tap
+  void _handleReport() {
+    HapticFeedback.mediumImpact();
+    if (widget.onReport != null) {
+      widget.onReport!(widget.event);
+    }
   }
 
-  String _formatTimeAgo(DateTime time) {
-    final now = DateTime.now();
-    final difference = now.difference(time);
-    
-    if (difference.inDays > 0) {
-      return '${difference.inDays}d';
-    } else if (difference.inHours > 0) {
-      return '${difference.inHours}h';
-    } else if (difference.inMinutes > 0) {
-      return '${difference.inMinutes}m';
-    } else {
-      return 'now';
-    }
+  @override
+  Widget build(BuildContext context) {
+    // Log view when visible
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!_hasLoggedView) {
+        _logViewInteraction();
+        _hasLoggedView = true;
+      }
+    });
+
+    // Check if the card is reposted
+    final isReposted = widget.isRepost && widget.repostedBy != null;
+    final isQuote = isReposted && widget.repostType == RepostContentType.quote && widget.quoteText != null && widget.quoteText!.isNotEmpty;
+
+    // Apply different styling if this is a quoted card
+    final margin = widget.isQuoted 
+        ? const EdgeInsets.all(0)
+        : const EdgeInsets.symmetric(horizontal: 16, vertical: 8);
+    final borderRadius = widget.isQuoted ? 12.0 : 24.0;
+
+    // Wrap the card with Dismissible for swipe-to-dismiss functionality
+    return Dismissible(
+      key: ValueKey('dismissible_${widget.event.id}'),
+      direction: DismissDirection.endToStart, // Only allow right to left swipe
+      background: Container(
+        alignment: Alignment.centerRight,
+        padding: const EdgeInsets.only(right: 20.0),
+        color: Colors.red.shade900,
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(
+              Icons.not_interested,
+              color: Colors.white,
+              size: 32,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Not Interested',
+              style: GoogleFonts.inter(
+                color: Colors.white,
+                fontWeight: FontWeight.w600,
+                fontSize: 14,
+              ),
+            ),
+          ],
+        ),
+      ),
+      confirmDismiss: (direction) async {
+        // Confirm the dismissal with haptic feedback
+        HapticFeedback.mediumImpact();
+        
+        // Show a snackbar to confirm
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Event removed from your feed',
+              style: GoogleFonts.inter(),
+            ),
+            backgroundColor: Colors.black.withOpacity(0.8),
+            action: SnackBarAction(
+              label: 'UNDO',
+              textColor: AppColors.gold,
+              onPressed: () {
+                // Refresh feed to bring item back (provider implementation)
+                ref.read(feedStateProvider.notifier).refreshFeed();
+              },
+            ),
+          ),
+        );
+        
+        // Return true to confirm dismiss
+        return true;
+      },
+      onDismissed: (direction) {
+        // Call the provider to hide this event from the feed
+        ref.read(feedStateProvider.notifier).hideEvent(widget.event.id);
+      },
+      child: AnimatedSize(
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeInOut,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // User repost status - show if current user has reposted this event
+            Builder(
+              builder: (context) {
+                final hasReposted = _hasUserReposted();
+                final repostCount = _getRepostCount();
+                
+                if (!hasReposted || repostCount == 0) {
+                  return const SizedBox.shrink();
+                }
+                
+                final repostText = repostCount > 1 
+                  ? 'You and ${repostCount - 1} other${repostCount > 2 ? 's' : ''} reposted' 
+                  : 'You reposted';
+                
+                return Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.repeat_rounded,
+                        size: 14,
+                        color: AppColors.gold.withOpacity(0.8),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        repostText,
+                        style: GoogleFonts.inter(
+                          color: AppColors.white.withOpacity(0.7),
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }
+            ),
+            
+            // Show repost header if this is a repost with animation
+            AnimatedSwitcher(
+              duration: const Duration(milliseconds: 300),
+              transitionBuilder: (Widget child, Animation<double> animation) {
+                return SlideTransition(
+                  position: Tween<Offset>(
+                    begin: const Offset(0, -0.5),
+                    end: Offset.zero,
+                  ).animate(animation),
+                  child: FadeTransition(
+                    opacity: animation,
+                    child: child,
+                  ),
+                );
+              },
+              child: isReposted
+                  ? isQuote 
+                      ? _QuoteRepostHeader(
+                          key: ValueKey('quote_${widget.event.id}'),
+                          user: widget.repostedBy!,
+                          time: widget.repostTimestamp ?? DateTime.now(),
+                          quoteText: widget.quoteText!,
+                          event: widget.event,
+                          onEventTap: widget.onTap != null ? () => widget.onTap!(widget.event) : null,
+                        )
+                      : _RepostHeader(
+                          key: ValueKey('repost_${widget.event.id}'),
+                          user: widget.repostedBy!,
+                          time: widget.repostTimestamp ?? DateTime.now(),
+                          repostType: widget.repostType,
+                        )
+                  : const SizedBox.shrink(key: ValueKey('no_repost')),
+            ),
+            
+            // Only show the main card if this is not a quote repost
+            // For quote reposts, the quoted event is shown in the header
+            if (!isQuote)
+              AnimatedScale(
+                scale: _isPressed ? 0.98 : 1.0,
+                duration: const Duration(milliseconds: 150),
+                curve: Curves.easeOut,
+                child: GestureDetector(
+                  onTap: () {
+                    // Navigate to event details using the correct nested path
+                    if (context.mounted) {
+                      context.push('/home/event/${widget.event.id}', extra: {
+                        'event': widget.event,
+                        'heroTag': 'event-card-${widget.event.id}',
+                      });
+                    }
+                  },
+                  onTapDown: (_) => setState(() => _isPressed = true),
+                  onTapUp: (_) => setState(() => _isPressed = false),
+                  onTapCancel: () => setState(() => _isPressed = false),
+                  child: _EventCardBody(
+                    event: widget.event,
+                    isRsvped: _isRsvped,
+                    isRepostScaling: _isRepostScaling,
+                    onRsvp: _handleRsvp,
+                    onRepostScale: _triggerRepostScale,
+                    onRepost: _handleRepost,
+                    followsClub: widget.followsClub,
+                    todayBoosts: widget.todayBoosts,
+                    margin: margin,
+                    borderRadius: borderRadius,
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
   }
 }
 
@@ -873,75 +903,45 @@ class _DateAndBoostRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final formattedDate = DateFormat('E, MMM d • h:mm a').format(event.startDate);
+    
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+      padding: const EdgeInsets.all(16),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          // Date display
-          Text(
-            _formatShortDate(_convertToLocalTime(event.startDate)),
-            style: GoogleFonts.inter(
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-              color: AppColors.textSecondary,
-              letterSpacing: 0.5,
+          // Date
+          Expanded(
+            child: Row(
+              children: [
+                const Icon(
+                  HugeIcons.calendar,
+                  size: 14,
+                  color: AppColors.textSecondary,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  formattedDate,
+                  style: GoogleFonts.inter(
+                    fontSize: 13,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+              ],
             ),
           ),
           
-          // Boost indicator (if applicable)
-          if (_isBoostEvent(event))
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: AppColors.gold.withOpacity(0.2),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    Icons.trending_up,
-                    size: 14,
-                    color: AppColors.gold,
-                  ),
-                  const SizedBox(width: 4),
-                  Text(
-                    'PROMOTED',
-                    style: GoogleFonts.inter(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.gold,
-                    ),
-                  ),
-                ],
-              ),
-            ),
+          // Report button
+          ReportButton(
+            contentId: event.id,
+            contentType: ReportedContentType.event,
+            contentPreview: event.title,
+            ownerId: event.createdBy,
+            size: 16,
+            color: Colors.white54,
+          ),
         ],
       ),
     );
-  }
-  
-  // Format date as "MON DD" (e.g. "JUN 15")
-  String _formatShortDate(DateTime date) {
-    final monthNames = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 
-                         'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
-    return '${monthNames[date.month - 1]} ${date.day}';
-  }
-  
-  // Helper method to convert EDT times to local time zone
-  DateTime _convertToLocalTime(DateTime dateTime) {
-    // The events are stored in EDT time, so we need to convert to local time
-    final edtOffset = const Duration(hours: -4); // EDT is UTC-4
-    final utcTime = dateTime.toUtc().add(-edtOffset); // Convert EDT to UTC
-    return utcTime.toLocal(); // Convert UTC to local time
-  }
-  
-  // Determine if an event is promoted/boosted
-  bool _isBoostEvent(Event event) {
-    // In a real app, this would be determined by a field on the event
-    // For demo purposes, we'll assume it's false
-    return false;
   }
 }
 
@@ -986,7 +986,7 @@ class _TimeAndLocationRow extends StatelessWidget {
         // Time row
         Row(
           children: [
-            Icon(
+            const Icon(
               HugeIcons.calendar,
               size: 16,
               color: AppColors.textSecondary,
@@ -1010,7 +1010,7 @@ class _TimeAndLocationRow extends StatelessWidget {
         // Location row
         Row(
           children: [
-            Icon(
+            const Icon(
               HugeIcons.strokeRoundedHouse03,
               size: 16,
               color: AppColors.textSecondary,

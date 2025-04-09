@@ -68,6 +68,16 @@
 				<string>hiveapp</string>
 			</array>
 		</dict>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>com.hiveapp</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>hive</string>
+			</array>
+		</dict>
 	</array>
 </dict>
 </plist>

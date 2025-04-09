@@ -28,7 +28,12 @@ import 'package:hive_ui/core/navigation/app_bar_builder.dart';
 import 'package:flutter/foundation.dart' show kDebugMode;
 
 class OnboardingProfilePage extends ConsumerStatefulWidget {
-  const OnboardingProfilePage({super.key});
+  final bool skipToDefaults;
+  
+  const OnboardingProfilePage({
+    super.key, 
+    this.skipToDefaults = false,
+  });
 
   @override
   ConsumerState<OnboardingProfilePage> createState() =>
@@ -59,7 +64,7 @@ class _OnboardingProfilePageState extends ConsumerState<OnboardingProfilePage>
 
   // Answers to sequential questions
   String? _selectedYear;
-  String? _selectedField;
+  String? _selectedMajor;
   String? _selectedResidence;
   AccountTier _selectedTier =
       AccountTier.verified; // Default to verified for UB students
@@ -205,21 +210,20 @@ class _OnboardingProfilePageState extends ConsumerState<OnboardingProfilePage>
       );
     }
 
-    // Load the user email from preferences
-    _userEmail = UserPreferencesService.getUserEmail();
-
-    // Check if user has buffalo.edu email and set tier automatically
-    if (_userEmail.toLowerCase().endsWith('buffalo.edu')) {
-      _selectedTier =
-          AccountTier.verified; // Default to verified for buffalo.edu emails
-    } else if (_userEmail.toLowerCase().endsWith('.edu')) {
-      // For other .edu domains, still set to Public but they can upgrade later
-      _selectedTier = AccountTier.public;
-      // Check if the email is verified in Firebase Auth
-      _checkEmailVerification();
-    } else {
-      // Non .edu emails default to public
-      _selectedTier = AccountTier.public;
+    // Initialize variables from preferences
+    _loadUserEmailFromPreferences();
+    
+    // Check if we should auto-skip with defaults
+    if (widget.skipToDefaults) {
+      // We'll schedule this to happen after the first frame renders
+      // to ensure everything is properly initialized
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          debugPrint('Skipping to defaults as requested by route parameter');
+          // This will be called after the first frame is rendered
+          _autoSkipWithDefaults();
+        }
+      });
     }
 
     // Initialize filtered lists
@@ -249,6 +253,107 @@ class _OnboardingProfilePageState extends ConsumerState<OnboardingProfilePage>
 
     // Verify auth state
     _verifyAuthState();
+  }
+
+  // Auto-skip helper method
+  void _autoSkipWithDefaults() {
+    // Set default values for all required fields
+    setState(() {
+      // Default year
+      _selectedYear = _years.first;
+      
+      // Default major
+      _selectedMajor = 'Computer Science';
+      
+      // Default residence
+      _selectedResidence = _residences.first;
+      
+      // Default tier - use verified if they have a .edu email
+      final userEmail = _firebaseAuth.currentUser?.email ?? '';
+      _selectedTier = userEmail.toLowerCase().endsWith('.edu') 
+          ? AccountTier.verified 
+          : AccountTier.public;
+      
+      // Default interests
+      _selectedInterests.clear();
+      _selectedInterests.addAll([
+        'Campus Events',
+        'Student Life',
+        'Networking',
+        'Career Development',
+        'Social Activities',
+        'Technology'
+      ]);
+    });
+    
+    // Complete onboarding with defaults
+    _completeOnboarding();
+  }
+
+  /// Complete onboarding with current values and navigate to home
+  Future<void> _completeOnboarding() async {
+    try {
+      setState(() {
+        _isCompletingOnboarding = true;
+      });
+      
+      // Get current user ID
+      final userId = _firebaseAuth.currentUser?.uid;
+      if (userId == null) {
+        debugPrint('Cannot complete onboarding: No user ID available');
+        return;
+      }
+      
+      // Create user profile data
+      final profile = UserProfile(
+        id: userId,
+        username: '${_firstNameController.text.trim()} ${_lastNameController.text.trim()}',
+        displayName: '${_firstNameController.text.trim()} ${_lastNameController.text.trim()}',
+        year: _selectedYear ?? 'Freshman',
+        major: _selectedMajor ?? 'Undecided',
+        residence: _selectedResidence ?? 'Off Campus',
+        eventCount: 0,
+        spaceCount: 0,
+        friendCount: 0,
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+        accountTier: _selectedTier,
+        interests: _selectedInterests,
+      );
+      
+      // Save to Firestore
+      await _firestore.collection('users').doc(userId).set(profile.toJson());
+      
+      // Save to local preferences 
+      await UserPreferencesService.storeProfile(profile);
+      
+      // Mark onboarding as completed
+      await UserPreferencesService.setOnboardingCompleted(true);
+      
+      if (mounted) {
+        // Navigate to home
+        context.go('/home');
+      }
+    } catch (e) {
+      debugPrint('Error completing onboarding: $e');
+      // Show error if needed
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isCompletingOnboarding = false;
+        });
+      }
+    }
+  }
+
+  /// Load user email from preferences
+  Future<void> _loadUserEmailFromPreferences() async {
+    final email = UserPreferencesService.getUserEmail();
+    if (email.isNotEmpty && mounted) {
+      setState(() {
+        _userEmail = email;
+      });
+    }
   }
 
   // Check if the user's email is verified in Firebase Auth
@@ -608,68 +713,62 @@ class _OnboardingProfilePageState extends ConsumerState<OnboardingProfilePage>
   }
 
   // Update _completeOnboarding to handle auth issues properly
-  Future<void> _completeOnboarding() async {
+  Future<void> _completeOnboardingAndNavigate() async {
+    if (_isCompletingOnboarding) return;
+
+    setState(() {
+      _isCompletingOnboarding = true;
+    });
+
     try {
-      setState(() {
-        _isCompletingOnboarding = true;
-      });
-
-      // Get the user's email to verify permissions
-      final String userEmail = _userEmail.toLowerCase();
-      final bool hasBuffaloEmail = userEmail.endsWith('buffalo.edu');
-
-      // Force public account for non-Buffalo emails regardless of selection
-      if (!hasBuffaloEmail &&
-          (_selectedTier == AccountTier.verified ||
-              _selectedTier == AccountTier.verifiedPlus)) {
-        setState(() {
-          _selectedTier = AccountTier.public;
-        });
-
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(
-                  'Only Buffalo.edu emails can have Verified accounts. Your account has been set to Public.'),
-              duration: Duration(seconds: 3),
-            ),
-          );
-        }
-      }
-
-      // Get the current Firebase user
-      final auth = FirebaseAuth.instance;
-      final firestore = FirebaseFirestore.instance;
-      final currentUser = auth.currentUser;
+      // Get the current user
+      final firebaseAuth = FirebaseAuth.instance;
+      final currentUser = firebaseAuth.currentUser;
 
       if (currentUser == null) {
-        throw Exception('No authenticated user found');
+        setState(() {
+          _isCompletingOnboarding = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('No authenticated user found'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
       }
 
-      // Create a username from first and last name
+      // Get the user's values from text controllers and selections
       final String firstName = _firstNameController.text.trim();
       final String lastName = _lastNameController.text.trim();
-      final String username = '$firstName $lastName';
+      final String userEmail = _userEmail.toLowerCase();
+      
+      debugPrint('Creating user profile for ${currentUser.email}');
 
-      // Update the Firebase user's profile with the data collected during onboarding
+      final String username = '${firstName.toLowerCase()}${lastName.toLowerCase()}';
+      final bool hasBuffaloEmail = currentUser.email != null &&
+          currentUser.email!.toLowerCase().endsWith('buffalo.edu');
+
+      // Create the user profile structure for Firestore
       final Map<String, dynamic> profileData = {
         'id': currentUser.uid,
         'userId': currentUser.uid,
         'username': username, // Use the combined first and last name
-        'displayName': username, // Also set displayName for compatibility
+        'displayName': '$firstName $lastName', // Also set displayName for compatibility
+        'firstName': firstName,
+        'lastName': lastName,
         'email': currentUser.email,
         'photoURL': currentUser.photoURL ?? '',
-        'educationalEmail': _userEmail,
+        'educationalEmail': userEmail,
         'eduEmailVerified': hasBuffaloEmail, // Auto-verify Buffalo emails
         'year': _selectedYear,
-        'major':
-            _selectedField, // Use major instead of field for UserProfile compatibility
+        'major': _selectedMajor, // Direct mapping to major field
         'residence': _selectedResidence,
         'interests': _selectedInterests, // Save as a list instead of a string
         'accountTier': _selectedTier.name,
         'onboardingCompleted': true,
         'eventCount': 0,
-        'clubCount': 0,
+        'spaceCount': 0,
         'friendCount': 0,
         'createdAt': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
@@ -689,7 +788,7 @@ class _OnboardingProfilePageState extends ConsumerState<OnboardingProfilePage>
       }
 
       // Update or create the user document in Firestore
-      await firestore.collection('users').doc(currentUser.uid).set(
+      await _firestore.collection('users').doc(currentUser.uid).set(
             profileData,
             SetOptions(merge: true),
           );
@@ -700,12 +799,33 @@ class _OnboardingProfilePageState extends ConsumerState<OnboardingProfilePage>
       // Save the user ID to preferences for persistence
       await UserPreferencesService.setUserId(currentUser.uid);
 
-      // Refresh the profile provider after onboarding completion
-      if (ref.exists(profileProvider)) {
-        debugPrint('Refreshing profile provider after onboarding completion');
-        await ref.read(profileProvider.notifier).refreshProfile();
-      } else {
-        debugPrint('Profile provider not available, skipping refresh');
+      // Create a UserProfile object from the profile data
+      final userProfile = UserProfile.fromJson(profileData);
+      
+      // Cache the profile locally to ensure it's available immediately
+      await UserPreferencesService.storeProfile(userProfile);
+      
+      // Call refreshProfile with a retry mechanism
+      int retries = 0;
+      bool refreshSuccess = false;
+      while (!refreshSuccess && retries < 3) {
+        try {
+          if (ref.exists(profileProvider)) {
+            debugPrint('Refreshing profile provider after onboarding completion (attempt ${retries + 1})');
+            await ref.read(profileProvider.notifier).refreshProfile();
+            refreshSuccess = true;
+            debugPrint('Profile refresh successful');
+          } else {
+            debugPrint('Profile provider not available, skipping refresh');
+            break;
+          }
+        } catch (e) {
+          debugPrint('Error refreshing profile (attempt ${retries + 1}): $e');
+          retries++;
+          if (retries < 3) {
+            await Future.delayed(Duration(milliseconds: 500 * retries));
+          }
+        }
       }
 
       if (mounted) {
@@ -1054,7 +1174,7 @@ class _OnboardingProfilePageState extends ConsumerState<OnboardingProfilePage>
   // ignore: unused_element
   void _clearFieldSelection() {
     setState(() {
-      _selectedField = null;
+      _selectedMajor = null;
       _fieldSearchQuery = '';
       // Apply education level filter
       _filterFields('');
@@ -1552,17 +1672,18 @@ class _OnboardingProfilePageState extends ConsumerState<OnboardingProfilePage>
               itemCount: _filteredFields.length,
               itemBuilder: (context, index) {
                 final field = _filteredFields[index];
-                final bool isSelected = _selectedField == field;
+                final bool isSelected = _selectedMajor == field;
 
                 return GestureDetector(
                   onTap: () {
                     HapticFeedback.selectionClick();
                     setState(() {
-                      _selectedField = field;
-
-                      // Remove auto-advance code to ensure user must tap the continue button
-                      // This ensures mobile users can deliberately advance with the Continue button
+                      _selectedMajor = field;
+                      _fieldSearchQuery = ''; // Clear search after selection
+                      _filteredFields = []; // Clear filtered list
+                      _searchFocusNode.unfocus(); // Dismiss keyboard
                     });
+                    _nextPage();
                   },
                   child: Container(
                     margin: const EdgeInsets.only(bottom: 12),
@@ -1630,7 +1751,7 @@ class _OnboardingProfilePageState extends ConsumerState<OnboardingProfilePage>
           _buildProgressIndicator(6, currentPage),
           const SizedBox(height: 16),
           _buildContinueButton(
-            onPressed: _selectedField != null ? _nextPage : null,
+            onPressed: _selectedMajor != null ? _nextPage : null,
           ),
         ],
       ),
@@ -2078,6 +2199,27 @@ class _OnboardingProfilePageState extends ConsumerState<OnboardingProfilePage>
             onPressed:
                 _selectedInterests.length >= _minInterests ? _nextPage : null,
           ),
+          
+          // Add skip option with defaults
+          const SizedBox(height: 12),
+          GestureDetector(
+            onTap: () {
+              _skipWithDefaultInterests();
+              HapticFeedback.lightImpact();
+            },
+            child: Padding(
+              padding: const EdgeInsets.all(8.0),
+              child: Text(
+                'Skip with recommended interests',
+                style: GoogleFonts.inter(
+                  color: Colors.white.withOpacity(0.6),
+                  fontSize: 14,
+                  decoration: TextDecoration.underline,
+                ),
+              ),
+            ),
+          ),
+          
           const SizedBox(height: 24), // Extra space at bottom for mobile
         ],
       ),
@@ -2268,7 +2410,7 @@ class _OnboardingProfilePageState extends ConsumerState<OnboardingProfilePage>
                       // Make sure club and role are selected (should be set from dialog)
                       if (_selectedClub != null && _selectedClubRole != null) {
                         // Complete onboarding directly - we've already collected club info
-                        _completeOnboarding();
+                        _completeOnboardingAndNavigate();
                       } else {
                         // Something went wrong, prompt user to select their club
                         ScaffoldMessenger.of(context).showSnackBar(
@@ -2302,7 +2444,7 @@ class _OnboardingProfilePageState extends ConsumerState<OnboardingProfilePage>
                   case AccountTier.verified:
                     if (hasBuffaloEmail) {
                       // Complete onboarding directly
-                      _completeOnboarding();
+                      _completeOnboardingAndNavigate();
                     } else {
                       // Not a buffalo.edu email - enforce the rule
                       ScaffoldMessenger.of(context).showSnackBar(
@@ -2324,7 +2466,7 @@ class _OnboardingProfilePageState extends ConsumerState<OnboardingProfilePage>
                   default:
                     // Complete onboarding for public tier - fixed to ensure it always processes
                     debugPrint('Completing onboarding for public tier account');
-                    _completeOnboarding();
+                    _completeOnboardingAndNavigate();
                     break;
                 }
               } catch (e) {
@@ -2725,7 +2867,7 @@ class _OnboardingProfilePageState extends ConsumerState<OnboardingProfilePage>
                   onPressed: (_selectedClub != null &&
                           _selectedClubRole != null &&
                           !_isLoadingClubs)
-                      ? _completeOnboarding
+                      ? _completeOnboardingAndNavigate
                       : null,
                 ),
         ],
@@ -3051,28 +3193,28 @@ class _OnboardingProfilePageState extends ConsumerState<OnboardingProfilePage>
   List<String> _getRelevantInterests() {
     final List<String> relevant = [];
 
-    if (_selectedField == null) return relevant;
+    if (_selectedMajor == null) return relevant;
 
     // Check for STEM-related fields
-    if (_selectedField!.contains('Engineering') ||
-        _selectedField!.contains('Computer') ||
-        _selectedField!.contains('Science') ||
-        _selectedField!.contains('Mathematics') ||
-        _selectedField!.contains('Physics') ||
-        _selectedField!.contains('Chemistry') ||
-        _selectedField!.contains('Biology')) {
+    if (_selectedMajor!.contains('Engineering') ||
+        _selectedMajor!.contains('Computer') ||
+        _selectedMajor!.contains('Science') ||
+        _selectedMajor!.contains('Mathematics') ||
+        _selectedMajor!.contains('Physics') ||
+        _selectedMajor!.contains('Chemistry') ||
+        _selectedMajor!.contains('Biology')) {
       relevant.addAll(
           ['Research', 'Hackathons', 'Tutoring', 'Academic Competitions']);
     }
 
     // Check for arts-related fields
-    if (_selectedField!.contains('Art') ||
-        _selectedField!.contains('Music') ||
-        _selectedField!.contains('Theater') ||
-        _selectedField!.contains('Design') ||
-        _selectedField!.contains('Film') ||
-        _selectedField!.contains('Dance') ||
-        _selectedField!.contains('Creative')) {
+    if (_selectedMajor!.contains('Art') ||
+        _selectedMajor!.contains('Music') ||
+        _selectedMajor!.contains('Theater') ||
+        _selectedMajor!.contains('Design') ||
+        _selectedMajor!.contains('Film') ||
+        _selectedMajor!.contains('Dance') ||
+        _selectedMajor!.contains('Creative')) {
       relevant.addAll([
         'Visual Arts',
         'Music',
@@ -3084,11 +3226,11 @@ class _OnboardingProfilePageState extends ConsumerState<OnboardingProfilePage>
     }
 
     // Check for business-related fields
-    if (_selectedField!.contains('Business') ||
-        _selectedField!.contains('Management') ||
-        _selectedField!.contains('Economics') ||
-        _selectedField!.contains('Marketing') ||
-        _selectedField!.contains('Finance')) {
+    if (_selectedMajor!.contains('Business') ||
+        _selectedMajor!.contains('Management') ||
+        _selectedMajor!.contains('Economics') ||
+        _selectedMajor!.contains('Marketing') ||
+        _selectedMajor!.contains('Finance')) {
       relevant.addAll([
         'Networking',
         'Entrepreneurship',
@@ -3098,27 +3240,21 @@ class _OnboardingProfilePageState extends ConsumerState<OnboardingProfilePage>
     }
 
     // Check for healthcare-related fields
-    if (_selectedField!.contains('Health') ||
-        _selectedField!.contains('Nursing') ||
-        _selectedField!.contains('Medicine') ||
-        _selectedField!.contains('Pharmacy') ||
-        _selectedField!.contains('Therapy')) {
+    if (_selectedMajor!.contains('Health') ||
+        _selectedMajor!.contains('Nursing') ||
+        _selectedMajor!.contains('Medicine') ||
+        _selectedMajor!.contains('Pharmacy') ||
+        _selectedMajor!.contains('Therapy')) {
       relevant.addAll(['Volunteering', 'Research', 'Fitness', 'Yoga']);
     }
 
     // Check for social science fields
-    if (_selectedField!.contains('Psychology') ||
-        _selectedField!.contains('Sociology') ||
-        _selectedField!.contains('Anthropology') ||
-        _selectedField!.contains('Political') ||
-        _selectedField!.contains('History')) {
-      relevant.addAll([
-        'Social Justice',
-        'Political Activism',
-        'Volunteering',
-        'Cultural Clubs',
-        'Debate'
-      ]);
+    if (_selectedMajor!.contains('Psychology') ||
+        _selectedMajor!.contains('Sociology') ||
+        _selectedMajor!.contains('Anthropology') ||
+        _selectedMajor!.contains('Political') ||
+        _selectedMajor!.contains('History')) {
+      relevant.addAll(['Volunteering', 'Discussion Groups', 'Book Clubs']);
     }
 
     return relevant;
@@ -4749,6 +4885,46 @@ class _OnboardingProfilePageState extends ConsumerState<OnboardingProfilePage>
         // Refresh UI state
       });
     }
+  }
+
+  /// Skip interest selection and use default interests
+  void _skipWithDefaultInterests() {
+    // Set default interests based on the user's major
+    setState(() {
+      _selectedInterests.clear();
+      
+      // Add some default general interests that most students might like
+      final defaultInterests = [
+        'Campus Events',
+        'Student Life',
+        'Networking',
+        'Career Development',
+        'Social Activities',
+      ];
+      
+      // Add major-specific interests if available
+      if (_selectedMajor != null) {
+        if (_selectedMajor!.contains('Computer') || _selectedMajor!.contains('Engineering')) {
+          defaultInterests.addAll(['Technology', 'Programming', 'Innovation']);
+        } else if (_selectedMajor!.contains('Business') || _selectedMajor!.contains('Economics')) {
+          defaultInterests.addAll(['Entrepreneurship', 'Finance', 'Leadership']);
+        } else if (_selectedMajor!.contains('Art') || _selectedMajor!.contains('Design')) {
+          defaultInterests.addAll(['Creative Arts', 'Design', 'Visual Arts']);
+        } else if (_selectedMajor!.contains('Science') || _selectedMajor!.contains('Biology')) {
+          defaultInterests.addAll(['Research', 'Science', 'Healthcare']);
+        }
+      }
+      
+      // Filter to ensure all interests exist in the available options
+      for (final interest in defaultInterests) {
+        if (_interestOptions.contains(interest) && _selectedInterests.length < _maxInterests) {
+          _selectedInterests.add(interest);
+        }
+      }
+    });
+    
+    // Continue to next page
+    _nextPage();
   }
 }
 

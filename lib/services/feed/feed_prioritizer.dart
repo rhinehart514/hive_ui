@@ -5,7 +5,6 @@ import 'package:hive_ui/models/feed_inspirational_message.dart';
 import 'package:hive_ui/features/friends/domain/entities/suggested_friend.dart';
 import 'package:hive_ui/models/recommended_space.dart';
 import 'package:hive_ui/models/user_profile.dart';
-import 'package:flutter/material.dart';
 import 'package:hive_ui/models/repost_content_type.dart';
 
 /// Service for prioritizing and distributing feed items
@@ -553,9 +552,9 @@ class FeedPrioritizer {
       
       if (userYear != null && 
           (event.description.toLowerCase().contains('year $userYear') ||
-           event.description.toLowerCase().contains('${_getYearString(userYear)}') ||
+           event.description.toLowerCase().contains(_getYearString(userYear)) ||
            event.title.toLowerCase().contains('year $userYear') ||
-           event.title.toLowerCase().contains('${_getYearString(userYear)}'))) {
+           event.title.toLowerCase().contains(_getYearString(userYear)))) {
         score += 2; // Event is targeted at user's academic year
       }
       
@@ -698,11 +697,12 @@ class FeedPrioritizer {
         major: '',
         residence: '',
         eventCount: 0,
-        clubCount: 0,
+        spaceCount: 0,
         friendCount: 0,
         profileImageUrl: null,
         createdAt: now.subtract(const Duration(days: 30)),
         updatedAt: now,
+        interests: const [],
       );
 
       reposts.add(

@@ -45,7 +45,7 @@ class EventHeaderSection extends StatelessWidget {
               child: Transform.scale(
                 scale: 1 + (scrollOffset * 0.0005),
                 child: OptimizedImage(
-                  imageUrl: event.safeImageUrl,
+                  imageUrl: _getSafeImageUrl(),
                   fit: BoxFit.cover,
                   backgroundColor: AppColors.cardBackground,
                 ),
@@ -179,7 +179,7 @@ class EventHeaderSection extends StatelessWidget {
                     child: Row(
                       children: [
                         Icon(
-                          event.isClubCreated ? Icons.groups : Icons.person,
+                          _isClubCreated() ? Icons.groups : Icons.person,
                           color: AppColors.white,
                           size: 16,
                         ),
@@ -357,5 +357,16 @@ class EventHeaderSection extends StatelessWidget {
   /// Format year
   String _formatYear(DateTime date) {
     return date.year.toString();
+  }
+
+  // Helper method to get a safe image URL
+  String _getSafeImageUrl() {
+    // Return the image URL if it exists and is not empty, otherwise return an empty string
+    return event.imageUrl.isNotEmpty ? event.imageUrl : '';
+  }
+
+  // Helper method to check if event was created by a club
+  bool _isClubCreated() {
+    return event.source == EventSource.club;
   }
 }

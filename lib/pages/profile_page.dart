@@ -6,36 +6,33 @@ import 'package:auto_route/auto_route.dart';
 import 'package:timezone/data/latest.dart' as tz;
 import 'package:go_router/go_router.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:hive_ui/core/navigation/routes.dart';
 import 'package:hive_ui/widgets/profile/profile_header.dart';
 import 'package:hive_ui/widgets/profile/profile_tab_content.dart' as content;
 import 'package:hive_ui/widgets/profile/profile_skeleton_loader.dart';
-import 'package:hive_ui/widgets/profile/modern_profile_editor.dart';
 import 'package:hive_ui/widgets/profile/profile_image_viewer.dart';
 import 'package:hive_ui/widgets/profile/verified_plus_dialog.dart';
 import 'package:hive_ui/widgets/profile/profile_tab_bar.dart';
 import 'package:hive_ui/widgets/profile/profile_share_modal.dart';
-import 'package:hive_ui/widgets/profile/profile_interaction_buttons.dart';
 import 'package:hive_ui/constants/interest_options.dart';
 import 'package:hive_ui/providers/admin_provider.dart';
 import 'package:hive_ui/providers/friend_providers.dart';
-
-// Models
 import 'package:hive_ui/models/user_profile.dart';
+import 'package:hive_ui/theme/app_colors.dart';
+import 'package:hive_ui/widgets/profile/activity_feed.dart';
+import 'package:hive_ui/widgets/profile/profile_accessibility_helper.dart';
+import 'package:hive_ui/widgets/profile/enhanced_profile_editor.dart';
+import 'package:hive_ui/widgets/friends/friend_request_button.dart';
 
 // New architecture providers
-import 'package:hive_ui/features/profile/presentation/providers/profile_providers.dart';
+import 'package:hive_ui/features/profile/presentation/providers/profile_providers.dart' as profile_providers;
 import 'package:hive_ui/features/profile/presentation/providers/profile_media_provider.dart';
-import 'package:hive_ui/features/profile/presentation/providers/social_providers.dart';
 
 // Keep services
 import 'package:hive_ui/services/profile_sharing_service.dart';
 
 // Theme and Styling
-import 'package:hive_ui/theme/app_colors.dart';
 import 'package:hive_ui/theme/huge_icons.dart';
-import 'package:hive_ui/features/profile/presentation/widgets/profile_accessibility_helper.dart';
 
 /// Provider to track whether the profile page is viewing the current user or another user
 final isCurrentUserProfileProvider = StateProvider<bool>((ref) => true);
@@ -59,6 +56,8 @@ class _ProfilePageState extends ConsumerState<ProfilePage>
     with TickerProviderStateMixin {
   late TabController _tabController;
   bool _isInitialized = false;
+  late ScrollController _scrollController;
+  bool _isHeaderExpanded = false;
 
   @override
   void initState() {
@@ -67,14 +66,25 @@ class _ProfilePageState extends ConsumerState<ProfilePage>
     // Initialize timezone database
     tz.initializeTimeZones();
 
-    // Initialize TabController with correct length
-    // (3 tabs - Spaces, Events, Friends)
-    _tabController = TabController(length: 3, vsync: this);
+    _scrollController = ScrollController()
+      ..addListener(() {
+        setState(() {
+          _isHeaderExpanded = _scrollController.hasClients &&
+              _scrollController.offset <= (240 - kToolbarHeight);
+        });
+      });
+    _tabController = TabController(length: 4, vsync: this);
 
     // Set initial tab index to 2 (Friends) for debugging the friends tab
     _tabController.index = 2;
-
-    // DON'T modify providers in initState - moved to didChangeDependencies
+    
+    // Schedule profile sync after showing the page
+    // We do this after a short delay to avoid UI jank
+    Future.delayed(const Duration(milliseconds: 500), () {
+      if (mounted) {
+        ref.read(profile_providers.profileSyncProvider.notifier).scheduleSyncProfile();
+      }
+    });
     
     // Add tab controller listener for haptic feedback
     // Wrap in try-catch to prevent any TabController issues
@@ -121,10 +131,10 @@ class _ProfilePageState extends ConsumerState<ProfilePage>
         debugPrint('Profile page: Loading profile data for ${widget.userId ?? 'current user'}');
         if (widget.userId != null) {
           // Load another user's profile using loadProfile with userId parameter
-          ref.read(profileProvider.notifier).loadProfile(widget.userId!);
+          ref.read(profile_providers.profileProvider.notifier).loadProfile(widget.userId!);
         } else {
           // For current user profile, refresh to ensure data is up-to-date
-          ref.read(profileProvider.notifier).refreshProfile();
+          ref.read(profile_providers.profileProvider.notifier).refreshProfile();
         }
       }
     });
@@ -139,6 +149,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage>
     } catch (e) {
       debugPrint('Error disposing TabController: $e');
     }
+    _scrollController.dispose();
     super.dispose();
   }
 
@@ -150,6 +161,20 @@ class _ProfilePageState extends ConsumerState<ProfilePage>
       backgroundColor: AppColors.black,
       extendBodyBehindAppBar: true,
       extendBody: true,
+      // Add a FloatingActionButton for the sync menu (only for current user)
+      floatingActionButton: widget.userId == null ? 
+        FloatingActionButton(
+          backgroundColor: AppColors.gold,
+          foregroundColor: Colors.black,
+          tooltip: 'Profile Options',
+          onPressed: () {
+            final profileState = ref.read(profile_providers.profileProvider);
+            if (profileState.profile != null) {
+              _showProfileOptions(context, profileState.profile!);
+            }
+          },
+          child: const Icon(Icons.sync),
+        ) : null,
       appBar: PreferredSize(
         preferredSize: const Size.fromHeight(0),
         child: AppBar(
@@ -165,7 +190,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage>
       ),
       body: Consumer(
         builder: (context, ref, child) {
-          final profileState = ref.watch(profileProvider);
+          final profileState = ref.watch(profile_providers.profileProvider);
 
           // Use our custom whenWidget method
           return profileState.whenWidget(
@@ -213,7 +238,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage>
             ElevatedButton.icon(
               onPressed: () {
                 // Use the new provider
-                ref.read(profileProvider.notifier).refreshProfile();
+                ref.read(profile_providers.profileProvider.notifier).refreshProfile();
               },
               style: ElevatedButton.styleFrom(
                 elevation: 0,
@@ -256,6 +281,10 @@ class _ProfilePageState extends ConsumerState<ProfilePage>
 
     // Tab view content with optimized accessibility
     final tabViews = [
+      ActivityFeedTab(
+        profile: profile,
+        userId: widget.userId,
+      ),
       content.ProfileTabContent(
         tabType: content.ProfileTabType.spaces,
         profile: profile,
@@ -290,7 +319,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage>
     final accessibleTabBarView = ProfileAccessibilityHelper.createAccessibleTabView(
       tabController: _tabController,
       children: tabViews,
-      tabLabels: ['Spaces', 'Events', 'Friends'],
+      tabLabels: ['Activity', 'Spaces', 'Events', 'Friends'],
     );
 
     return AnnotatedRegion<SystemUiOverlayStyle>(
@@ -339,6 +368,8 @@ class _ProfilePageState extends ConsumerState<ProfilePage>
                   onMessage: _handleMessage,
                   onShareProfile: _handleShareProfile,
                   onAddTagsTapped: () => _showTagsDialog(context),
+                  firstName: profile.firstName,
+                  lastName: profile.lastName,
                 ),
               ),
               // Use the ProfileTabBarDelegate for a sticky tab bar
@@ -360,81 +391,19 @@ class _ProfilePageState extends ConsumerState<ProfilePage>
   }
 
   void _initializeServices() {
-    if (!mounted) return;
-
-    try {
-      // Initialize user profile data if needed
-      if (!_isInitialized) {
-        _isInitialized = true;
-
-        Future(() async {
-          if (!mounted) return;
-
-          try {
-            // Check if we already have profile data
-            final profileState = ref.read(profileProvider);
-            final hasProfileData = profileState.profile != null &&
-                !profileState.isLoading &&
-                !profileState.hasError;
-
-            if (!hasProfileData) {
-              // If no profile data, show loading and refresh
-              debugPrint(
-                  'Profile page: No profile data available, refreshing...');
-              await ref.read(profileProvider.notifier).refreshProfile();
-            } else {
-              // If we have data, still refresh in the background
-              debugPrint(
-                  'Profile page: Data available, refreshing in background');
-              ref.read(profileProvider.notifier).refreshProfile();
-            }
-
-            // If viewing another user's profile, initialize social status
-            if (mounted && widget.userId != null) {
-              ref
-                  .read(socialProvider.notifier)
-                  .initializeFollowingStatus(widget.userId!);
-            }
-
-            // Pre-load profile image to avoid jank
-            _preloadProfileImage();
-          } catch (e) {
-            debugPrint('Error initializing profile: $e');
-            if (mounted) {
-              // Only show error if we don't have any profile data
-              final profileState = ref.read(profileProvider);
-              if (profileState.profile == null) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: const Text('Error loading profile. Please try again.'),
-                    backgroundColor: Colors.red,
-                    action: SnackBarAction(
-                      label: 'Retry',
-                      textColor: Colors.white,
-                      onPressed: () {
-                        if (mounted) {
-                          Future(() {
-                            ref.read(profileProvider.notifier).refreshProfile();
-                          });
-                        }
-                      },
-                    ),
-                  ),
-                );
-              }
-            }
-          }
-        });
-      }
-    } catch (e) {
-      debugPrint('Error in _initializeServices: $e');
-    }
+    if (_isInitialized) return;
+    _isInitialized = true;
+    
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      // Initialize any required services here
+    });
   }
 
   // Preload profile image to avoid jank when showing the profile
   void _preloadProfileImage() {
     try {
-      final profileState = ref.read(profileProvider);
+      final profileState = ref.read(profile_providers.profileProvider);
 
       // Only try to preload if the profile is already loaded
       if (profileState.profile != null) {
@@ -487,18 +456,21 @@ class _ProfilePageState extends ConsumerState<ProfilePage>
       overlays: [SystemUiOverlay.top],
     );
 
-    // Go directly to the full profile editor
-    showModernProfileEditor(
+    // Store context references before async gap
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
+
+    // Use the enhanced profile editor instead of the modern editor
+    showEnhancedProfileEditor(
       context,
       profile,
       (updatedProfile) async {
         try {
           // Update the profile provider
-          await _handleProfileUpdate(updatedProfile);
+          await _handleProfileUpdate();
         } catch (error) {
           // Show error message
           if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
+            scaffoldMessenger.showSnackBar(
               SnackBar(
                 content: Text(
                   'Failed to update profile',
@@ -521,57 +493,31 @@ class _ProfilePageState extends ConsumerState<ProfilePage>
     );
   }
 
-  Future<void> _handleProfileUpdate(UserProfile updatedProfile) async {
-    // Store context in local variable
-    final currentContext = context;
-
+  Future<void> _handleProfileUpdate() async {
+    // Store necessary context references before async operation
+    final navigatorState = Navigator.of(context);
+    final scaffoldState = ScaffoldMessenger.of(context);
+    
     try {
-      // Log the profile update for debugging
-      debugPrint('⏳ Updating profile with tags: ${updatedProfile.interests}');
+      await ref.read(profile_providers.profileProvider.notifier).refreshProfile();
       
-      // Ensure we have the latest profile before updating
-      if (updatedProfile.interests != null) {
-        debugPrint('📋 Number of interests: ${updatedProfile.interests!.length}');
-      }
-      
-      // Use the new providers to update profile
-      await ref.read(profileProvider.notifier).updateProfile(updatedProfile);
-      
-      // Refresh profile to verify the update took effect
-      await ref.read(profileProvider.notifier).refreshProfile();
-      
-      debugPrint('✅ Profile updated successfully');
-
+      // Check if still mounted before using context or stored references
       if (!mounted) return;
-
-      // Use stored context for feedback
-      ScaffoldMessenger.of(currentContext).showSnackBar(
-        const SnackBar(
-          content: Text('Profile updated successfully'),
-          backgroundColor: Colors.green,
-          behavior: SnackBarBehavior.floating,
-        ),
+      scaffoldState.showSnackBar(
+        const SnackBar(content: Text('Profile updated successfully')),
       );
+      navigatorState.pop();
     } catch (e) {
-      // Log error details
-      debugPrint('❌ Error updating profile: $e');
-      
       if (!mounted) return;
-
-      // Use stored context for error notification
-      ScaffoldMessenger.of(currentContext).showSnackBar(
-        SnackBar(
-          content: Text('Failed to update profile: $e'),
-          backgroundColor: Colors.red,
-          behavior: SnackBarBehavior.floating,
-        ),
+      scaffoldState.showSnackBar(
+        SnackBar(content: Text('Failed to update profile: $e')),
       );
     }
   }
 
   // Show tags dialog when "Add" is tapped on profile tags section
   void _showTagsDialog(BuildContext context) {
-    final userProfileAsync = ref.read(profileProvider);
+    final userProfileAsync = ref.read(profile_providers.profileProvider);
 
     // Early return if profile is loading or has error
     if (userProfileAsync.profile == null) return;
@@ -580,7 +526,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage>
     final userProfile = userProfileAsync.profile!;
 
     // Create controllers and states for the dialog
-    final selectedInterests = userProfile.interests?.toList() ?? [];
+    final selectedInterests = userProfile.interests.toList() ?? [];
     final searchController = TextEditingController();
     final interestsProvider =
         StateProvider<List<String>>((ref) => InterestOptions.options);
@@ -956,20 +902,11 @@ class _ProfilePageState extends ConsumerState<ProfilePage>
                                           .where((interest) => interest.isNotEmpty)
                                           .toList();
                                       
-                                      // Get the current user ID from the profile
-                                      final userId = userProfile.id;
-                                      if (userId.isEmpty) {
-                                        throw Exception('User ID is missing or invalid');
-                                      }
-                                      
                                       // Use the dedicated method for updating interests
-                                      await ref.read(profileProvider.notifier).updateUserInterests(
-                                        userId,
-                                        cleanInterests,
-                                      );
+                                      await _handleInterestUpdate(cleanInterests);
                                       
                                       // Force a refresh to ensure we see the changes
-                                      await ref.read(profileProvider.notifier).refreshProfile();
+                                      await ref.read(profile_providers.profileProvider.notifier).refreshProfile();
                                       
                                       // Close the loading dialog
                                       if (context.mounted) {
@@ -1056,6 +993,40 @@ class _ProfilePageState extends ConsumerState<ProfilePage>
     );
   }
 
+  Future<void> _handleInterestUpdate(List<String> interests) async {
+    try {
+      final success = await ref.read(profile_providers.profileProvider.notifier).updateUserInterests(interests);
+      
+      if (!mounted) return;
+
+      if (success) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Interests updated successfully'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Failed to update interests'),
+            behavior: SnackBarBehavior.floating,
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error updating interests: $e'),
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
   void _handleRequestFriend(UserProfile profile) {
     HapticFeedback.mediumImpact();
     _sendFriendRequest(profile);
@@ -1063,7 +1034,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage>
 
   void _handleMessage(BuildContext context) {
     HapticFeedback.mediumImpact();
-    final userProfile = ref.read(profileProvider).value;
+    final userProfile = ref.read(profile_providers.profileProvider).value;
     if (userProfile != null) {
       _navigateToChat(context, userProfile.id);
     }
@@ -1096,8 +1067,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage>
   // Updated method to use the centralized navigation implementation
   void _navigateToChat(BuildContext context, String? targetUserId) {
     if (targetUserId != null) {
-      context
-          .push(AppRoutes.createChat, extra: {'initialUserId': targetUserId});
+      context.push(AppRoutes.createChat, extra: {'initialUserId': targetUserId});
     } else {
       context.push(AppRoutes.messaging);
     }
@@ -1107,49 +1077,21 @@ class _ProfilePageState extends ConsumerState<ProfilePage>
     context.pushNamed('spaces');
   }
 
-  Widget _buildProfileInteractionButtons(
-      UserProfile profile, bool isCurrentUserProfile) {
-    return ProfileInteractionButtons(
-      profile: profile,
-      isCurrentUser: isCurrentUserProfile,
-      onEditProfile: (context, profile) {
-        HapticFeedback.mediumImpact();
-        context.push('/profile/edit');
-      },
-      onRequestFriend: (profile) {
-        HapticFeedback.mediumImpact();
-        _sendFriendRequest(profile);
-      },
-      onMessage: (context) {
-        HapticFeedback.mediumImpact();
-        context.push('/messaging/chat/${profile.id}');
-      },
-      onShareProfile: (context, profile) {
-        HapticFeedback.mediumImpact();
-        showModalBottomSheet(
-          context: context,
-          backgroundColor: Colors.transparent,
-          isScrollControlled: true,
-          builder: (context) {
-            return ProfileShareModal(
-              profile: profile,
-            );
-          },
-        );
-      },
-    );
-  }
-  
-  void _sendFriendRequest(UserProfile profile) {
+  void _sendFriendRequest(UserProfile profile) async {
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
     final friendRequestParams = profile.id;
     
     // Clear any existing call to avoid conflicts
     ref.refresh(sendFriendRequestProvider(friendRequestParams));
     
-    // Send the friend request
-    ref.read(sendFriendRequestProvider(friendRequestParams).future).then((success) {
+    try {
+      // Send the friend request
+      final success = await ref.read(sendFriendRequestProvider(friendRequestParams).future);
+      
+      if (!mounted) return;
+      
       if (success) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        scaffoldMessenger.showSnackBar(
           SnackBar(
             content: Text('Friend request sent to ${profile.username}'),
             behavior: SnackBarBehavior.floating,
@@ -1157,7 +1099,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage>
           ),
         );
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
+        scaffoldMessenger.showSnackBar(
           const SnackBar(
             content: Text('Failed to send friend request'),
             behavior: SnackBarBehavior.floating,
@@ -1165,7 +1107,16 @@ class _ProfilePageState extends ConsumerState<ProfilePage>
           ),
         );
       }
-    });
+    } catch (e) {
+      if (!mounted) return;
+      scaffoldMessenger.showSnackBar(
+        SnackBar(
+          content: Text('Error sending friend request: $e'),
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 
   /// Navigate to the profile photo page
@@ -1178,6 +1129,204 @@ class _ProfilePageState extends ConsumerState<ProfilePage>
   void _showSettingsOptions(BuildContext context) {
     HapticFeedback.mediumImpact();
     context.push(AppRoutes.settings);
+  }
+
+  Future<void> _handleAsyncOperation(BuildContext context, Future<void> Function() operation) async {
+    // Store scaffoldMessenger before async gap
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
+    
+    try {
+      await operation();
+    } catch (e) {
+      // Check mounted before using stored reference
+      if (!mounted) return;
+      scaffoldMessenger.showSnackBar(
+        SnackBar(content: Text(e.toString())),
+      );
+    }
+  }
+
+  void _showErrorSnackBar(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
+    );
+  }
+
+  void _onInterestSelected(String interest) async {
+    final currentProfile = ref.read(profile_providers.profileProvider).profile;
+    if (currentProfile == null) return;
+
+    // Fix dead null-aware expression - remove unnecessary null check
+    final currentInterests = List<String>.from(currentProfile.interests);
+    if (currentInterests.contains(interest)) {
+      currentInterests.remove(interest);
+    } else {
+      currentInterests.add(interest);
+    }
+
+    await ref.read(profile_providers.profileProvider.notifier).updateUserInterests(currentInterests);
+  }
+
+  void _showProfileOptions(BuildContext context, UserProfile profile) {
+    // Show a bottom sheet with different profile actions
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return Container(
+          decoration: BoxDecoration(
+            color: AppColors.black.withOpacity(0.9),
+            borderRadius: const BorderRadius.only(
+              topLeft: Radius.circular(16),
+              topRight: Radius.circular(16),
+            ),
+          ),
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.sync, color: AppColors.gold),
+                title: const Text(
+                  'Sync Profile', 
+                  style: TextStyle(color: Colors.white),
+                ),
+                subtitle: const Text(
+                  'Update joined spaces and RSVPs',
+                  style: TextStyle(color: Colors.white70),
+                ),
+                onTap: () async {
+                  // Store context references before closing bottom sheet
+                  final scaffoldState = ScaffoldMessenger.of(context);
+                  Navigator.pop(context); // Close the bottom sheet
+                  
+                  // Show loading indicator
+                  scaffoldState.showSnackBar(
+                    const SnackBar(
+                      content: Text('Syncing profile data...'),
+                      duration: Duration(seconds: 2),
+                    ),
+                  );
+                  
+                  // Use sync provider to update profile data
+                  try {
+                    await ref.read(profile_providers.profileSyncProvider.notifier).syncProfile();
+                    
+                    if (mounted) {
+                      scaffoldState.showSnackBar(
+                        const SnackBar(
+                          content: Text('Profile synced successfully'),
+                          backgroundColor: Colors.green,
+                        ),
+                      );
+                    }
+                  } catch (e) {
+                    if (mounted) {
+                      scaffoldState.showSnackBar(
+                        SnackBar(
+                          content: Text('Error syncing profile: $e'),
+                          backgroundColor: Colors.red,
+                        ),
+                      );
+                    }
+                  }
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.share, color: AppColors.gold),
+                title: const Text(
+                  'Share Profile',
+                  style: TextStyle(color: Colors.white),
+                ),
+                onTap: () {
+                  Navigator.pop(context);
+                  _handleShareProfile(context, profile);
+                },
+              ),
+              if (widget.userId == null) // Only show for current user
+                ListTile(
+                  leading: const Icon(Icons.edit, color: AppColors.gold),
+                  title: const Text(
+                    'Edit Profile',
+                    style: TextStyle(color: Colors.white),
+                  ),
+                  onTap: () {
+                    Navigator.pop(context);
+                    _handleEditProfile(context, profile);
+                  },
+                ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildProfileActions(UserProfile profile) {
+    final isCurrentUser = profile.id == FirebaseAuth.instance.currentUser?.uid;
+    
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 16),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          if (isCurrentUser)
+            // Edit profile button for current user
+            OutlinedButton.icon(
+              onPressed: () => _handleEditProfile(context, profile),
+              icon: const Icon(Icons.edit, color: AppColors.yellow),
+              label: const Text('Edit Profile'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppColors.yellow,
+                side: const BorderSide(color: AppColors.yellow, width: 1.0),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 10,
+                ),
+              ).copyWith(
+                overlayColor: MaterialStateProperty.resolveWith<Color?>(
+                  (states) {
+                    if (states.contains(MaterialState.pressed)) {
+                      return AppColors.yellow.withOpacity(0.15);
+                    }
+                    return null;
+                  },
+                ),
+              ),
+            )
+          else
+            // Friend request button for other users
+            FriendRequestButton(
+              userId: profile.id,
+              onConnectionStateChanged: (state) {
+                // Optionally refresh the profile or update UI
+              },
+            ),
+        ],
+      ),
+    );
+  }
+
+  /// Refresh profile on pull to refresh
+  Future<void> _handleRefresh() async {
+    HapticFeedback.mediumImpact();
+    debugPrint('Refreshing profile...');
+    try {
+      await ref.read(profile_providers.profileProvider.notifier).refreshProfile();
+      // Sync profile after refresh
+      await ref.read(profile_providers.profileSyncProvider.notifier).syncProfile();
+      debugPrint('Profile refreshed successfully');
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString())),
+      );
+    }
   }
 }
 

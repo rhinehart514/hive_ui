@@ -348,4 +348,85 @@ class AppTheme {
       ),
     );
   }
+
+  // Light theme implementation
+  static ThemeData get lightTheme {
+    return ThemeData.light().copyWith(
+      // Light background with dark text
+      scaffoldBackgroundColor: AppColors.white,
+      primaryColor: AppColors.black,
+      colorScheme: const ColorScheme.light(
+        primary: AppColors.black,
+        secondary: AppColors.gold,
+        surface: AppColors.white,
+        background: AppColors.white,
+        error: AppColors.error,
+        onPrimary: AppColors.white,
+        onSecondary: AppColors.black,
+        onSurface: AppColors.black,
+        onBackground: AppColors.black,
+      ),
+      // Subtle dividers
+      dividerTheme: const DividerThemeData(
+        color: AppColors.divider,
+        thickness: 0.5,
+        space: spacing24,
+      ),
+      // Refined cards with minimal borders
+      cardTheme: CardTheme(
+        color: AppColors.white,
+        elevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(radiusLg),
+          side: const BorderSide(color: AppColors.cardBorder, width: 0.5),
+        ),
+        margin: const EdgeInsets.all(spacing8),
+      ),
+      // Input styling - minimal with focused accents
+      inputDecorationTheme: InputDecorationTheme(
+        filled: true,
+        fillColor: AppColors.white,
+        labelStyle: GoogleFonts.inter(
+          color: AppColors.black,
+          fontWeight: FontWeight.w400,
+        ),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(radiusMd),
+          borderSide: const BorderSide(color: AppColors.grey600, width: 0.5),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(radiusMd),
+          borderSide: const BorderSide(color: AppColors.grey600, width: 0.5),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(radiusMd),
+          borderSide: const BorderSide(color: AppColors.gold, width: 1),
+        ),
+        errorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(radiusMd),
+          borderSide: const BorderSide(color: AppColors.error, width: 0.5),
+        ),
+        focusedErrorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(radiusMd),
+          borderSide: const BorderSide(color: AppColors.error, width: 1),
+        ),
+      ),
+      // Button themes
+      elevatedButtonTheme: ElevatedButtonThemeData(
+        style: ElevatedButton.styleFrom(
+          backgroundColor: AppColors.black,
+          foregroundColor: AppColors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(radiusLg),
+          ),
+          minimumSize: const Size(double.infinity, spacing56),
+          elevation: 0,
+          textStyle: GoogleFonts.inter(
+            fontSize: 16,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ),
+    );
+  }
 }

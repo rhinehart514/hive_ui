@@ -28,12 +28,16 @@ class SocialAuthButton extends ConsumerStatefulWidget {
 
   /// Callback when auth is complete
   final SocialAuthResultCallback? onAuthResult;
+  
+  /// The path to return to after successful authentication
+  final String? returnToPath;
 
   /// Constructor
   const SocialAuthButton({
     Key? key,
     required this.provider,
     this.onAuthResult,
+    this.returnToPath,
   }) : super(key: key);
 
   @override
@@ -72,6 +76,11 @@ class _SocialAuthButtonState extends ConsumerState<SocialAuthButton> {
     try {
       // Initialize preferences if not already
       await UserPreferencesService.initialize();
+      
+      // Store the return path for post-auth redirect if provided
+      if (widget.returnToPath != null && widget.returnToPath!.isNotEmpty) {
+        await UserPreferencesService.setSocialAuthRedirectPath(widget.returnToPath!);
+      }
 
       // Sign in with Google using Firebase
       await ref.read(authControllerProvider.notifier).signInWithGoogle();

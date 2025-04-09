@@ -155,7 +155,7 @@ class ProfileStatsSection extends StatelessWidget {
           const SizedBox(width: 24),
           _buildStatItem(
             label: 'Spaces',
-            value: profile.clubCount.toString(),
+            value: profile.spaceCount.toString(),
           ),
           const SizedBox(width: 24),
           _buildStatItem(
@@ -513,7 +513,7 @@ class EventsGridTab extends ConsumerWidget {
                 ),
                 image: event.imageUrl != null
                     ? DecorationImage(
-                        image: NetworkImage(event.imageUrl!),
+                        image: NetworkImage(event.imageUrl),
                         fit: BoxFit.cover,
                       )
                     : null,

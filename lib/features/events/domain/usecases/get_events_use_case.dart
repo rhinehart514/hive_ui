@@ -1,7 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_ui/features/events/domain/providers/event_repository_provider.dart';
 import 'package:hive_ui/features/events/domain/repositories/event_repository.dart';
-import 'package:hive_ui/models/event.dart';
 
 /// Use case for fetching events
 class GetEventsUseCase {

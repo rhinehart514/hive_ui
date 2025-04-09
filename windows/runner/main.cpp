@@ -12,8 +12,8 @@
 
 int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
                       _In_ wchar_t *command_line, _In_ int show_command) {
-  // Run script to patch Firebase plugins
-  std::cout << "Running Firebase plugin patch script..." << std::endl;
+  // Run script to patch Firebase plugins for Windows compatibility
+  std::cout << "Running Firebase plugin compatibility patch for Windows..." << std::endl;
   system("powershell.exe -ExecutionPolicy Bypass -File .\\patch_firebase_plugins.ps1");
   
   // Attach to console when present (e.g., 'flutter run') or create a
@@ -33,6 +33,10 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   project.set_dart_entrypoint_arguments(std::move(command_line_arguments));
 
   FlutterWindow window(project);
+  
+  // Using Windows-specific implementation for plugins
+  std::cout << "Using platform-specific implementations for Windows" << std::endl;
+  
   Win32Window::Point origin(10, 10);
   Win32Window::Size size(1280, 720);
   if (!window.Create(L"hive_ui", origin, size)) {

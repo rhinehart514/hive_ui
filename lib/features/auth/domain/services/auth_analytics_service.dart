@@ -18,9 +18,15 @@ class AuthAnalyticsService {
 
       // Log additional custom parameters if provided
       if (additionalParams != null && additionalParams.isNotEmpty) {
+        // Ensure correct type for parameters
+        final Map<String, Object> typedParams = Map<String, Object>.fromEntries(
+          additionalParams.entries
+            .where((entry) => entry.value != null) // Filter out null values
+            .map((entry) => MapEntry(entry.key, entry.value as Object)),
+        );
         await _analytics.logEvent(
           name: 'login_extended',
-          parameters: additionalParams,
+          parameters: typedParams.isNotEmpty ? typedParams : null,
         );
       }
 
@@ -41,9 +47,15 @@ class AuthAnalyticsService {
 
       // Log additional custom parameters if provided
       if (additionalParams != null && additionalParams.isNotEmpty) {
+        // Ensure correct type for parameters
+        final Map<String, Object> typedParams = Map<String, Object>.fromEntries(
+          additionalParams.entries
+            .where((entry) => entry.value != null)
+            .map((entry) => MapEntry(entry.key, entry.value as Object)),
+        );
         await _analytics.logEvent(
           name: 'sign_up_extended',
-          parameters: additionalParams,
+          parameters: typedParams.isNotEmpty ? typedParams : null,
         );
       }
 
@@ -62,9 +74,15 @@ class AuthAnalyticsService {
         params['email_domain'] = email.split('@').last;
       }
 
+      // Ensure correct type for parameters
+      final Map<String, Object> typedParams = Map<String, Object>.fromEntries(
+        params.entries
+          .where((entry) => entry.value != null)
+          .map((entry) => MapEntry(entry.key, entry.value as Object)),
+      );
       await _analytics.logEvent(
         name: 'password_reset_requested',
-        parameters: params,
+        parameters: typedParams.isNotEmpty ? typedParams : null,
       );
 
       debugPrint('Analytics: Password reset event tracked successfully');
@@ -91,9 +109,15 @@ class AuthAnalyticsService {
         params.addAll(additionalParams);
       }
 
+      // Ensure correct type for parameters
+      final Map<String, Object> typedParams = Map<String, Object>.fromEntries(
+        params.entries
+          .where((entry) => entry.value != null)
+          .map((entry) => MapEntry(entry.key, entry.value as Object)),
+      );
       await _analytics.logEvent(
         name: 'auth_error',
-        parameters: params,
+        parameters: typedParams.isNotEmpty ? typedParams : null,
       );
 
       debugPrint(
@@ -111,15 +135,17 @@ class AuthAnalyticsService {
     int? timeSpentSeconds,
   }) async {
     try {
-      await _analytics.logEvent(
-        name: 'onboarding_step_completed',
-        parameters: {
+      // Ensure correct type for parameters, handling potential null for timeSpentSeconds
+      final Map<String, Object> typedParams = {
           'step_name': stepName,
           'step_number': stepNumber,
           'total_steps': totalSteps,
-          'time_spent_seconds': timeSpentSeconds,
+          if (timeSpentSeconds != null) 'time_spent_seconds': timeSpentSeconds,
           'completion_percentage': (stepNumber / totalSteps * 100).round(),
-        },
+      };
+      await _analytics.logEvent(
+        name: 'onboarding_step_completed',
+        parameters: typedParams,
       );
 
       debugPrint(
@@ -153,9 +179,15 @@ class AuthAnalyticsService {
         }
       }
 
+      // Ensure correct type for parameters
+      final Map<String, Object> typedParams = Map<String, Object>.fromEntries(
+        params.entries
+          .where((entry) => entry.value != null)
+          .map((entry) => MapEntry(entry.key, entry.value as Object)),
+      );
       await _analytics.logEvent(
         name: 'onboarding_completed',
-        parameters: params,
+        parameters: typedParams.isNotEmpty ? typedParams : null,
       );
 
       debugPrint('Analytics: Onboarding completion event tracked successfully');
@@ -172,15 +204,17 @@ class AuthAnalyticsService {
     int? timeSpentSeconds,
   }) async {
     try {
-      await _analytics.logEvent(
-        name: 'onboarding_abandoned',
-        parameters: {
+      // Ensure correct type for parameters, handling potential null for timeSpentSeconds
+      final Map<String, Object> typedParams = {
           'last_step': lastStep,
           'last_step_number': lastStepNumber,
           'total_steps': totalSteps,
-          'time_spent_seconds': timeSpentSeconds,
+          if (timeSpentSeconds != null) 'time_spent_seconds': timeSpentSeconds,
           'completion_percentage': (lastStepNumber / totalSteps * 100).round(),
-        },
+      };
+      await _analytics.logEvent(
+        name: 'onboarding_abandoned',
+        parameters: typedParams,
       );
 
       debugPrint(
@@ -220,9 +254,19 @@ class AuthAnalyticsService {
     Map<String, dynamic>? parameters,
   }) async {
     try {
+      // Ensure correct type for parameters
+      Map<String, Object>? typedParams;
+      if (parameters != null && parameters.isNotEmpty) {
+         typedParams = Map<String, Object>.fromEntries(
+          parameters.entries
+            .where((entry) => entry.value != null) // Filter out null values
+            .map((entry) => MapEntry(entry.key, entry.value as Object)),
+        );
+      }
+
       await _analytics.logEvent(
         name: eventName,
-        parameters: parameters,
+        parameters: (typedParams?.isNotEmpty ?? false) ? typedParams : null,
       );
 
       debugPrint(

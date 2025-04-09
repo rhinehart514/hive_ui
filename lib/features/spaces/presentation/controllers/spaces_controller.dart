@@ -91,10 +91,15 @@ class SpacesController extends StateNotifier<AsyncValue<List<SpaceEntity>>> {
   }
 
   /// Join a space
-  Future<void> joinSpace(String spaceId) async {
+  Future<bool> joinSpace(String spaceId) async {
     try {
       final useCase = _ref.read(joinSpaceUseCaseProvider);
-      await useCase.execute(spaceId);
+      final success = await useCase.execute(spaceId);
+      
+      if (!success) {
+        debugPrint('Failed to join space: operation returned false');
+        return false;
+      }
 
       // Refresh spaces after joining
       if (state.hasValue) {
@@ -134,14 +139,17 @@ class SpacesController extends StateNotifier<AsyncValue<List<SpaceEntity>>> {
 
         state = AsyncValue.data(updatedSpaces);
       }
+      
+      return true;
     } catch (e) {
-      // Show error but don't update state
+      // Log error and return false
       debugPrint('Error joining space: $e');
+      return false;
     }
   }
 
   /// Leave a space
-  Future<void> leaveSpace(String spaceId) async {
+  Future<bool> leaveSpace(String spaceId) async {
     try {
       // Find the space before updating to track analytics
       SpaceEntity? spaceToLeave;
@@ -154,7 +162,12 @@ class SpacesController extends StateNotifier<AsyncValue<List<SpaceEntity>>> {
       }
 
       final useCase = _ref.read(leaveSpaceUseCaseProvider);
-      await useCase.execute(spaceId);
+      final success = await useCase.execute(spaceId);
+      
+      if (!success) {
+        debugPrint('Failed to leave space: operation returned false');
+        return false;
+      }
 
       // Track space leave in analytics
       if (spaceToLeave != null) {
@@ -194,9 +207,12 @@ class SpacesController extends StateNotifier<AsyncValue<List<SpaceEntity>>> {
           }).toList(),
         );
       }
+      
+      return true;
     } catch (e) {
-      // Show error but don't update state
+      // Log error and return false
       debugPrint('Error leaving space: $e');
+      return false;
     }
   }
 

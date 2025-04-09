@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hive_ui/core/navigation/routes.dart';
 import 'package:hive_ui/core/navigation/transitions.dart';
@@ -129,7 +128,7 @@ class NavigationService {
   static void popUntil(BuildContext context, String routeName) {
     final router = GoRouter.of(context);
     while (router.canPop() && 
-           !router.routeInformationProvider.value.location!.startsWith(routeName)) {
+           !router.routeInformationProvider.value.location.startsWith(routeName)) {
       _applyTransition(NavigationFeedbackType.modalDismiss);
       router.pop();
     }

@@ -35,6 +35,8 @@ final clubEventsProvider =
       status: 'confirmed',
       link: '',
       tags: const ['meeting', 'club'],
+      imageUrl: 'assets/images/events/club_meeting.jpg',
+      source: EventSource.club,
     )
   ];
 });

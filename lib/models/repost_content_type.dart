@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
+import '../theme/app_colors.dart';
 
-/// Enum representing different types of repost content
+/// Defines the type of repost content
 enum RepostContentType {
   /// Standard repost with a comment
   standard,
@@ -70,11 +71,11 @@ extension RepostContentTypeProperties on RepostContentType {
   Color get color {
     switch (this) {
       case RepostContentType.standard:
-        return const Color(0xFFEEBA2A); // Gold
+        return AppColors.info;
       case RepostContentType.review:
         return const Color(0xFFFF9800); // Orange
       case RepostContentType.quote:
-        return const Color(0xFF03A9F4); // Light Blue
+        return AppColors.success;
       case RepostContentType.informative:
         return const Color(0xFF64B5F6); // Blue
       case RepostContentType.question:
@@ -82,7 +83,7 @@ extension RepostContentTypeProperties on RepostContentType {
       case RepostContentType.recommendation:
         return const Color(0xFF4CAF50); // Green
       case RepostContentType.highlight:
-        return const Color(0xFFE53935); // Red
+        return AppColors.gold;
     }
   }
 

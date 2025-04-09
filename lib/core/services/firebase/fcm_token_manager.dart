@@ -3,7 +3,6 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:hive_ui/core/services/firebase/firebase_core_service.dart';
 import 'package:uuid/uuid.dart';
 
 /// Manager for FCM tokens that handles saving them to Firestore
@@ -81,7 +80,7 @@ class FCMTokenManager {
 
       // Remove the token from Firestore
       await _firestore.collection('users').doc(user.uid).update({
-        'fcmTokens.${_tokenId}': FieldValue.delete(),
+        'fcmTokens.$_tokenId': FieldValue.delete(),
       });
       
       debugPrint('FCM token removed from Firestore');

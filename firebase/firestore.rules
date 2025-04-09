@@ -1,0 +1,71 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Helper functions for checking user roles
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isAdmin() {
+      return isAuthenticated() && request.auth.token.roles.admin == true;
+    }
+    
+    function isVerified() {
+      return isAuthenticated() && request.auth.token.roles.verified == true;
+    }
+    
+    function isVerifiedPlus() {
+      return isAuthenticated() && request.auth.token.roles.verifiedPlus == true;
+    }
+    
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    function isSpaceLeader(spaceId) {
+      return isAuthenticated() && 
+        exists(/databases/$(database)/documents/spaces/$(spaceId)/leaders/$(request.auth.uid));
+    }
+    
+    // Security rules for verification collections
+    match /emailVerifications/{docId} {
+      // Users can create verification requests
+      // Only the requesting user can read their own verification
+      // Only admins can read all verifications
+      allow create: if isAuthenticated() && 
+        request.resource.data.userId == request.auth.uid;
+      allow read: if isAuthenticated() && 
+        (resource.data.userId == request.auth.uid || isAdmin());
+      allow update: if isAdmin() || 
+        (isAuthenticated() && resource.data.userId == request.auth.uid);
+    }
+    
+    match /verificationRequests/{requestId} {
+      // Users can submit verification requests
+      // Only admins can approve or reject requests
+      allow create: if isAuthenticated() && 
+        request.resource.data.userId == request.auth.uid;
+      allow read: if isAuthenticated() && 
+        (resource.data.userId == request.auth.uid || isAdmin());
+      allow update: if isAdmin();
+    }
+    
+    match /user_verifications/{userId} {
+      // Users can read their own verification status
+      // Only admin or the user can update verification status
+      allow read: if isAuthenticated();
+      allow write: if isAdmin() || isOwner(userId);
+    }
+    
+    match /claimUpdates/{updateId} {
+      // Only admins can create claim updates
+      // The target user can read their own claim updates
+      allow create, update: if isAdmin();
+      allow read: if isAdmin() || 
+        (isAuthenticated() && resource.data.userId == request.auth.uid);
+    }
+    
+    // Other collections...
+  }
+} 

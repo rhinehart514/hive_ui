@@ -10,6 +10,7 @@ class UserPreferencesService {
   static const String _userEmailKey = 'user_email';
   static const String _userIdKey = 'user_id';
   static const String _onboardingDataKey = 'onboarding_data';
+  static const String _socialAuthRedirectPathKey = 'social_auth_redirect_path';
 
   static SharedPreferences? _preferences;
 
@@ -40,11 +41,12 @@ class UserPreferencesService {
           major: 'Undecided',
           residence: 'Off Campus',
           eventCount: 0,
-          clubCount: 0,
+          spaceCount: 0,
           friendCount: 0,
           createdAt: DateTime.now(),
           updatedAt: DateTime.now(),
           accountTier: AccountTier.public,
+          interests: const [],
         );
 
         // Store the default profile
@@ -71,7 +73,8 @@ class UserPreferencesService {
 
       // Fallback to shared preferences mock for emergency situations
       try {
-        SharedPreferences.setMockInitialValues({});
+        // Note: setMockInitialValues is only for testing - don't use in production
+        // SharedPreferences.setMockInitialValues({});
         _preferences = await SharedPreferences.getInstance();
         debugPrint(
             'UserPreferencesService: Using mock preferences after error');
@@ -88,29 +91,35 @@ class UserPreferencesService {
     try {
       _ensureInitialized();
 
-      // First try to get the explicit onboarding flag
-      final hasCompleted =
-          _preferences?.getBool(_hasCompletedOnboardingKey) ?? false;
+      // Check the explicit onboarding flag
+      final hasCompleted = _preferences?.getBool(_hasCompletedOnboardingKey) ?? false;
+      
+      // For debugging
+      final savedEmail = getUserEmail();
+      final hasProfile = _preferences?.containsKey(_userProfileKey) ?? false;
+      debugPrint('UserPreferencesService: hasCompletedOnboarding check - flag: $hasCompleted, email: $savedEmail, hasProfile: $hasProfile');
 
       // If the flag indicates onboarding is completed, just return true
       if (hasCompleted) {
         return true;
       }
 
-      // If the explicit flag is false, check if there's other evidence the user might have completed onboarding
-
-      // 1. Check if user has email saved - existing users with email should be considered onboarded
-      final savedEmail = getUserEmail();
-      if (savedEmail.isNotEmpty) {
+      // Only auto-correct for accounts that existed before this fix
+      // and have been using the app for a while (not new accounts)
+      final userEmail = getUserEmail();
+      if (userEmail.isNotEmpty) {
         debugPrint(
-            'User has email ($savedEmail) but no onboarding flag. Treating as potentially onboarded user.');
+            'User has email ($userEmail) but no onboarding flag. Treating as potentially onboarded user.');
 
-        // 2. Check if there's a stored profile which indicates they've likely done onboarding
-        final hasStoredProfile =
-            _preferences?.containsKey(_userProfileKey) ?? false;
-        if (hasStoredProfile) {
+        // Check if there's a stored profile which indicates they've likely done onboarding
+        final hasStoredProfile = _preferences?.containsKey(_userProfileKey) ?? false;
+        
+        // Only auto-correct if we also have a user ID (existing users)
+        final hasUserId = _preferences?.containsKey(_userIdKey) ?? false;
+        
+        if (hasStoredProfile && hasUserId) {
           debugPrint(
-              'User has a stored profile. Auto-correcting onboarding status to completed.');
+              'User has a stored profile and ID. Auto-correcting onboarding status to completed.');
 
           // Fix the inconsistency by setting the flag
           _preferences?.setBool(_hasCompletedOnboardingKey, true);
@@ -165,9 +174,28 @@ class UserPreferencesService {
 
   /// Reset onboarding status (for testing or account reset)
   static Future<bool> resetOnboardingStatus() async {
-    _ensureInitialized();
-    return await _preferences?.setBool(_hasCompletedOnboardingKey, false) ??
-        false;
+    try {
+      _ensureInitialized();
+      
+      // Clear any stored profile first to prevent auto-correction
+      await _preferences?.remove(_userProfileKey);
+      debugPrint('UserPreferencesService: Removed stored profile during onboarding reset');
+      
+      // Clear stored email as well
+      await _preferences?.remove(_userEmailKey);
+      
+      // Set onboarding flag to false
+      final result = await _preferences?.setBool(_hasCompletedOnboardingKey, false) ?? false;
+      
+      // Verify the flag was set
+      final verifyValue = _preferences?.getBool(_hasCompletedOnboardingKey) ?? false;
+      debugPrint('UserPreferencesService: Onboarding reset - flag is now $verifyValue');
+      
+      return result;
+    } catch (e) {
+      debugPrint('UserPreferencesService: Error resetting onboarding status: $e');
+      return false;
+    }
   }
 
   /// Store user profile data
@@ -216,11 +244,12 @@ class UserPreferencesService {
           major: 'Undecided',
           residence: 'Off Campus',
           eventCount: 0,
-          clubCount: 0,
+          spaceCount: 0,
           friendCount: 0,
           createdAt: DateTime.now(),
           updatedAt: DateTime.now(),
           accountTier: AccountTier.public,
+          interests: const [],
         );
       }
 
@@ -250,11 +279,12 @@ class UserPreferencesService {
         major: 'Undecided',
         residence: 'Off Campus',
         eventCount: 0,
-        clubCount: 0,
+        spaceCount: 0,
         friendCount: 0,
         createdAt: DateTime.now(),
         updatedAt: DateTime.now(),
         accountTier: AccountTier.public,
+        interests: const [],
       );
     }
   }
@@ -454,5 +484,87 @@ class UserPreferencesService {
           'UserPreferencesService not initialized. Call initialize() first.');
     }
     return _preferences!;
+  }
+
+  /// Force reset onboarding status - for use when regular reset fails
+  static Future<bool> forceResetOnboardingStatus() async {
+    try {
+      debugPrint('UserPreferencesService: Performing FORCE reset of onboarding status');
+      
+      // Get a fresh instance of SharedPreferences to bypass any caching issues
+      final prefs = await SharedPreferences.getInstance();
+      
+      // Clear everything related to user state
+      await prefs.remove(_userProfileKey);
+      await prefs.remove(_userEmailKey);
+      await prefs.remove(_onboardingDataKey);
+      
+      // Set the onboarding flag to false directly
+      final result = await prefs.setBool(_hasCompletedOnboardingKey, false);
+      
+      // Verify the flag is now false
+      final verifyValue = prefs.getBool(_hasCompletedOnboardingKey) ?? false;
+      debugPrint('UserPreferencesService: Force reset - flag is now: $verifyValue (result: $result)');
+      
+      // Update our cached instance
+      _preferences = prefs;
+      
+      return result;
+    } catch (e) {
+      debugPrint('UserPreferencesService: Error in force reset of onboarding: $e');
+      return false;
+    }
+  }
+  
+  /// Get the stored user ID (synchronous version)
+  static String getUserIdSync() {
+    _ensureInitialized();
+    return _preferences?.getString(_userIdKey) ?? '';
+  }
+  
+  /// Save the user ID
+  static Future<bool> saveUserId(String userId) async {
+    _ensureInitialized();
+    debugPrint('UserPreferencesService: Saving user ID: $userId');
+    return await _preferences?.setString(_userIdKey, userId) ?? false;
+  }
+
+  /// Store the path to redirect to after social authentication
+  static Future<bool> setSocialAuthRedirectPath(String path) async {
+    try {
+      _ensureInitialized();
+      
+      final result = await _preferences?.setString(_socialAuthRedirectPathKey, path) ?? false;
+      debugPrint('UserPreferencesService: Social auth redirect path saved: $path');
+      return result;
+    } catch (e) {
+      debugPrint('UserPreferencesService: Error storing social auth redirect path: $e');
+      return false;
+    }
+  }
+  
+  /// Get the stored redirect path for social authentication
+  static String getSocialAuthRedirectPath() {
+    try {
+      _ensureInitialized();
+      final path = _preferences?.getString(_socialAuthRedirectPathKey) ?? '';
+      return path;
+    } catch (e) {
+      debugPrint('UserPreferencesService: Error getting social auth redirect path: $e');
+      return '';
+    }
+  }
+  
+  /// Clear the stored redirect path after using it
+  static Future<bool> clearSocialAuthRedirectPath() async {
+    try {
+      _ensureInitialized();
+      final result = await _preferences?.remove(_socialAuthRedirectPathKey) ?? false;
+      debugPrint('UserPreferencesService: Social auth redirect path cleared');
+      return result;
+    } catch (e) {
+      debugPrint('UserPreferencesService: Error clearing social auth redirect path: $e');
+      return false;
+    }
   }
 }

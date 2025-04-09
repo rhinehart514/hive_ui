@@ -177,9 +177,7 @@ class FeedNotifier extends StateNotifier<FeedState> {
               reposterProfile: repost.reposterProfile,
               repostTime: repost.repostTime,
               comment: repost.comment,
-              contentType: repost.contentType == 'quote' 
-                ? RepostContentType.quote 
-                : RepostContentType.standard,
+              contentType: repost.contentType,
             ),
             'sortKey': repost.event.startDate.millisecondsSinceEpoch
           });
@@ -741,7 +739,7 @@ class FeedNotifier extends StateNotifier<FeedState> {
               .get();
           
           if (!eventDoc.exists) {
-            debugPrint('Event ${eventId} not found for repost');
+            debugPrint('Event $eventId not found for repost');
             continue;
           }
           
@@ -752,7 +750,7 @@ class FeedNotifier extends StateNotifier<FeedState> {
               .get();
           
           if (!userDoc.exists) {
-            debugPrint('User ${repostedById} not found for repost');
+            debugPrint('User $repostedById not found for repost');
             continue;
           }
           
@@ -772,10 +770,13 @@ class FeedNotifier extends StateNotifier<FeedState> {
             major: userData['major'] ?? '',
             residence: userData['residence'] ?? '',
             eventCount: userData['eventCount'] ?? 0,
-            clubCount: userData['clubCount'] ?? 0,
+            spaceCount: userData['spaceCount'] ?? userData['clubCount'] ?? 0,
             friendCount: userData['friendCount'] ?? 0,
             createdAt: _parseTimestamp(userData['createdAt']),
             updatedAt: _parseTimestamp(userData['updatedAt']),
+            interests: userData['interests'] != null 
+                ? List<String>.from(userData['interests']) 
+                : [],
           );
           
           // Create RepostItem for feed

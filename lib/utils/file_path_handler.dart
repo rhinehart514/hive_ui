@@ -15,20 +15,37 @@ class FilePathHandler {
     if (filePath.startsWith('file://')) {
       try {
         // Remove the protocol to get a regular file path
-        final rawPath = filePath.replaceFirst('file://', '');
-        // For Windows paths, remove leading slashes
-        final cleanPath = Platform.isWindows 
-            ? rawPath.replaceFirst(RegExp(r'^/+'), '')
-            : rawPath;
+        String rawPath = filePath.replaceFirst('file://', '');
+        
+        if (Platform.isWindows) {
+          // For Windows paths:
+          // 1. Remove leading slashes
+          rawPath = rawPath.replaceFirst(RegExp(r'^/+'), '');
+          
+          // 2. Handle drive letter if present (e.g., C:)
+          if (rawPath.contains(':')) {
+            // Ensure drive letter is properly formatted
+            final parts = rawPath.split(':');
+            if (parts.length == 2) {
+              rawPath = '${parts[0].toUpperCase()}:${parts[1]}';
+            }
+          }
+          
+          // 3. Convert forward slashes to backslashes for Windows
+          rawPath = rawPath.replaceAll('/', '\\');
+        } else {
+          // For non-Windows platforms, just use the path as is
+          rawPath = rawPath;
+        }
             
         // Verify it's a valid file path
-        if (cleanPath.isEmpty) {
+        if (rawPath.isEmpty) {
           debugPrint('Invalid file:// path: $filePath');
           return '';
         }
         
         // Return as regular file path to avoid URI parsing issues
-        return cleanPath;
+        return rawPath;
       } catch (e) {
         debugPrint('Error handling file:// URI: $e');
         return '';
@@ -52,12 +69,21 @@ class FilePathHandler {
 
     try {
       if (Platform.isWindows) {
-        // For Windows, we need to handle the path differently
-        final normalizedPath = path.normalize(filePath).replaceAll('\\', '/');
-        if (!normalizedPath.startsWith('/')) {
-          // Ensure the path starts with a forward slash
-          return '/$normalizedPath';
+        // For Windows, handle the path while preserving drive letters
+        String normalizedPath = path.normalize(filePath);
+        
+        // Convert all slashes to backslashes
+        normalizedPath = normalizedPath.replaceAll('/', '\\');
+        
+        // Handle drive letter if present
+        if (normalizedPath.contains(':')) {
+          final parts = normalizedPath.split(':');
+          if (parts.length == 2) {
+            // Ensure drive letter is uppercase
+            normalizedPath = '${parts[0].toUpperCase()}:${parts[1]}';
+          }
         }
+        
         return normalizedPath;
       } else if (Platform.isAndroid) {
         // For Android, handle content URIs and file paths

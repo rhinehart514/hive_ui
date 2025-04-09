@@ -13,10 +13,12 @@ import 'package:intl/intl.dart';
 import 'package:hive_ui/theme/huge_icons.dart';
 import 'package:confetti/confetti.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:hive_ui/features/spaces/data/datasources/spaces_firestore_datasource.dart';
 
 // Add the spaceRepositoryProvider
 final spaceRepositoryProvider = Provider<SpaceRepositoryImpl>((ref) {
-  return SpaceRepositoryImpl();
+  final dataSource = SpacesFirestoreDataSource();
+  return SpaceRepositoryImpl(dataSource);
 });
 
 /// A beautiful event detail page with premium HIVE-branded design

@@ -436,7 +436,7 @@ class _HiveAppBarState extends ConsumerState<HiveAppBar> with SingleTickerProvid
                             fontWeight: FontWeight.w400,
                             letterSpacing: 0.1,
                           ),
-                          prefixIcon: Icon(
+                          prefixIcon: const Icon(
                             Icons.search,
                             color: AppColors.yellow,
                             size: 20,
@@ -453,7 +453,7 @@ class _HiveAppBarState extends ConsumerState<HiveAppBar> with SingleTickerProvid
                   ),
                   const SizedBox(width: 8),
                   IconButton(
-                    icon: Icon(Icons.close, color: AppColors.yellow, size: 20),
+                    icon: const Icon(Icons.close, color: AppColors.yellow, size: 20),
                     onPressed: () {
                       HapticFeedback.lightImpact();
                       if (widget.searchController != null) {

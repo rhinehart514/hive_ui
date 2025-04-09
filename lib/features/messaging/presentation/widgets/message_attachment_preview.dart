@@ -226,7 +226,7 @@ class MessageAttachmentPreview extends StatelessWidget {
                   const SizedBox(height: 4),
                   
                   // Waveform (simplified)
-                  Container(
+                  SizedBox(
                     height: 20,
                     child: Row(
                       children: List.generate(
@@ -286,7 +286,7 @@ class MessageAttachmentPreview extends StatelessWidget {
               child: Center(
                 child: Text(
                   extension.length > 3 ? extension.substring(0, 3) : extension,
-                  style: TextStyle(
+                  style: const TextStyle(
                     color: AppColors.gold,
                     fontWeight: FontWeight.bold,
                     fontSize: 14,
@@ -347,18 +347,18 @@ class MessageAttachmentPreview extends StatelessWidget {
           borderRadius: BorderRadius.circular(12),
           color: Colors.grey.shade800,
         ),
-        child: Row(
+        child: const Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(
+            Icon(
               Icons.attach_file,
               color: AppColors.gold,
             ),
-            const SizedBox(width: 8),
+            SizedBox(width: 8),
             Expanded(
               child: Text(
                 'Attachment',
-                style: const TextStyle(
+                style: TextStyle(
                   color: Colors.white,
                 ),
                 maxLines: 1,

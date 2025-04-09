@@ -6,6 +6,7 @@ import 'package:hive_ui/core/navigation/transitions.dart';
 import 'package:hive_ui/theme/app_colors.dart';
 import 'package:hive_ui/theme/huge_icons.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:hive_ui/core/widgets/offline_status_overlay.dart';
 
 /// Provider to control the visibility of the navigation bar
 final navigationBarVisibilityProvider = StateProvider<bool>((ref) => true);
@@ -191,7 +192,11 @@ class _ShellState extends State<Shell> {
                 child: SafeArea(
                   bottom: false,
                   // Use a simpler approach to avoid animation issues
-                  child: widget.navigationShell,
+                  child: OfflineStatusOverlay(
+                    showAtBottom: true, 
+                    edgePadding: isNavBarVisible ? navBarHeight + 16 : 16,
+                    child: widget.navigationShell,
+                  ),
                 ),
               ),
 

@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_ui/features/messaging/application/providers/messaging_providers.dart';
-import 'package:hive_ui/features/messaging/domain/entities/message.dart';
 import 'package:hive_ui/features/messaging/presentation/widgets/message_bubble.dart';
 import 'package:hive_ui/features/messaging/presentation/widgets/chat_input.dart';
 import 'package:hive_ui/theme/app_colors.dart';
@@ -75,8 +74,8 @@ class _MessageThreadScreenState extends ConsumerState<MessageThreadScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     // Thread label
-                    Padding(
-                      padding: const EdgeInsets.only(left: 16, bottom: 4),
+                    const Padding(
+                      padding: EdgeInsets.only(left: 16, bottom: 4),
                       child: Text(
                         'Thread',
                         style: TextStyle(
@@ -109,7 +108,7 @@ class _MessageThreadScreenState extends ConsumerState<MessageThreadScreen> {
             child: threadsAsync.when(
               data: (messages) {
                 if (messages.isEmpty) {
-                  return Center(
+                  return const Center(
                     child: Text(
                       'No replies yet',
                       style: TextStyle(color: Colors.grey),
@@ -154,7 +153,7 @@ class _MessageThreadScreenState extends ConsumerState<MessageThreadScreen> {
   }
   
   Widget _buildMessageNotFound() {
-    return Center(
+    return const Center(
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -163,7 +162,7 @@ class _MessageThreadScreenState extends ConsumerState<MessageThreadScreen> {
             size: 48,
             color: Colors.grey,
           ),
-          const SizedBox(height: 16),
+          SizedBox(height: 16),
           Text(
             'Thread not found',
             style: TextStyle(

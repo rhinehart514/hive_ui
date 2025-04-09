@@ -14,6 +14,7 @@ HIVE UI is a Flutter-based mobile application that helps users discover, create,
 - **Social Integration**: Connect with clubs and event organizers
 - **Clean UI**: Enjoy a beautiful glassmorphic design with fluid animations
 - **Real-time Messaging**: Chat with users and groups with instant message delivery
+- **Deep Linking**: Open various content types within the app
 
 ## Architecture
 
@@ -162,3 +163,19 @@ The app now includes a full-featured real-time messaging system powered by Fireb
 - **Typing indicators**: See when someone is typing a response
 - **Media sharing**: Share images, videos, and files in conversations
 - **Message reactions**: React to messages with emojis
+
+### Deep Linking
+
+HIVE supports deep linking to various content types within the app:
+
+- Events: `hive://events/{id}` - Open event details
+- Spaces: `hive://spaces/{type}/spaces/{id}` - Open space details
+- Profiles: `hive://profiles/{id}` - View a user profile
+- Chats: `hive://messages/chat/{id}` - Open direct chat
+- Group Chats: `hive://messages/group/{id}` - Open group chat
+- Posts: `hive://posts/{id}` - View a specific post
+- Search: `hive://search?q={query}` - Open search results
+- Organizations: `hive://organizations/{id}` - View organization details
+- Event Check-ins: `hive://events/{id}/check-in` - Go to event check-in
+
+Links can be shared externally and will open the app to the correct content. Authentication is required for all deep links.

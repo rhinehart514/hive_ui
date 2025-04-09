@@ -15,7 +15,7 @@ class OnboardingState {
   final String? selectedYear;
 
   /// Selected field of study
-  final String? selectedField;
+  final String? selectedMajor;
 
   /// Selected residence
   final String? selectedResidence;
@@ -52,7 +52,7 @@ class OnboardingState {
     this.firstName = '',
     this.lastName = '',
     this.selectedYear,
-    this.selectedField,
+    this.selectedMajor,
     this.selectedResidence,
     this.selectedTier = AccountTier.verified,
     this.selectedClubId,
@@ -65,12 +65,12 @@ class OnboardingState {
     this.clubs = const [],
   });
 
-  /// Creates a copy of this OnboardingState with the given fields replaced with new values
+  /// Creates a copy of this state with the given fields replaced
   OnboardingState copyWith({
     String? firstName,
     String? lastName,
     String? selectedYear,
-    String? selectedField,
+    String? selectedMajor,
     String? selectedResidence,
     AccountTier? selectedTier,
     String? selectedClubId,
@@ -86,7 +86,7 @@ class OnboardingState {
       firstName: firstName ?? this.firstName,
       lastName: lastName ?? this.lastName,
       selectedYear: selectedYear ?? this.selectedYear,
-      selectedField: selectedField ?? this.selectedField,
+      selectedMajor: selectedMajor ?? this.selectedMajor,
       selectedResidence: selectedResidence ?? this.selectedResidence,
       selectedTier: selectedTier ?? this.selectedTier,
       selectedClubId: selectedClubId ?? this.selectedClubId,
@@ -94,8 +94,7 @@ class OnboardingState {
       selectedInterests: selectedInterests ?? this.selectedInterests,
       currentStep: currentStep ?? this.currentStep,
       totalSteps: totalSteps ?? this.totalSteps,
-      isCompletingOnboarding:
-          isCompletingOnboarding ?? this.isCompletingOnboarding,
+      isCompletingOnboarding: isCompletingOnboarding ?? this.isCompletingOnboarding,
       isLoadingClubs: isLoadingClubs ?? this.isLoadingClubs,
       clubs: clubs ?? this.clubs,
     );
@@ -109,8 +108,26 @@ class OnboardingState {
       firstName.isNotEmpty &&
       lastName.isNotEmpty &&
       selectedYear != null &&
-      selectedField != null &&
+      selectedMajor != null &&
       selectedResidence != null;
+
+  /// Whether the user has completed account tier selection
+  bool get hasCompletedTierSelection => true; // Always true since we have a default
+
+  /// Whether the user has completed club selection if they're verified plus
+  bool get hasCompletedClubSelection =>
+      selectedTier != AccountTier.verifiedPlus ||
+      (selectedClubId != null && selectedClubRole != null);
+
+  /// Whether the user has selected at least one interest
+  bool get hasSelectedInterests => selectedInterests.isNotEmpty;
+
+  /// Whether all required onboarding steps are complete
+  bool get isComplete =>
+      hasCompletedPersonalInfo &&
+      hasCompletedTierSelection &&
+      hasCompletedClubSelection &&
+      hasSelectedInterests;
 
   /// Whether the required minimum number of interests has been selected
   bool hasSelectedMinInterests(int minInterests) =>
@@ -136,4 +153,43 @@ class OnboardingState {
   Club? get selectedClub => selectedClubId != null
       ? clubs.where((club) => club.id == selectedClubId).firstOrNull
       : null;
+
+  @override
+  bool operator ==(Object other) {
+    if (identical(this, other)) return true;
+
+    return other is OnboardingState &&
+        other.firstName == firstName &&
+        other.lastName == lastName &&
+        other.selectedYear == selectedYear &&
+        other.selectedMajor == selectedMajor &&
+        other.selectedResidence == selectedResidence &&
+        other.selectedTier == selectedTier &&
+        other.selectedClubId == selectedClubId &&
+        other.selectedClubRole == selectedClubRole &&
+        listEquals(other.selectedInterests, selectedInterests) &&
+        other.currentStep == currentStep &&
+        other.totalSteps == totalSteps &&
+        other.isCompletingOnboarding == isCompletingOnboarding &&
+        other.isLoadingClubs == isLoadingClubs &&
+        listEquals(other.clubs, clubs);
+  }
+
+  @override
+  int get hashCode {
+    return firstName.hashCode ^
+        lastName.hashCode ^
+        selectedYear.hashCode ^
+        selectedMajor.hashCode ^
+        selectedResidence.hashCode ^
+        selectedTier.hashCode ^
+        selectedClubId.hashCode ^
+        selectedClubRole.hashCode ^
+        selectedInterests.hashCode ^
+        currentStep.hashCode ^
+        totalSteps.hashCode ^
+        isCompletingOnboarding.hashCode ^
+        isLoadingClubs.hashCode ^
+        clubs.hashCode;
+  }
 }

@@ -13,7 +13,7 @@ class OnboardingProfileModel {
   final String? year;
 
   /// Selected field of study/major
-  final String? field;
+  final String? major;
 
   /// Selected residence
   final String? residence;
@@ -38,7 +38,7 @@ class OnboardingProfileModel {
     required this.firstName,
     required this.lastName,
     this.year,
-    this.field,
+    this.major,
     this.residence,
     required this.accountTier,
     this.clubId,
@@ -53,7 +53,7 @@ class OnboardingProfileModel {
       firstName: profile.firstName,
       lastName: profile.lastName,
       year: profile.year,
-      field: profile.field,
+      major: profile.major,
       residence: profile.residence,
       accountTier: profile.accountTier,
       clubId: profile.clubId,
@@ -69,7 +69,7 @@ class OnboardingProfileModel {
       firstName: firstName,
       lastName: lastName,
       year: year,
-      field: field,
+      major: major,
       residence: residence,
       accountTier: accountTier,
       clubId: clubId,
@@ -85,7 +85,7 @@ class OnboardingProfileModel {
       firstName: json['firstName'] as String,
       lastName: json['lastName'] as String,
       year: json['year'] as String?,
-      field: json['field'] as String?,
+      major: json['major'] as String?,
       residence: json['residence'] as String?,
       accountTier: _parseAccountTier(json['accountTier']),
       clubId: json['clubId'] as String?,
@@ -101,7 +101,7 @@ class OnboardingProfileModel {
       'firstName': firstName,
       'lastName': lastName,
       'year': year,
-      'field': field,
+      'major': major,
       'residence': residence,
       'accountTier': accountTier.toString().split('.').last,
       'clubId': clubId,
@@ -122,10 +122,14 @@ class OnboardingProfileModel {
     }
 
     if (tier is String) {
-      return AccountTier.values.firstWhere(
-        (e) => e.toString().split('.').last.toLowerCase() == tier.toLowerCase(),
-        orElse: () => AccountTier.public,
-      );
+      try {
+        return AccountTier.values.firstWhere(
+          (e) => e.toString().split('.').last.toLowerCase() == tier.toLowerCase(),
+          orElse: () => AccountTier.public,
+        );
+      } catch (_) {
+        return AccountTier.public;
+      }
     }
 
     return AccountTier.public;

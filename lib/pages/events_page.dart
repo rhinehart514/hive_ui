@@ -347,8 +347,8 @@ class _EventsPageState extends ConsumerState<EventsPage>
       context,
       MaterialPageRoute(
         builder: (context) => EventDetailsPage(
+          eventId: event.id,
           event: event,
-          heroTag: 'event_${event.id}',
         ),
       ),
     );

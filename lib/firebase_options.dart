@@ -28,7 +28,7 @@ class DefaultFirebaseOptions {
       case TargetPlatform.macOS:
         return macos;
       case TargetPlatform.windows:
-        return web;
+        return windows;
       case TargetPlatform.linux:
         throw UnsupportedError(
           'Linux platform is not supported - manually configure your Firebase app',
@@ -67,10 +67,8 @@ class DefaultFirebaseOptions {
     projectId: 'hive-9265c',
     databaseURL: 'https://hive-9265c-default-rtdb.firebaseio.com',
     storageBucket: 'hive-9265c.appspot.com',
-    androidClientId:
-        '573191826528-e815gk6bh55k1nfirmfcoahu5vpnbl48.apps.googleusercontent.com',
-    iosClientId:
-        '573191826528-0lbugjqjf7baf66qpq0ktl32altvkcji.apps.googleusercontent.com',
+    androidClientId: '573191826528-e815gk6bh55k1nfirmfcoahu5vpnbl48.apps.googleusercontent.com',
+    iosClientId: '573191826528-0lbugjqjf7baf66qpq0ktl32altvkcji.apps.googleusercontent.com',
     iosBundleId: 'com.example.hiveUi',
   );
 
@@ -81,10 +79,8 @@ class DefaultFirebaseOptions {
     projectId: 'hive-9265c',
     databaseURL: 'https://hive-9265c-default-rtdb.firebaseio.com',
     storageBucket: 'hive-9265c.appspot.com',
-    androidClientId:
-        '573191826528-e815gk6bh55k1nfirmfcoahu5vpnbl48.apps.googleusercontent.com',
-    iosClientId:
-        '573191826528-0lbugjqjf7baf66qpq0ktl32altvkcji.apps.googleusercontent.com',
+    androidClientId: '573191826528-e815gk6bh55k1nfirmfcoahu5vpnbl48.apps.googleusercontent.com',
+    iosClientId: '573191826528-0lbugjqjf7baf66qpq0ktl32altvkcji.apps.googleusercontent.com',
     iosBundleId: 'com.example.hiveUi',
   );
 
@@ -98,4 +94,5 @@ class DefaultFirebaseOptions {
     storageBucket: 'hive-9265c.appspot.com',
     measurementId: 'G-XLRQEW08TF',
   );
+
 }

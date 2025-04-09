@@ -10,6 +10,7 @@ import 'package:hive_ui/services/optimized_club_adapter.dart';
 import 'package:hive_ui/services/service_initializer.dart';
 
 /// Represents the state of the onboarding process
+@immutable
 class OnboardingState {
   /// Current step in the onboarding process
   final int currentStep;
@@ -26,8 +27,8 @@ class OnboardingState {
   /// Selected academic year
   final String? selectedYear;
 
-  /// Selected field/major
-  final String? selectedField;
+  /// Selected major
+  final String? selectedMajor;
 
   /// Selected residence
   final String? selectedResidence;
@@ -60,7 +61,7 @@ class OnboardingState {
     this.firstName = '',
     this.lastName = '',
     this.selectedYear,
-    this.selectedField,
+    this.selectedMajor,
     this.selectedResidence,
     this.selectedTier = AccountTier.verified,
     this.selectedClubId,
@@ -78,7 +79,7 @@ class OnboardingState {
     String? firstName,
     String? lastName,
     String? selectedYear,
-    String? selectedField,
+    String? selectedMajor,
     String? selectedResidence,
     AccountTier? selectedTier,
     String? selectedClubId,
@@ -94,7 +95,7 @@ class OnboardingState {
       firstName: firstName ?? this.firstName,
       lastName: lastName ?? this.lastName,
       selectedYear: selectedYear ?? this.selectedYear,
-      selectedField: selectedField ?? this.selectedField,
+      selectedMajor: selectedMajor ?? this.selectedMajor,
       selectedResidence: selectedResidence ?? this.selectedResidence,
       selectedTier: selectedTier ?? this.selectedTier,
       selectedClubId: selectedClubId ?? this.selectedClubId,
@@ -110,13 +111,18 @@ class OnboardingState {
   /// The user's full name
   String get fullName => '$firstName $lastName'.trim();
 
-  /// Whether the user has completed personal info
+  /// Whether the user has completed personal info (name and academic details)
   bool get hasCompletedPersonalInfo =>
       firstName.isNotEmpty &&
       lastName.isNotEmpty &&
       selectedYear != null &&
-      selectedField != null &&
+      selectedMajor != null &&
       selectedResidence != null;
+
+  /// Whether all required onboarding steps are complete
+  bool get isComplete =>
+      hasCompletedPersonalInfo &&
+      selectedInterests.isNotEmpty;
 
   /// Whether the onboarding can proceed to the next step
   bool canProceedToNextStep(int minInterests) {
@@ -145,7 +151,7 @@ class OnboardingState {
       firstName: firstName,
       lastName: lastName,
       year: selectedYear,
-      field: selectedField,
+      major: selectedMajor,
       residence: selectedResidence,
       accountTier: selectedTier,
       clubId: selectedClubId,
@@ -225,7 +231,7 @@ class OnboardingController extends StateNotifier<OnboardingState> {
           firstName: profile.firstName,
           lastName: profile.lastName,
           selectedYear: profile.year,
-          selectedField: profile.field,
+          selectedMajor: profile.major,
           selectedResidence: profile.residence,
           selectedTier: profile.accountTier,
           selectedClubId: profile.clubId,
@@ -256,9 +262,9 @@ class OnboardingController extends StateNotifier<OnboardingState> {
     _saveProgress();
   }
 
-  /// Update the selected field
-  void updateSelectedField(String? field) {
-    state = state.copyWith(selectedField: field);
+  /// Update the selected major
+  void updateSelectedMajor(String? major) {
+    state = state.copyWith(selectedMajor: major);
     _saveProgress();
   }
 
@@ -341,7 +347,7 @@ class OnboardingController extends StateNotifier<OnboardingState> {
         'firstName': state.firstName,
         'lastName': state.lastName,
         'selectedYear': state.selectedYear,
-        'selectedField': state.selectedField,
+        'selectedMajor': state.selectedMajor,
         'selectedResidence': state.selectedResidence,
         'selectedTier': state.selectedTier.toString().split('.').last,
         'selectedClubId': state.selectedClubId,
@@ -376,5 +382,72 @@ class OnboardingController extends StateNotifier<OnboardingState> {
       state = state.copyWith(isCompletingOnboarding: false);
       rethrow;
     }
+  }
+
+  /// Updates the field of study/major
+  Future<void> updateMajor(String major) async {
+    state = state.copyWith(selectedMajor: major);
+    
+    // Note: Interest suggestions based on major could be implemented here
+    // No implementation for _suggestInterestsBasedOnProfile exists yet
+  }
+
+  /// Updates the residence
+  void updateResidence(String residence) {
+    state = state.copyWith(selectedResidence: residence);
+  }
+
+  /// Converts the current state to an OnboardingProfile
+  OnboardingProfile toOnboardingProfile() {
+    return OnboardingProfile(
+      firstName: state.firstName,
+      lastName: state.lastName,
+      year: state.selectedYear,
+      major: state.selectedMajor,
+      residence: state.selectedResidence,
+      accountTier: state.selectedTier,
+      clubId: state.selectedClubId,
+      clubRole: state.selectedClubRole,
+      interests: state.selectedInterests,
+      onboardingCompleted: state.isComplete,
+    );
+  }
+
+  /// Builds a profile from the current state or a remote profile
+  Future<void> buildProfileFromRemote() async {
+    try {
+      final profile = await _getOnboardingProfileUseCase();
+      if (profile != null) {
+        state = state.copyWith(
+          firstName: profile.firstName,
+          lastName: profile.lastName,
+          selectedYear: profile.year,
+          selectedMajor: profile.major,
+          selectedResidence: profile.residence,
+          selectedTier: profile.accountTier,
+          selectedClubId: profile.clubId,
+          selectedClubRole: profile.clubRole,
+          selectedInterests: profile.interests,
+        );
+      }
+    } catch (e) {
+      debugPrint('Error loading profile: $e');
+      // Keep current state on error
+    }
+  }
+
+  /// Gets the data to upload to the onboarding profile
+  Map<String, dynamic> getOnboardingData() {
+    return {
+      'firstName': state.firstName,
+      'lastName': state.lastName,
+      'selectedYear': state.selectedYear,
+      'selectedMajor': state.selectedMajor,
+      'selectedResidence': state.selectedResidence,
+      'selectedTier': state.selectedTier.name,
+      'selectedClubId': state.selectedClubId,
+      'selectedClubRole': state.selectedClubRole,
+      'selectedInterests': state.selectedInterests,
+    };
   }
 }

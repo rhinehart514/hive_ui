@@ -8,8 +8,6 @@ import '../../models/repost_content_type.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/huge_icons.dart';
 import '../../extensions/glassmorphism_extension.dart';
-import '../../core/navigation/routes.dart';
-import 'package:flutter/foundation.dart';
 import '../../providers/reposted_events_provider.dart';
 import '../../utils/auth_utils.dart';
 import '../../providers/feed_provider.dart';
@@ -300,7 +298,7 @@ class _RepostOptionsCardState extends ConsumerState<RepostOptionsCard> {
         child: Row(
           children: [
             if (showProgress)
-              SizedBox(
+              const SizedBox(
                 width: 24,
                 height: 24,
                 child: CircularProgressIndicator(

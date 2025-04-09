@@ -51,7 +51,7 @@ class AvatarOptimization {
     );
     
     // Load the image directly without precaching
-    await cacheProvider.obtainKey(ImageConfiguration());
+    await cacheProvider.obtainKey(const ImageConfiguration());
   }
   
   /// Extract dominant color from an avatar for use in UI

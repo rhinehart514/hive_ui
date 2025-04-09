@@ -3,10 +3,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_ui/models/event.dart';
 import 'package:hive_ui/models/feed_state.dart';
+import 'package:hive_ui/models/repost_content_type.dart';
 import 'package:hive_ui/providers/profile_provider.dart';
 import 'package:hive_ui/providers/feed_provider.dart'; // Main feed state
 import 'package:hive_ui/services/feed/feed_service.dart';
 import 'package:hive_ui/services/feed/feed_analytics.dart';
+import 'package:hive_ui/providers/event_update_provider.dart';
+import 'package:hive_ui/providers/reposted_events_provider.dart';
 
 /// Provider for the feed controller
 final feedControllerProvider = Provider<FeedController>((ref) {
@@ -237,14 +240,153 @@ class FeedController extends StateNotifier<FeedState> {
   /// Handle RSVP to an event
   Future<void> rsvpToEvent(Event event) async {
     try {
+      final currentProfile = _ref.read(profileProvider).profile;
+      if (currentProfile == null) throw Exception('User profile not found');
+      
+      // Optimistic update
+      final updatedEvent = event.copyWith(
+        attendees: event.attendees.contains(currentProfile.id)
+            ? event.attendees.where((id) => id != currentProfile.id).toList()
+            : [...event.attendees, currentProfile.id],
+      );
+      
+      // Update all instances of this event in the feed
+      _updateEventInFeed(updatedEvent);
+      
       // Save event using profile provider
-      await _ref.read(profileProvider.notifier).saveEvent(event);
-
+      await _ref.read(profileProvider.notifier).saveEvent(updatedEvent);
+      
       // Track interaction for personalization
       await FeedAnalytics.trackEventInteraction(event, 'rsvp');
+      
+      // Notify listeners of the update
+      _notifyEventUpdate(updatedEvent);
     } catch (e) {
       debugPrint('Error RSVPing to event: $e');
+      // Rollback optimistic update
+      _updateEventInFeed(event);
+      rethrow;
     }
+  }
+
+  /// Update an event in all feed locations
+  void _updateEventInFeed(Event updatedEvent) {
+    final currentState = state;
+    
+    // Update in main events list
+    final updatedEvents = currentState.events.map((e) => 
+      e.id == updatedEvent.id ? updatedEvent : e
+    ).toList();
+    
+    // Update in feed items
+    final updatedFeedItems = currentState.feedItems.map((item) {
+      if (item['type'] == 'event' && (item['data'] as Event).id == updatedEvent.id) {
+        return {
+          ...item,
+          'data': updatedEvent,
+        };
+      } else if (item['type'] == 'repost' && 
+          (item['data'] as RepostItem).event.id == updatedEvent.id) {
+        final repost = item['data'] as RepostItem;
+        return {
+          ...item,
+          'data': repost.copyWith(event: updatedEvent),
+        };
+      }
+      return item;
+    }).toList();
+    
+    // Update state
+    state = currentState.copyWith(
+      events: updatedEvents,
+      feedItems: updatedFeedItems,
+    );
+  }
+
+  /// Handle repost of an event
+  Future<void> repostEvent(Event event, {String? comment, RepostContentType type = RepostContentType.standard}) async {
+    try {
+      // Get current user profile
+      final currentProfile = _ref.read(profileProvider).profile;
+      if (currentProfile == null) throw Exception('User profile not found');
+      
+      // Create repost item
+      final repost = RepostItem(
+        event: event,
+        reposterProfile: currentProfile,
+        repostTime: DateTime.now(),
+        comment: comment,
+        contentType: type,
+      );
+      
+      // Optimistic update
+      final updatedEvent = event.copyWith(
+        reposts: [...event.reposts, currentProfile.id],
+      );
+      
+      // Update feed with new repost and updated event
+      _addRepostToFeed(repost, updatedEvent);
+      
+      // Save repost to backend
+      await _ref.read(repostedEventsProvider.notifier).addRepost(
+        event: event,
+        repostedBy: currentProfile,
+        comment: comment,
+        type: type,
+      );
+      
+      // Track interaction
+      await FeedAnalytics.trackEventInteraction(event, 'repost');
+    } catch (e) {
+      debugPrint('Error reposting event: $e');
+      // Rollback optimistic update
+      _updateEventInFeed(event);
+      rethrow;
+    }
+  }
+
+  /// Add a repost to the feed
+  void _addRepostToFeed(RepostItem repost, Event updatedEvent) {
+    final currentState = state;
+    
+    // Update event in all locations
+    _updateEventInFeed(updatedEvent);
+    
+    // Add repost to list
+    final updatedReposts = [repost, ...currentState.reposts];
+    
+    // Add repost to feed items in correct position
+    final updatedFeedItems = [...currentState.feedItems];
+    
+    // Find position to insert repost (after original event if exists)
+    int insertIndex = 0;
+    for (var i = 0; i < updatedFeedItems.length; i++) {
+      if (updatedFeedItems[i]['type'] == 'event' && 
+          (updatedFeedItems[i]['data'] as Event).id == repost.event.id) {
+        insertIndex = i + 1;
+        break;
+      }
+    }
+    
+    // Insert repost
+    updatedFeedItems.insert(insertIndex, {
+      'type': 'repost',
+      'data': repost,
+      'eventStartDate': repost.event.startDate.millisecondsSinceEpoch,
+      'timestamp': repost.repostTime.millisecondsSinceEpoch,
+    });
+    
+    // Update state
+    state = currentState.copyWith(
+      reposts: updatedReposts,
+      feedItems: updatedFeedItems,
+    );
+  }
+
+  /// Notify listeners of event updates
+  void _notifyEventUpdate(Event event) {
+    // Notify any listeners about the event update
+    _ref.read(eventUpdateProvider.notifier).notifyEventUpdate(event);
   }
 
   /// Track event view

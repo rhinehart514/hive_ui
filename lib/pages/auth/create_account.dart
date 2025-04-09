@@ -7,10 +7,15 @@ import 'package:hive_ui/theme/app_colors.dart';
 import 'package:hive_ui/services/user_preferences_service.dart';
 import 'package:hive_ui/features/auth/providers/auth_providers.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:hive_ui/firebase_options.dart';
+import 'package:hive_ui/firebase_init_tracker.dart';
 import 'package:flutter/foundation.dart'
     show debugPrint, kIsWeb, defaultTargetPlatform, TargetPlatform;
 import 'package:hive_ui/core/navigation/transitions.dart';
 import 'package:hive_ui/core/navigation/app_bar_builder.dart';
+import 'package:hive_ui/pages/onboarding_profile.dart';
+import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 
 class CreateAccountPage extends ConsumerStatefulWidget {
   const CreateAccountPage({super.key});
@@ -200,6 +205,29 @@ class _CreateAccountPageState extends ConsumerState<CreateAccountPage> {
 
       // Create account using Firebase
       debugPrint('Creating Firebase account...');
+      
+      // Ensure Firebase is initialized before creating account
+      try {
+        // Check the tracker first
+        if (!FirebaseInitTracker.isInitialized && defaultTargetPlatform != TargetPlatform.windows) {
+          debugPrint('Firebase not initialized in create account page, initializing now...');
+          await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+          
+          if (Firebase.apps.isNotEmpty) {
+            FirebaseInitTracker.isInitialized = true;
+            FirebaseInitTracker.needsInitialization = false;
+            debugPrint('Firebase initialized successfully from create account page');
+          } else {
+            throw 'Failed to initialize Firebase';
+          }
+        } else {
+          debugPrint('Firebase already initialized: ${FirebaseInitTracker.isInitialized}');
+        }
+      } catch (e) {
+        debugPrint('Error initializing Firebase in create account page: $e');
+        throw 'Could not initialize Firebase. Please restart the app and try again.';
+      }
+      
       await ref
           .read(authControllerProvider.notifier)
           .createUserWithEmailPassword(
@@ -209,32 +237,29 @@ class _CreateAccountPageState extends ConsumerState<CreateAccountPage> {
 
       debugPrint('Firebase account created successfully');
 
-      // CRITICAL: Ensure authentication state is fully propagated before continuing
-      final firebaseAuth = FirebaseAuth.instance;
-      int retryCount = 0;
+      // Instead of polling, add a small delay to allow Riverpod state to update
+      await Future.delayed(const Duration(milliseconds: 300)); 
 
-      // Verify that we have a valid Firebase user before proceeding to onboarding
-      while (firebaseAuth.currentUser == null && retryCount < 5) {
+      // Check currentUser status via the provider *if necessary* for logic like email verification
+      // Reading the auth state provider once after the controller action
+      final updatedAuthState = ref.read(authStateProvider);
+      final currentUser = updatedAuthState.valueOrNull; // Safely get AuthUser or null
+
+      if (currentUser != null && currentUser.isNotEmpty) { // Check if user is not empty
         debugPrint(
-            'Waiting for Firebase auth state to propagate (attempt ${retryCount + 1})');
-        await Future.delayed(const Duration(milliseconds: 500));
-        retryCount++;
-      }
+            'Firebase user confirmed via provider: ${currentUser.id}'); // Use id from AuthUser
 
-      if (firebaseAuth.currentUser != null) {
-        debugPrint(
-            'Firebase user confirmed ready for onboarding: ${firebaseAuth.currentUser!.uid}');
-
-        // For email verification
+        // For email verification (using the currentUser obtained via provider)
         if (isEduEmail && !isBuffaloEmail) {
-          // Send verification email for educational emails
           try {
-            await firebaseAuth.currentUser!.sendEmailVerification();
+            // Call the controller method to send verification
+            await ref.read(authControllerProvider.notifier).sendEmailVerification();
+            debugPrint('Verification email requested for ${currentUser.email}');
             if (mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
                   content: Text(
-                    'Verification email sent to $email',
+                    'Verification email sent to ${currentUser.email}', // Use email from AuthUser
                     style: GoogleFonts.inter(
                       color: AppColors.white,
                       fontWeight: FontWeight.w500,
@@ -410,52 +435,93 @@ class _CreateAccountPageState extends ConsumerState<CreateAccountPage> {
       // Sign in with Google using Firebase
       await ref.read(authControllerProvider.notifier).signInWithGoogle();
 
-      // Wait for Firebase Auth state to propagate
-      final firebaseAuth = FirebaseAuth.instance;
-      int retryCount = 0;
-      while (firebaseAuth.currentUser == null && retryCount < 5) {
-        debugPrint(
-            'Waiting for Google auth state to propagate (attempt ${retryCount + 1})');
-        await Future.delayed(const Duration(milliseconds: 300));
-        retryCount++;
-      }
+      // Add a small delay to allow Riverpod state to update
+      await Future.delayed(const Duration(milliseconds: 300)); 
 
-      if (firebaseAuth.currentUser == null) {
-        debugPrint(
-            'Warning: Firebase user still null after Google sign-in. Attempting recovery...');
+      // Re-read the auth state provider to get the latest user status
+      final updatedAuthState = ref.read(authStateProvider);
+      final currentUserFromGoogle = updatedAuthState.valueOrNull;
 
-        // Additional recovery attempt for Windows platforms
+      if (currentUserFromGoogle == null) {
+        debugPrint(
+            'Warning: Firebase user still null after Google sign-in (checked via provider).');
+        // Keep existing recovery logic for Windows if desired
         if (defaultTargetPlatform == TargetPlatform.windows) {
-          debugPrint(
-              'Attempting Windows-specific recovery for Google sign-in...');
-          await Future.delayed(const Duration(seconds: 1));
-
-          // Check one more time after a longer delay
-          if (firebaseAuth.currentUser != null) {
-            debugPrint('Delayed recovery successful, user found after wait');
-          } else {
-            debugPrint('Recovery failed, user still null after extended wait');
-          }
-        }
+            debugPrint(
+                'Attempting Windows-specific recovery for Google sign-in...');
+            await Future.delayed(const Duration(seconds: 1));
+            // Check one more time after a longer delay
+            final finalAuthState = ref.read(authStateProvider);
+            if (finalAuthState.valueOrNull != null) {
+                 debugPrint('Delayed recovery successful, user found after wait');
+             } else {
+                 debugPrint('Recovery failed, user still null after extended wait');
+             }
+         }
+         // Potentially throw error or show message if still null?
       } else {
         debugPrint(
-            'Google sign-in confirmed: ${firebaseAuth.currentUser!.uid}');
+            'Google sign-in confirmed via provider: ${currentUserFromGoogle.id}'); // Use id from AuthUser
 
         // Store email in preferences for reference
-        if (firebaseAuth.currentUser!.email != null) {
+        if (currentUserFromGoogle.email != null) {
           await UserPreferencesService.saveUserEmail(
-              firebaseAuth.currentUser!.email!);
+              currentUserFromGoogle.email!);
         }
       }
 
       // Check if this is a new account or existing
       final user = ref.read(currentUserProvider);
-      final bool isNewUser = user.createdAt.difference(DateTime.now()).inSeconds.abs() < 10;
+      
+      // Simpler approach to detect new users that avoids null safety issues
+      bool isNewUser = false;
+      
+      // Method 1: Based on creation time (if available)
+      final createdAt = user.createdAt;
+      if (createdAt != null) {
+        final creationTimeSeconds = createdAt.difference(DateTime.now()).inSeconds.abs();
+        if (creationTimeSeconds < 30) {
+          isNewUser = true;
+          debugPrint('New user detection - Based on creation time: true (created $creationTimeSeconds seconds ago)');
+        }
+      }
+      
+      // Method 2: Check if we have no saved user ID
+      final savedUserId = UserPreferencesService.getUserIdSync();
+      if (savedUserId == '') {
+        // We don't have a saved user ID but we have a current user
+        final currentUserId = user.id ?? '';
+        if (currentUserId != '') {
+          isNewUser = true;
+          debugPrint('New user detection - No saved user ID: true');
+        }
+      }
+      
+      // Skip Method 3 since AuthUser doesn't have isNewUser property
+      
+      debugPrint('Final new user detection result: $isNewUser');
 
       if (isNewUser) {
         // For new accounts, ensure onboarding status is reset
+        debugPrint('New account detected! Resetting onboarding status...');
         await UserPreferencesService.resetOnboardingStatus();
+        
+        // Save user ID to help with future new user detection
+        await UserPreferencesService.saveUserId(user.id);
+        
+        // Verify reset was successful 
+        final onboardingStatus = UserPreferencesService.hasCompletedOnboarding();
+        debugPrint('Verification: Onboarding status after reset: $onboardingStatus (should be false)');
+        
+        // Safety check - force reset again if needed
+        if (onboardingStatus == true) {
+          debugPrint('WARNING: Onboarding reset failed. Trying again with force flag...');
+          await UserPreferencesService.forceResetOnboardingStatus();
+        }
+        
         debugPrint('New Google account detected. Redirecting to onboarding...');
+      } else {
+        debugPrint('Existing account detected. Will go to home screen.');
       }
 
       if (mounted) {
@@ -472,8 +538,15 @@ class _CreateAccountPageState extends ConsumerState<CreateAccountPage> {
 
         // Navigate based on user state
         if (isNewUser) {
-          // New users go to onboarding
-          context.go('/onboarding');
+          // Add a small delay to ensure preferences are saved
+          await Future.delayed(const Duration(milliseconds: 200));
+          
+          // New users go to onboarding - use pushReplacement for more reliable navigation
+          debugPrint('Navigating to onboarding page...');
+          Navigator.of(context).pushAndRemoveUntil(
+            MaterialPageRoute(builder: (context) => const OnboardingProfilePage()),
+            (route) => false, // Remove all routes underneath
+          );
         } else {
           // Existing users go to home
           context.go('/home');

@@ -3,7 +3,6 @@ import '../models/event.dart';
 import '../models/feed_state.dart' hide SpaceRecommendation, HiveLabItem;
 import '../models/repost_content_type.dart';
 import '../components/event_card/event_card.dart';
-import '../models/user_profile.dart';
 import '../models/space_recommendation.dart';
 import '../models/hive_lab_item.dart';
 import '../components/feed/space_recommendation_card.dart';

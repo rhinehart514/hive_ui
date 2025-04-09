@@ -25,6 +25,11 @@ class SpaceModel {
   final SpaceType spaceType;
   final List<String> eventIds;
   final bool hiveExclusive;
+  final bool hasMessageBoard;
+  final SpaceLifecycleState lifecycleState;
+  final SpaceClaimStatus claimStatus;
+  final String? claimId;
+  final DateTime? lastActivityAt;
 
   SpaceModel({
     required this.id,
@@ -47,6 +52,11 @@ class SpaceModel {
     this.spaceType = SpaceType.other,
     this.eventIds = const [],
     this.hiveExclusive = false,
+    this.hasMessageBoard = true,
+    this.lifecycleState = SpaceLifecycleState.active,
+    this.claimStatus = SpaceClaimStatus.notRequired,
+    this.claimId,
+    this.lastActivityAt,
   });
 
   /// Convert to domain entity
@@ -72,6 +82,11 @@ class SpaceModel {
       eventIds: eventIds,
       customData: customData,
       hiveExclusive: hiveExclusive,
+      hasMessageBoard: hasMessageBoard,
+      lifecycleState: lifecycleState,
+      claimStatus: claimStatus,
+      claimId: claimId,
+      lastActivityAt: lastActivityAt,
     );
   }
 
@@ -101,6 +116,17 @@ class SpaceModel {
         updatedAt = DateTime.parse(data['updatedAt']);
       }
     }
+    
+    DateTime? lastActivityAt;
+    if (data['lastActivityAt'] != null) {
+      if (data['lastActivityAt'] is Timestamp) {
+        lastActivityAt = (data['lastActivityAt'] as Timestamp).toDate();
+      } else if (data['lastActivityAt'] is int) {
+        lastActivityAt = DateTime.fromMillisecondsSinceEpoch(data['lastActivityAt']);
+      } else if (data['lastActivityAt'] is String) {
+        lastActivityAt = DateTime.parse(data['lastActivityAt']);
+      }
+    }
 
     // Parse icon
     int iconCodePoint = Icons.group.codePoint;
@@ -113,143 +139,138 @@ class SpaceModel {
     // Parse space type
     SpaceType spaceType = SpaceType.other;
     if (data['spaceType'] != null) {
-      final spaceTypeStr = data['spaceType'].toString().toLowerCase();
-      if (spaceTypeStr.contains('student')) {
-        spaceType = SpaceType.studentOrg;
-      } else if (spaceTypeStr.contains('universit')) {
-        spaceType = SpaceType.universityOrg;
-      } else if (spaceTypeStr.contains('living')) {
-        spaceType = SpaceType.campusLiving;
-      } else if (spaceTypeStr.contains('frat') ||
-          spaceTypeStr.contains('soror')) {
-        spaceType = SpaceType.fraternityAndSorority;
+      if (data['spaceType'] is String) {
+        switch (data['spaceType']) {
+          case 'studentOrg':
+            spaceType = SpaceType.studentOrg;
+            break;
+          case 'universityOrg':
+            spaceType = SpaceType.universityOrg;
+            break;
+          case 'campusLiving':
+            spaceType = SpaceType.campusLiving;
+            break;
+          case 'fraternityAndSorority':
+            spaceType = SpaceType.fraternityAndSorority;
+            break;
+          case 'hiveExclusive':
+            spaceType = SpaceType.hiveExclusive;
+            break;
+          default:
+            spaceType = SpaceType.other;
+        }
       }
+    }
+    
+    // Parse lifecycle state
+    SpaceLifecycleState lifecycleState = SpaceLifecycleState.active;
+    if (data['lifecycleState'] != null) {
+      if (data['lifecycleState'] is String) {
+        switch (data['lifecycleState']) {
+          case 'created':
+            lifecycleState = SpaceLifecycleState.created;
+            break;
+          case 'active':
+            lifecycleState = SpaceLifecycleState.active;
+            break;
+          case 'dormant':
+            lifecycleState = SpaceLifecycleState.dormant;
+            break;
+          case 'archived':
+            lifecycleState = SpaceLifecycleState.archived;
+            break;
+        }
+      }
+    }
+    
+    // Parse claim status
+    SpaceClaimStatus claimStatus = SpaceClaimStatus.notRequired;
+    if (data['claimStatus'] != null) {
+      if (data['claimStatus'] is String) {
+        switch (data['claimStatus']) {
+          case 'unclaimed':
+            claimStatus = SpaceClaimStatus.unclaimed;
+            break;
+          case 'pending':
+            claimStatus = SpaceClaimStatus.pending;
+            break;
+          case 'claimed':
+            claimStatus = SpaceClaimStatus.claimed;
+            break;
+          case 'notRequired':
+            claimStatus = SpaceClaimStatus.notRequired;
+            break;
+        }
+      }
+    } else {
+      // Determine default claim status based on space type
+      final bool isHiveExclusive = data['hiveExclusive'] == true || 
+                                   spaceType == SpaceType.hiveExclusive;
+      claimStatus = isHiveExclusive ? SpaceClaimStatus.notRequired : SpaceClaimStatus.unclaimed;
+    }
+
+    // Parse lists
+    List<String> tags = [];
+    if (data['tags'] != null && data['tags'] is List) {
+      tags = List<String>.from(data['tags'] as List);
+    }
+
+    List<String> moderators = [];
+    if (data['moderators'] != null && data['moderators'] is List) {
+      moderators = List<String>.from(data['moderators'] as List);
+    }
+
+    List<String> admins = [];
+    if (data['admins'] != null && data['admins'] is List) {
+      admins = List<String>.from(data['admins'] as List);
+    }
+
+    List<String> relatedSpaceIds = [];
+    if (data['relatedSpaceIds'] != null && data['relatedSpaceIds'] is List) {
+      relatedSpaceIds = List<String>.from(data['relatedSpaceIds'] as List);
+    }
+
+    List<String> eventIds = [];
+    if (data['eventIds'] != null && data['eventIds'] is List) {
+      eventIds = List<String>.from(data['eventIds'] as List);
+    }
+
+    // Parse maps
+    Map<String, String> quickActions = {};
+    if (data['quickActions'] != null && data['quickActions'] is Map) {
+      quickActions = Map<String, String>.from(data['quickActions'] as Map);
     }
 
     // Parse metrics
-    SpaceMetricsModel metrics;
-    if (data['metrics'] != null) {
-      try {
-        metrics = SpaceMetricsModel.fromJson(
-            data['metrics'] as Map<String, dynamic>, doc.id);
-      } catch (e) {
-        metrics = SpaceMetricsModel.initial(doc.id);
-      }
-    } else {
-      metrics = SpaceMetricsModel.initial(doc.id);
-    }
-
-    // Safely parse list fields
-    List<String> parseTags() {
-      if (data['tags'] == null) return const [];
-      if (data['tags'] is List) {
-        try {
-          return List<String>.from(data['tags'] as List);
-        } catch (e) {
-          return const [];
-        }
-      }
-      return const [];
-    }
-
-    List<String> parseModerators() {
-      if (data['moderators'] == null) return const [];
-      if (data['moderators'] is List) {
-        try {
-          return List<String>.from(data['moderators'] as List);
-        } catch (e) {
-          return const [];
-        }
-      }
-      return const [];
-    }
-
-    List<String> parseAdmins() {
-      if (data['admins'] == null) return const [];
-      if (data['admins'] is List) {
-        try {
-          return List<String>.from(data['admins'] as List);
-        } catch (e) {
-          return const [];
-        }
-      }
-      return const [];
-    }
-
-    List<String> parseRelatedSpaceIds() {
-      if (data['relatedSpaceIds'] == null) return const [];
-      if (data['relatedSpaceIds'] is List) {
-        try {
-          return List<String>.from(data['relatedSpaceIds'] as List);
-        } catch (e) {
-          return const [];
-        }
-      }
-      return const [];
-    }
-
-    List<String> parseEventIds() {
-      if (data['eventIds'] == null) return const [];
-      if (data['eventIds'] is List) {
-        try {
-          return List<String>.from(data['eventIds'] as List);
-        } catch (e) {
-          return const [];
-        }
-      }
-      return const [];
-    }
-
-    // Parse custom data safely
-    Map<String, dynamic> parseCustomData() {
-      if (data['customData'] == null) return const {};
-      if (data['customData'] is Map) {
-        try {
-          return Map<String, dynamic>.from(data['customData'] as Map);
-        } catch (e) {
-          return const {};
-        }
-      }
-      return const {};
-    }
-
-    // Parse quickActions safely
-    Map<String, String> parseQuickActions() {
-      if (data['quickActions'] == null) return const {};
-      if (data['quickActions'] is Map) {
-        try {
-          return Map<String, String>.from(data['quickActions'] as Map);
-        } catch (e) {
-          return const {};
-        }
-      }
-      return const {};
-    }
-
-    // Check for hiveExclusive flag
-    final bool hiveExclusive = data['hiveExclusive'] == true;
+    final metricsData = data['metrics'] as Map<String, dynamic>? ?? {};
+    final metrics = SpaceMetricsModel.fromMap(doc.id, metricsData);
 
     return SpaceModel(
       id: doc.id,
-      name: data['name'] ?? 'Unnamed Space',
-      description: data['description'] ?? '',
+      name: data['name'] as String? ?? 'Unnamed Space',
+      description: data['description'] as String? ?? '',
       iconCodePoint: iconCodePoint,
-      imageUrl: data['imageUrl'],
-      bannerUrl: data['bannerUrl'],
+      imageUrl: data['imageUrl'] as String?,
+      bannerUrl: data['bannerUrl'] as String?,
       metrics: metrics,
-      tags: parseTags(),
-      customData: parseCustomData(),
-      isJoined: false, // This is determined elsewhere
-      isPrivate: data['isPrivate'] == true,
-      moderators: parseModerators(),
-      admins: parseAdmins(),
-      quickActions: parseQuickActions(),
-      relatedSpaceIds: parseRelatedSpaceIds(),
+      tags: tags,
+      customData: data['customData'] as Map<String, dynamic>? ?? {},
+      isJoined: data['isJoined'] as bool? ?? false,
+      isPrivate: data['isPrivate'] as bool? ?? false,
+      moderators: moderators,
+      admins: admins,
+      quickActions: quickActions,
+      relatedSpaceIds: relatedSpaceIds,
       createdAt: createdAt,
       updatedAt: updatedAt,
       spaceType: spaceType,
-      eventIds: parseEventIds(),
-      hiveExclusive: hiveExclusive,
+      eventIds: eventIds,
+      hiveExclusive: data['hiveExclusive'] as bool? ?? false,
+      hasMessageBoard: data['hasMessageBoard'] as bool? ?? true,
+      lifecycleState: lifecycleState,
+      claimStatus: claimStatus,
+      claimId: data['claimId'] as String?,
+      lastActivityAt: lastActivityAt,
     );
   }
 
@@ -261,19 +282,71 @@ class SpaceModel {
       'icon': iconCodePoint,
       'imageUrl': imageUrl,
       'bannerUrl': bannerUrl,
-      'metrics': metrics.toJson(),
+      'metrics': metrics.toMap(),
       'tags': tags,
       'customData': customData,
+      'isJoined': isJoined,
       'isPrivate': isPrivate,
       'moderators': moderators,
       'admins': admins,
       'quickActions': quickActions,
       'relatedSpaceIds': relatedSpaceIds,
-      'createdAt': createdAt,
-      'updatedAt': updatedAt,
-      'spaceType': spaceType.toString().split('.').last,
+      'createdAt': Timestamp.fromDate(createdAt),
+      'updatedAt': Timestamp.fromDate(updatedAt),
+      'spaceType': _spaceTypeToString(spaceType),
       'eventIds': eventIds,
       'hiveExclusive': hiveExclusive,
+      'hasMessageBoard': hasMessageBoard,
+      'lifecycleState': _lifecycleStateToString(lifecycleState),
+      'claimStatus': _claimStatusToString(claimStatus),
+      'claimId': claimId,
+      'lastActivityAt': lastActivityAt != null ? Timestamp.fromDate(lastActivityAt!) : null,
     };
+  }
+  
+  /// Convert SpaceType enum to string
+  String _spaceTypeToString(SpaceType type) {
+    switch (type) {
+      case SpaceType.studentOrg:
+        return 'studentOrg';
+      case SpaceType.universityOrg:
+        return 'universityOrg';
+      case SpaceType.campusLiving:
+        return 'campusLiving';
+      case SpaceType.fraternityAndSorority:
+        return 'fraternityAndSorority';
+      case SpaceType.hiveExclusive:
+        return 'hiveExclusive';
+      case SpaceType.other:
+        return 'other';
+    }
+  }
+  
+  /// Convert SpaceLifecycleState enum to string
+  String _lifecycleStateToString(SpaceLifecycleState state) {
+    switch (state) {
+      case SpaceLifecycleState.created:
+        return 'created';
+      case SpaceLifecycleState.active:
+        return 'active';
+      case SpaceLifecycleState.dormant:
+        return 'dormant';
+      case SpaceLifecycleState.archived:
+        return 'archived';
+    }
+  }
+  
+  /// Convert SpaceClaimStatus enum to string
+  String _claimStatusToString(SpaceClaimStatus status) {
+    switch (status) {
+      case SpaceClaimStatus.unclaimed:
+        return 'unclaimed';
+      case SpaceClaimStatus.pending:
+        return 'pending';
+      case SpaceClaimStatus.claimed:
+        return 'claimed';
+      case SpaceClaimStatus.notRequired:
+        return 'notRequired';
+    }
   }
 }

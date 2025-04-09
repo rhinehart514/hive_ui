@@ -1,47 +1,33 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:hive_ui/features/messaging/utils/messaging_initializer.dart';
 import 'package:hive_ui/core/navigation/router_config.dart';
 import 'package:hive_ui/theme/app_theme.dart';
+import 'package:hive_ui/core/app_initializer.dart';
+import 'package:hive_ui/core/widgets/offline_status_overlay.dart';
 
-class HiveApp extends ConsumerStatefulWidget {
-  const HiveApp({super.key});
+class HiveApp extends ConsumerWidget {
+  const HiveApp({Key? key}) : super(key: key);
 
   @override
-  ConsumerState<HiveApp> createState() => _HiveAppState();
-}
-
-class _HiveAppState extends ConsumerState<HiveApp> {
-  @override
-  void initState() {
-    super.initState();
+  Widget build(BuildContext context, WidgetRef ref) {
+    // Initialize app services
+    ref.watch(appInitializerProvider);
     
-    // Defer setup to ensure everything is initialized
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _setupServices();
-    });
-  }
-  
-  Future<void> _setupServices() async {
-    // Initialize messaging features
-    await initializeFirebaseMessaging();
-    // Initialize messaging services via provider
-    ref.read(messagingInitializerProvider);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    // Setup notification navigation after build is complete
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      setupNotificationNavigation(appRouter, context);
-    });
+    // Get router config
+    final router = ref.watch(routerProvider);
     
     return MaterialApp.router(
       title: 'HIVE',
-      theme: AppTheme.darkTheme,
-      themeMode: ThemeMode.dark,
-      routerConfig: appRouter,
-      debugShowCheckedModeBanner: false,
+      theme: AppTheme.lightTheme,
+      darkTheme: AppTheme.darkTheme,
+      themeMode: ThemeMode.dark, // Use dark theme by default
+      routerConfig: router,
+      builder: (context, child) {
+        // Wrap the entire app with the offline status overlay
+        return ConditionalOfflineStatusOverlay(
+          child: child ?? const SizedBox.shrink(),
+        );
+      },
     );
   }
 } 

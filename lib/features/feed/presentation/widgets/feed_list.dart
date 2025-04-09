@@ -6,11 +6,10 @@ import '../../../../models/repost_content_type.dart';
 import '../../../../models/feed_state.dart';
 import '../../../../models/space_recommendation.dart' as model;
 import '../../../../widgets/feed_event_card.dart';
-import '../../../../models/user_profile.dart';
-import '../../../../utils/auth_utils.dart';
 import '../../../../services/analytics_service.dart';
 import '../../../../components/feed/space_recommendation_card.dart';
-import '../../../../models/space_recommendation.dart' as model;
+import '../../../../components/moderation/report_dialog.dart';
+import '../../../../features/moderation/domain/entities/content_report_entity.dart';
 
 /// A reusable widget for displaying the feed items
 class FeedList extends ConsumerWidget {
@@ -118,6 +117,7 @@ class FeedList extends ConsumerWidget {
           onTap: (e) => onNavigateToEventDetails(e),
           onRsvp: (e) => onRsvpToEvent(e),
           onRepost: (e, comment, type) => _handleRepost(context, e, comment, type),
+          onReport: (e) => _handleReport(context, e),
         );
         
       case 'repost':
@@ -133,6 +133,7 @@ class FeedList extends ConsumerWidget {
           onTap: (e) => onNavigateToEventDetails(e),
           onRsvp: (e) => onRsvpToEvent(e),
           onRepost: (e, comment, type) => _handleRepost(context, e, comment, type),
+          onReport: (e) => _handleReport(context, e),
         );
         
       case 'spaceRecommendation':
@@ -327,5 +328,15 @@ class FeedList extends ConsumerWidget {
   void _handleRepost(BuildContext context, Event event, String? comment, RepostContentType type) {
     // Directly call the parent handler which already has auth checking
     onRepost(event, comment, type);
+  }
+  
+  void _handleReport(BuildContext context, Event event) {
+    showReportDialog(
+      context,
+      contentId: event.id,
+      contentType: ReportedContentType.event,
+      contentPreview: event.title,
+      ownerId: event.createdBy,
+    );
   }
 } 

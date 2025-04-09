@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:hive_ui/theme/app_colors.dart';
-import 'dart:ui';
 import 'package:url_launcher/url_launcher.dart';
 
 /// Data class for about section items
@@ -41,12 +40,12 @@ class SpaceAboutTab extends StatelessWidget {
   
   @override
   Widget build(BuildContext context) {
-    return ListView(
-      padding: const EdgeInsets.symmetric(vertical: 16),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         // Description section
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -86,8 +85,6 @@ class SpaceAboutTab extends StatelessWidget {
             ],
           ),
         ),
-        
-        const SizedBox(height: 24),
         
         // Connect section
         if (aboutItems.isNotEmpty) ...[

@@ -8,7 +8,6 @@ import '../../models/user_profile.dart';
 import '../../models/repost_content_type.dart';
 import '../../theme/app_colors.dart';
 import '../../components/optimized_image.dart';
-import '../../core/navigation/routes.dart';
 import '../../providers/reposted_events_provider.dart';
 import '../../providers/profile_provider.dart';
 import '../../components/event_card/event_card.dart';
@@ -690,7 +689,7 @@ extension RepostOptionsExtension on BuildContext {
                         debugPrint('Error navigating to quote_repost: $e');
                         if (mounted) {
                           ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
+                            const SnackBar(
                               content: Text('Could not open quote page'),
                               backgroundColor: Colors.red,
                             ),

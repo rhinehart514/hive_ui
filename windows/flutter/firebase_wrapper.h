@@ -73,4 +73,22 @@ public:
 
 #endif // WINDOWS_DESKTOP
 
-#endif // FIREBASE_WRAPPER_H_ 
+#include <flutter/standard_method_codec.h>
+#include <flutter/plugin_registrar_windows.h>
+
+// Include our custom Firebase Database plugin
+#include "firebase_database/include/firebase_database/firebase_database_plugin.h"
+
+namespace firebase_plugins {
+
+// Register all Firebase plugins for Windows
+inline void RegisterFirebasePlugins(flutter::PluginRegistrarWindows* registrar) {
+  // Register other Firebase plugins if needed
+  
+  // Register our custom Firebase Database plugin
+  FirebaseDatabasePluginRegisterWithRegistrar(registrar->GetRegistrarForPlugin("FirebaseDatabasePlugin"));
+}
+
+}  // namespace firebase_plugins
+
+#endif  // FIREBASE_WRAPPER_H_ 

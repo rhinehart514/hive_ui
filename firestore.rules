@@ -1,12 +1,8 @@
 rules_version = '2';
 
-// IMPORTANT: In the Hive UI codebase, "clubs" are represented in Firestore as "spaces" 
-// across multiple collections. This is a critical point to understand when checking permissions.
-// This rules file has been optimized to:
-// 1. Allow authenticated users to read spaces/clubs during and after onboarding
-// 2. Enable collectionGroup queries on "spaces" and "events" which are essential for the main feed
-// 3. Simplify authentication checks where appropriate to prevent permission errors
-// 4. Maintain security while ensuring the app functions properly
+// HIVE UI Platform - Comprehensive Firestore Security Rules
+// This ruleset is designed to secure all Firestore collections while enabling
+// proper functionality across the HIVE platform.
 
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -18,37 +14,63 @@ service cloud.firestore {
     }
     
     function isOwner(userId) {
-      return request.auth.uid == userId;
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    // Role-based access checks
+    function getUserRole() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
+    }
+    
+    function hasRole(minimumRole) {
+      let roleValue = {
+        'public': 0,
+        'verified': 1,
+        'verifiedPlus': 2,
+        'moderator': 3,
+        'admin': 4
+      };
+      let userRole = getUserRole();
+      return roleValue[userRole] >= roleValue[minimumRole];
     }
     
     function isAdmin() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+      return hasRole('admin');
     }
     
     function isModerator() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'moderator';
+      return hasRole('moderator');
     }
     
+    function isVerifiedPlus() {
+      return hasRole('verifiedPlus');
+    }
+    
+    function isVerified() {
+      return hasRole('verified');
+    }
+    
+    // Space/Club related helpers (optimized for performance)
     function isSpaceAdmin(spaceId) {
-      return request.auth.uid in get(/databases/$(database)/documents/spaces/$(spaceId)).data.admins;
+      return isAuthenticated() && 
+             exists(/databases/$(database)/documents/space_admin_index/$(request.auth.uid + "_" + spaceId));
     }
     
     function isSpaceModerator(spaceId) {
-      return request.auth.uid in get(/databases/$(database)/documents/spaces/$(spaceId)).data.moderators;
+      return isAuthenticated() && 
+             exists(/databases/$(database)/documents/space_moderator_index/$(request.auth.uid + "_" + spaceId));
     }
     
     function isSpaceMember(spaceId) {
-      return request.auth.uid in get(/databases/$(database)/documents/spaces/$(spaceId)).data.members;
+      return isAuthenticated() && 
+             exists(/databases/$(database)/documents/space_member_index/$(request.auth.uid + "_" + spaceId));
     }
     
-    // Space related helpers - optimized for performance
     function isSpaceLeader(spaceId) {
-      return isAuthenticated() && (
-        exists(/databases/$(database)/documents/space_leader_index/$(request.auth.uid + "_" + spaceId))
-      );
+      return isAuthenticated() && 
+             exists(/databases/$(database)/documents/space_leader_index/$(request.auth.uid + "_" + spaceId));
     }
     
-    // Club related helpers
     function isClubMember(clubId) {
       return isAuthenticated() && 
              exists(/databases/$(database)/documents/club_member_index/$(request.auth.uid + "_" + clubId));
@@ -75,638 +97,441 @@ service cloud.firestore {
              get(/databases/$(database)/documents/club_privacy/$(clubId)).data.isPublic == true;
     }
     
-    // Relationship helper
+    // Relationship helpers
     function areFriends(userId) {
-      return isAuthenticated() && (
-        exists(/databases/$(database)/documents/friend_index/$(request.auth.uid + "_" + userId))
-      );
+      return isAuthenticated() && 
+             exists(/databases/$(database)/documents/friend_index/$(request.auth.uid + "_" + userId));
     }
     
-    // Content creation rate limiting
-    function isRateLimited(collection) {
-      return request.time < resource.data.lastActionTime + duration.value(1, 's');
+    function isChatParticipant(chatId) {
+      return isAuthenticated() && 
+             exists(/databases/$(database)/documents/chats/$(chatId)) &&
+             request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participantIds;
     }
     
-    // Validation helpers
-    function isValidSpaceData(data) {
-      return data.name is string && 
-             data.name.size() > 0 && 
-             data.name.size() <= 100 &&
-             data.description is string;
+    // Rate limiting helper functions
+    function isRateLimited(collectionName) {
+      let userId = request.auth.uid;
+      let limitPath = /databases/$(database)/documents/rate_limits/$(userId);
+      let now = request.time;
+      let threshold = Duration.value(1, 'h');
+      
+      return exists(limitPath) &&
+             get(limitPath).data[collectionName + '_last_write'] > now - threshold &&
+             get(limitPath).data[collectionName + '_count'] >= 10;
     }
     
+    // Event state and temporal validation
+    function getEventState(eventId) {
+      let event = get(/databases/$(database)/documents/events/$(eventId)).data;
+      let now = request.time.toMillis();
+      let startTime = event.startDate.toMillis();
+      let endTime = event.endDate != null ? event.endDate.toMillis() : startTime + Duration.value(2, 'h').seconds() * 1000;
+      let postEventWindow = 12 * 60 * 60 * 1000; // 12 hours in milliseconds
+      
+      // Determine state based on times
+      if (event.published != true) {
+        return 'draft';
+      } else if (now < startTime) {
+        return 'published';
+      } else if (now >= startTime && now <= endTime) {
+        return 'live';
+      } else if (now > endTime && now <= endTime + postEventWindow) {
+        return 'completed';
+      } else {
+        return 'archived';
+      }
+    }
+    
+    function canEditEventDetails(eventId) {
+      let event = get(/databases/$(database)/documents/events/$(eventId)).data;
+      let eventState = getEventState(eventId);
+      let isCreator = request.auth.uid == event.createdBy;
+      
+      return (eventState == 'draft') || 
+             (eventState == 'published' && isCreator) ||
+             (eventState == 'live' && isAdmin());
+    }
+    
+    function isEditingCoreEventDetails() {
+      return request.resource.data.diff(resource.data).affectedKeys()
+        .hasAny(['startDate', 'endDate', 'location', 'title']);
+    }
+    
+    // Validation helper functions
     function isValidEventData(data) {
       return data.title is string && 
-             data.title.size() > 0 && 
+             data.title.size() > 0 &&
              data.title.size() <= 100 &&
-             (data.startDate is timestamp || data.startTime is timestamp) &&
-             (data.endDate is timestamp || data.endTime is timestamp);
+             data.createdBy is string && 
+             data.createdBy == request.auth.uid &&
+             data.startDate is timestamp && 
+             data.startDate > request.time;
+    }
+    
+    function isValidSpaceData(data) {
+      return data.name is string && 
+             data.name.size() > 0 &&
+             data.name.size() <= 100 &&
+             data.createdBy is string && 
+             data.createdBy == request.auth.uid;
     }
     
     function isValidClubData(data) {
-      return data.name is string &&
+      return data.name is string && 
              data.name.size() > 0 &&
              data.name.size() <= 100 &&
              data.description is string;
     }
     
+    function isValidChatMessageData(data) {
+      return data.text is string &&
+             data.senderId is string &&
+             data.senderId == request.auth.uid &&
+             data.timestamp is timestamp;
+    }
+    
     // ======== COLLECTION GROUP QUERIES ========
     
-    // Allow collection group query for spaces with additional access for onboarding
+    // Enable collection group queries for spaces (important for discovery/onboarding)
     match /{path=**}/spaces/{spaceId} {
-      // This rule specifically enables collectionGroup("spaces") queries
-      // Especially useful during onboarding when listing all available spaces
       allow read: if isAuthenticated();
     }
     
-    // Allow access to events via collection group queries
+    // Enable collection group queries for events (main feed functionality)
     match /{path=**}/events/{eventId} {
-      // Enable collectionGroup("events") queries for all authenticated users
       allow read: if isAuthenticated();
+    }
+    
+    // Enable collection group queries for posts
+    match /{path=**}/posts/{postId} {
+      allow read: if isAuthenticated() && 
+                  (!resource.data.isHidden || 
+                   resource.data.authorId == request.auth.uid || 
+                   isModerator() || 
+                   isAdmin());
     }
     
     // ======== USER MANAGEMENT ========
     
-    // Public user profile index - for discoverability
+    // Users collection
+    match /users/{userId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && isOwner(userId);
+      allow update: if isAuthenticated() && 
+                    (isOwner(userId) || 
+                     (request.resource.data.onboardingCompleted == true && 
+                     (resource.data == null || resource.data.onboardingCompleted != true)));
+      allow delete: if isAdmin();
+    }
+    
+    // User profiles
+    match /user_profiles/{userId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && isOwner(userId);
+      allow update: if isAuthenticated() && (isOwner(userId) || isAdmin());
+      allow delete: if isAdmin();
+    }
+    
+    // Public user index - for discoverability
     match /public_user_index/{userId} {
       allow read: if true; // Public profile index is readable by anyone
       allow write: if isOwner(userId) || isAdmin();
     }
     
-    // Users collection with improved access rules
-    match /users/{userId} {
-      allow read: if isAuthenticated();
-      allow write: if isAuthenticated() && isOwner(userId);
-    }
-    
-    // User rate limiting document
-    match /user_rate_limits/{userId} {
-      allow read: if isOwner(userId);
-      allow write: if isAdmin();
-    }
-    
-    // Admin users collection
-    match /admin_users/{userId} {
-      allow read: if isAuthenticated();
-      allow write: if isAdmin();
-    }
-    
-    // Moderator users collection
-    match /moderator_users/{userId} {
-      allow read: if isAuthenticated();
-      allow write: if isAdmin();
-    }
-    
-    // User session persistence
+    // User sessions
     match /user_sessions/{userId} {
       allow read, write: if isOwner(userId);
     }
     
-    // ======== FEED OPTIMIZATION ========
+    // User rate limits
+    match /rate_limits/{userId} {
+      allow read: if isOwner(userId);
+      allow create, update: if isAdmin() || (isOwner(userId) && !isRateLimited('rate_limits'));
+      allow delete: if isAdmin();
+    }
     
-    // Feed cache for faster main feed loading
-    // This collection contains pre-computed feed data to minimize reads
-    match /feed_cache/{userId} {
-      allow read: if isAuthenticated() && isOwner(userId);
-      // Only system processes should write to feed cache
+    // User authentication records
+    match /auth_records/{userId} {
+      allow read: if isOwner(userId);
       allow write: if isAdmin();
     }
     
-    // Public events index for main feed (contains minimal event data)
-    match /public_events_index/{eventId} {
-      // Public events are readable by anyone to make main feed efficient
-      allow read: if true;
-      // Only admins and event creators can update the public index
-      allow write: if isAuthenticated() && (
-        request.auth.uid == resource.data.creatorId || isAdmin()
-      );
+    // User settings
+    match /user_settings/{userId} {
+      allow read: if isOwner(userId);
+      allow write: if isOwner(userId);
     }
     
-    // Public spaces index for main feed (contains minimal space data)
-    match /public_spaces_index/{spaceId} {
-      // Public spaces are readable by anyone to make main feed efficient
-      allow read: if true;
-      // Only space leaders and admins can update the public index
-      allow write: if isAuthenticated() && (
-        isSpaceLeader(spaceId) || isAdmin()
-      );
+    // User notifications
+    match /notifications/{notificationId} {
+      allow read: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow update: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow create: if isAdmin();
     }
     
-    // Public clubs index for main feed (contains minimal club data)
-    match /public_clubs_index/{clubId} {
-      // Public clubs are readable by anyone to make main feed efficient
-      allow read: if true;
-      // Only club leaders and admins can update the public index
-      allow write: if isAuthenticated() && (
-        isClubLeader(clubId) || isAdmin()
-      );
-    }
+    // ======== SPACES/CLUBS MANAGEMENT ========
     
-    // ======== SPACE MANAGEMENT ========
-    
-    // Space privacy settings - optimized for quick access
-    match /space_privacy/{spaceId} {
-      allow read: if true;
-      allow write: if isAuthenticated() && (isSpaceLeader(spaceId) || isAdmin());
-    }
-    
-    // Space leader index - for quick leader verification
-    match /space_leader_index/{indexId} {
-      allow read: if isAuthenticated();
-      allow write: if isAdmin();
-    }
-    
-    // Space member index - for quick member verification
-    match /space_member_index/{indexId} {
-      allow read: if isAuthenticated();
-      allow write: if isAuthenticated() && (
-        indexId.split('_')[0] == request.auth.uid || 
-        isSpaceLeader(indexId.split('_')[1]) || 
-        isAdmin()
-      );
-    }
-    
-    // Space discovery index - for browsable directory
-    match /space_discovery/{spaceId} {
-      allow read: if true; // Allow public discovery even for guest users
-      allow write: if isAuthenticated() && (isSpaceLeader(spaceId) || isAdmin());
-    }
-      
-    // Structured spaces collection - enhanced for onboarding
-    match /spaces/{typeCollection} {
-      // Type collection document is always readable
-      allow read: if true; // Allow reading space categories without auth
-      allow write: if isAdmin();
-      
-      match /spaces/{spaceId} {
-        // Space document access - improved for onboarding
-        allow read: if true; // Allow all users to read spaces for better discovery
-        allow create: if isAuthenticated() && 
-                       isValidSpaceData(request.resource.data) &&
-                       // Enforce that spaces start as private
-                       request.resource.data.isPrivate == true &&
-                       // Ensure creator is admin
-                       request.auth.uid in request.resource.data.admins;
-        allow update: if isAuthenticated() && 
-                      (isSpaceLeader(spaceId) || 
-                       isAdmin()) &&
-                      // Enforce privacy rule: spaces with fewer than 10 members must be private
-                      (!('isPrivate' in request.resource.data) || 
-                        request.resource.data.isPrivate == true || 
-                        (request.resource.data.isPrivate == false && 
-                         (request.resource.data.members.size() >= 10 || 
-                          resource.data.members.size() >= 10)));
-        allow delete: if isAuthenticated() && isAdmin();
-        
-        // Space events - for feed display
-        match /events/{eventId} {
-          allow read: if true; // Allow all users to read events
-          allow create: if isAuthenticated() && (
-                        isSpaceMember(spaceId) || 
-                        isAdmin()
-                      );
-          allow update, delete: if isAuthenticated() && (
-                               request.auth.uid == resource.data.creatorId || 
-                               isSpaceLeader(spaceId) || 
-                               isAdmin()
-                             );
-        }
-        
-        // Members subcollection
-        match /members/{userId} {
-          allow read: if isAuthenticated();
-          allow create, update: if isAuthenticated() && (
-                               isAdmin() || 
-                               isSpaceLeader(spaceId) ||
-                               (isOwner(userId) && request.resource.data.roles == null)
-                             );
-          allow delete: if isAuthenticated() && (
-                        isAdmin() || 
-                        isSpaceLeader(spaceId)
-                      );
-        }
-        
-        // Membership requests - for requesting to join private spaces
-        match /membership_requests/{requestId} {
-          allow read: if isAuthenticated() && (
-                      request.auth.uid == resource.data.userId || 
-                      isSpaceLeader(spaceId) || 
-                      isAdmin()
-                    );
-          allow create: if isAuthenticated() && 
-                       request.auth.uid == request.resource.data.userId;
-          allow update: if isAuthenticated() && (
-                        isSpaceLeader(spaceId) || 
-                        isAdmin()
-                      );
-          allow delete: if isAuthenticated() && (
-                        request.auth.uid == resource.data.userId || 
-                        isSpaceLeader(spaceId) || 
-                        isAdmin()
-                      );
-        }
-        
-        // Announcements subcollection
-        match /announcements/{announcementId} {
-          allow read: if isAuthenticated();
-          allow create, update, delete: if isAuthenticated() && (
-                                       isSpaceLeader(spaceId) || 
-                                       isAdmin()
-                                     );
-        }
-        
-        // Content moderation reports
-        match /reports/{reportId} {
-          allow read: if isAuthenticated() && (
-                      isSpaceLeader(spaceId) || 
-                      isModerator() || 
-                      isAdmin()
-                    );
-          allow create: if isAuthenticated() && 
-                       isSpaceMember(spaceId);
-          allow update, delete: if isAuthenticated() && (
-                               isSpaceLeader(spaceId) || 
-                               isModerator() || 
-                               isAdmin()
-                             );
-        }
-      }
-    }
-    
-    // Legacy spaces support - Enhanced read access for onboarding
+    // Spaces collection
     match /spaces/{spaceId} {
-      allow read: if true; // Allow all users to read spaces for better discovery
-      allow create: if isAuthenticated() && isValidSpaceData(request.resource.data);
+      allow read: if isAuthenticated() && (
+                    isSpacePublic(spaceId) || 
+                    isSpaceMember(spaceId) || 
+                    isSpaceLeader(spaceId) || 
+                    isAdmin()
+                  );
+      
+      allow create: if isAuthenticated() && 
+                    isVerified() && 
+                    isValidSpaceData(request.resource.data);
+      
       allow update: if isAuthenticated() && (
-                     isSpaceLeader(spaceId) || 
-                     isAdmin()
-                   );
-      allow delete: if isAdmin();
+                    isSpaceLeader(spaceId) || 
+                    isAdmin());
       
-      // Legacy events subcollection - Enhanced read access
-      match /events/{eventId} {
-        allow read: if true; // Allow all users to read events
-        allow create: if isAuthenticated() && (
-                      isSpaceMember(spaceId) || 
-                      isAdmin()
-                    );
-        allow update, delete: if isAuthenticated() && (
-                             request.auth.uid == resource.data.creatorId || 
-                             isSpaceLeader(spaceId) || 
-                             isAdmin()
-                           );
-      }
-      
-      // Legacy members subcollection - Enhanced read access
-      match /members/{userId} {
-        allow read: if isAuthenticated();
-        allow create, update: if isAuthenticated() && (
-                             isAdmin() || 
-                             isSpaceLeader(spaceId) ||
-                             (isOwner(userId) && request.resource.data.roles == null)
-                           );
-        allow delete: if isAuthenticated() && (
-                      isAdmin() || 
-                      isSpaceLeader(spaceId)
-                    );
-      }
-    }
-    
-    // ======== CLUB MANAGEMENT ========
-    
-    // Club privacy settings
-    match /club_privacy/{clubId} {
-      allow read: if true;
-      allow write: if isAuthenticated() && (isClubLeader(clubId) || isAdmin());
-    }
-    
-    // Club leader index - for quick leader verification
-    match /club_leader_index/{indexId} {
-      allow read: if isAuthenticated();
-      allow write: if isAdmin();
-    }
-    
-    // Club member index - for quick member verification
-    match /club_member_index/{indexId} {
-      allow read: if isAuthenticated();
-      allow write: if isAuthenticated() && (
-        indexId.split('_')[0] == request.auth.uid || 
-        isClubLeader(indexId.split('_')[1]) || 
-        isAdmin()
-      );
-    }
-    
-    // Club discovery index - for browsable directory
-    match /club_discovery/{clubId} {
-      allow read: if true;
-      allow write: if isAuthenticated() && (isClubLeader(clubId) || isAdmin());
-    }
-    
-    // Add rule for collectionGroup query on clubs
-    match /{path=**}/clubs/{clubId} {
-      allow read: if true; // Allow all users to read clubs for better discovery
-    }
-    
-    // Clubs collection - top level
-    match /clubs/{clubId} {
-      allow read: if true; // Clubs are publicly readable in the feed
-      allow create: if isAuthenticated() && isValidClubData(request.resource.data);
-      allow update: if isAuthenticated() && (isClubLeader(clubId) || isAdmin());
-      allow delete: if isAdmin();
-      
-      // Members subcollection
-      match /members/{userId} {
-        allow read: if true; // Membership is public information
-        allow create, update: if isAuthenticated() && (
-                             isAdmin() || 
-                             isClubLeader(clubId) ||
-                             isOwner(userId)
-                           );
-        allow delete: if isAuthenticated() && (
-                      isAdmin() || 
-                      isClubLeader(clubId) ||
-                      isOwner(userId)
-                    );
-      }
-      
-      // Events subcollection
-      match /events/{eventId} {
-        allow read: if true; // Club events are public
-        allow create: if isAuthenticated() && (
-                     isClubMember(clubId) || isAdmin()
-                   ) && isValidEventData(request.resource.data);
-        allow update: if isAuthenticated() && (
-                     request.auth.uid == resource.data.creatorId || 
-                     isClubLeader(clubId) || 
-                     isAdmin()
-                   );
-        allow delete: if isAuthenticated() && (
-                     request.auth.uid == resource.data.creatorId || 
-                     isClubLeader(clubId) || 
-                     isAdmin()
-                   );
-      }
-    }
-    
-    // Structured clubs by branch (for organizing clubs into categories)
-    match /clubs/{branchName}/entities/{clubId} {
-      allow read: if true;
-      allow create: if isAuthenticated() && isValidClubData(request.resource.data);
-      allow update: if isAuthenticated() && (isClubLeader(clubId) || isAdmin());
-      allow delete: if isAdmin();
-      
-      // All subcollections share the same permissions
-      match /{collection}/{docId} {
-        allow read: if true;
-        allow create: if isAuthenticated() && (isClubMember(clubId) || isAdmin());
-        allow update, delete: if isAuthenticated() && (
-                             request.auth.uid == resource.data.creatorId || 
-                             isClubLeader(clubId) || 
-                             isAdmin()
-                           );
-      }
-    }
-    
-    // ======== EVENT MANAGEMENT ========
-    
-    // Event privacy settings
-    match /event_privacy/{eventId} {
-      allow read: if true;
-      allow write: if isAuthenticated() && (
-        request.auth.uid == get(/databases/$(database)/documents/events/$(eventId)).data.creatorId || 
-        isAdmin()
-      );
-    }
-    
-    // Global events collection - improved permissions for onboarding and feed
-    match /events/{eventId} {
-      // Allow all users to read events (needed for feed display)
-      allow read: if true;
-                   
-      allow create: if isAuthenticated() && isValidEventData(request.resource.data);
-      allow update: if isAuthenticated() && (
-                     request.auth.uid == resource.data.creatorId || 
-                     isAdmin()
-                   );
       allow delete: if isAuthenticated() && (
-                     request.auth.uid == resource.data.creatorId || 
-                     isAdmin()
-                   );
+                    isAdmin() || 
+                    (isSpaceLeader(spaceId) && resource.data.deletable == true));
       
-      // Event RSVPs - simplified for better access
-      match /rsvps/{userId} {
-        allow read: if isAuthenticated();
-        allow create, update, delete: if isAuthenticated() && isOwner(userId);
-      }
-    }
-    
-    // Lost events collection - for events without a clear home
-    match /lost_events/{eventId} {
-      allow read: if true; // Anyone can read lost events to display in feed
-      allow create, update: if isAuthenticated();
-      allow delete: if isAdmin();
-    }
-    
-    // Event comments
-    match /event_comments/{eventId} {
-      allow read: if true;
-      
-      match /comments/{commentId} {
-        allow read: if true; // Comments are public
-        allow create: if isAuthenticated();
-        allow update, delete: if isAuthenticated() && (
-                             request.auth.uid == resource.data.userId || 
-                             isAdmin() || 
-                             isModerator()
-                           );
-      }
-    }
-    
-    // ======== TRENDING CONTENT ========
-    
-    // Optimized collection for trending events
-    match /trending/{contentId} {
-      // Anyone can read trending content
-      allow read: if true;
-      // Only admin can update trending content
-      allow write: if isAdmin();
-    }
-    
-    // User activity stats for generating recommendations
-    match /user_activity_stats/{userId} {
-      allow read: if isOwner(userId) || isAdmin();
-      // Only the backend should write to this
-      allow write: if isAdmin();
-    }
-    
-    // ======== MESSAGING SYSTEM ========
-    
-    // Friend index for quick lookup
-    match /friend_index/{indexId} {
-      allow read: if isAuthenticated() && indexId.split('_')[0] == request.auth.uid;
-      allow write: if isAdmin();
-    }
-    
-    // Friend requests
-    match /friend_requests/{requestId} {
-      allow read: if isAuthenticated() && (
-                   request.auth.uid == resource.data.senderId || 
-                   request.auth.uid == resource.data.receiverId || 
-                   isAdmin()
-                 );
-      allow create: if isAuthenticated() && 
-                   request.auth.uid == request.resource.data.senderId && 
-                   !isRateLimited('friend_requests');
-      allow update, delete: if isAuthenticated() && (
-                           request.auth.uid == resource.data.senderId || 
-                           request.auth.uid == resource.data.receiverId || 
-                           isAdmin()
-                         );
-    }
-    
-    // Friends collection
-    match /friends/{friendshipId} {
-      allow read: if isAuthenticated() && (
-                   request.auth.uid == resource.data.userId || 
-                   request.auth.uid == resource.data.friendId || 
-                   isAdmin()
-                 );
-      allow create, update, delete: if isAuthenticated() && (
-                                   request.auth.uid == request.resource.data.userId || 
-                                   request.auth.uid == request.resource.data.friendId || 
-                                   isAdmin()
-                                 );
-    }
-    
-    // Chat collection
-    match /chats/{chatId} {
-      // Helper function to verify chat participation
-      function isParticipant() {
-        return isAuthenticated() && (
-          resource.data.participantIds == null || 
-          request.auth.uid in resource.data.participantIds
-        );
-      }
-      
-      allow read: if isAuthenticated() && (isParticipant() || isAdmin());
-      allow create: if isAuthenticated() && 
-                   request.auth.uid in request.resource.data.participantIds;
-      allow update: if isAuthenticated() && (isParticipant() || isAdmin());
-      allow delete: if isAdmin();
-      
-      // Chat messages - with optimized pagination
-      match /messages/{messageId} {
+      // Space events subcollection
+      match /events/{eventId} {
         allow read: if isAuthenticated() && (
-                     request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participantIds || 
-                     isAdmin()
-                   );
+                    isEventPublic(eventId) || 
+                    isSpaceMember(spaceId) || 
+                    isAdmin());
+        
         allow create: if isAuthenticated() && 
-                     request.auth.uid == request.resource.data.senderId && 
-                     request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participantIds && 
-                     request.resource.data.text.size() <= 2000;
-        allow update: if isAuthenticated() && 
-                     request.auth.uid == resource.data.senderId && 
-                     resource.data.timestamp.toMillis() > (request.time.toMillis() - 300000); // 5 minute edit window
-        allow delete: if isAuthenticated() && (
-                       request.auth.uid == resource.data.senderId || 
-                       isAdmin()
+                     isVerified() && 
+                     isSpaceMember(spaceId) && 
+                     isValidEventData(request.resource.data);
+        
+        allow update: if isAuthenticated() && (
+                      (request.auth.uid == resource.data.createdBy && 
+                      canEditEventDetails(eventId) && 
+                      (!isEditingCoreEventDetails() || getEventState(eventId) == 'draft')) ||
+                      isAdmin()
                      );
+        
+        allow delete: if isAuthenticated() && (
+                      (request.auth.uid == resource.data.createdBy && 
+                      getEventState(eventId) == 'draft') || 
+                      isAdmin()
+                     );
+        
+        // Event RSVPs subcollection
+        match /rsvps/{userId} {
+          allow read: if isAuthenticated();
+          allow create, update: if isAuthenticated() && 
+                                isOwner(userId) && 
+                                getEventState(eventId) != 'archived';
+          allow delete: if isAuthenticated() && 
+                       (isOwner(userId) || isAdmin());
+        }
+        
+        // Event comments subcollection
+        match /comments/{commentId} {
+          allow read: if isAuthenticated();
+          allow create: if isAuthenticated() && 
+                       request.resource.data.authorId == request.auth.uid &&
+                       getEventState(eventId) != 'archived';
+          allow update, delete: if isAuthenticated() && 
+                               (resource.data.authorId == request.auth.uid || 
+                                isAdmin() || 
+                                isSpaceModerator(spaceId));
+        }
       }
       
-      // Typing indicators - more restricted to prevent spam
-      match /typing/{userId} {
-        allow read: if isAuthenticated() && 
-                   request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participantIds;
-        allow write: if isAuthenticated() && 
-                    userId == request.auth.uid && 
-                    request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participantIds;
+      // Space posts subcollection
+      match /posts/{postId} {
+        allow read: if isAuthenticated() && (
+                    isSpaceMember(spaceId) || 
+                    isSpacePublic(spaceId));
+        
+        allow create: if isAuthenticated() && 
+                     isSpaceMember(spaceId) && 
+                     request.resource.data.authorId == request.auth.uid;
+        
+        allow update: if isAuthenticated() && (
+                     resource.data.authorId == request.auth.uid || 
+                     isSpaceAdmin(spaceId) || 
+                     isAdmin());
+        
+        allow delete: if isAuthenticated() && (
+                     resource.data.authorId == request.auth.uid || 
+                     isSpaceAdmin(spaceId) || 
+                     isAdmin());
+        
+        // Post comments subcollection
+        match /comments/{commentId} {
+          allow read: if isAuthenticated() && (
+                      isSpaceMember(spaceId) || 
+                      isSpacePublic(spaceId));
+          
+          allow create: if isAuthenticated() && 
+                       isSpaceMember(spaceId) && 
+                       request.resource.data.authorId == request.auth.uid;
+          
+          allow update, delete: if isAuthenticated() && (
+                               resource.data.authorId == request.auth.uid || 
+                               isSpaceAdmin(spaceId) || 
+                               isAdmin());
+        }
+      }
+      
+      // Space members subcollection
+      match /members/{memberId} {
+        allow read: if isAuthenticated() && (
+                    isSpaceMember(spaceId) || 
+                    isSpaceAdmin(spaceId) || 
+                    isAdmin());
+        
+        allow create: if isAuthenticated() && (
+                     (request.resource.data.userId == request.auth.uid && isSpacePublic(spaceId)) || 
+                     isSpaceAdmin(spaceId) || 
+                     isAdmin());
+        
+        allow update: if isAuthenticated() && (
+                     isSpaceAdmin(spaceId) || 
+                     isAdmin());
+        
+        allow delete: if isAuthenticated() && (
+                     (resource.data.userId == request.auth.uid) || 
+                     isSpaceAdmin(spaceId) || 
+                     isAdmin());
       }
     }
     
-    // ======== REPORTING AND MODERATION ========
+    // ======== CLUBS MANAGEMENT ========
     
-    // Content reports
-    match /content_reports/{reportId} {
-      allow read: if isAuthenticated() && (isModerator() || isAdmin());
-      allow create: if isAuthenticated();
-      allow update, delete: if isAuthenticated() && (isModerator() || isAdmin());
+    // Clubs collection
+    match /clubs/{clubId} {
+      allow read: if isAuthenticated() && (
+                  isClubPublic(clubId) || 
+                  isClubMember(clubId) || 
+                  isAdmin());
+      
+      allow create: if isAuthenticated() && 
+                    isVerified() && 
+                    isValidClubData(request.resource.data) && 
+                    request.resource.data.createdBy == request.auth.uid;
+      
+      allow update: if isAuthenticated() && (
+                   isClubLeader(clubId) || 
+                   isAdmin());
+      
+      allow delete: if isAuthenticated() && isAdmin();
+      
+      // Club members subcollection
+      match /members/{memberId} {
+        allow read: if isAuthenticated() && (
+                    isClubMember(clubId) || 
+                    isClubLeader(clubId) || 
+                    isAdmin());
+        
+        allow create: if isAuthenticated() && (
+                     (request.resource.data.userId == request.auth.uid && isClubPublic(clubId)) || 
+                     isClubLeader(clubId) || 
+                     isAdmin());
+        
+        allow update: if isAuthenticated() && (
+                     isClubLeader(clubId) || 
+                     isAdmin());
+        
+        allow delete: if isAuthenticated() && (
+                     (resource.data.userId == request.auth.uid) || 
+                     isClubLeader(clubId) || 
+                     isAdmin());
+      }
     }
     
-    // User reports
-    match /user_reports/{reportId} {
-      allow read: if isAuthenticated() && (isModerator() || isAdmin());
-      allow create: if isAuthenticated() && request.auth.uid != request.resource.data.reportedUserId;
-      allow update, delete: if isAuthenticated() && (isModerator() || isAdmin());
+    // ======== CHAT MANAGEMENT ========
+    
+    // Chats collection
+    match /chats/{chatId} {
+      allow read: if isAuthenticated() && isChatParticipant(chatId);
+      
+      allow create: if isAuthenticated() && 
+                   request.resource.data.participantIds is list && 
+                   request.auth.uid in request.resource.data.participantIds;
+      
+      allow update: if isAuthenticated() && 
+                   isChatParticipant(chatId);
+      
+      allow delete: if isAuthenticated() && (
+                   isChatParticipant(chatId) || 
+                   isAdmin());
+      
+      // Chat messages subcollection
+      match /messages/{messageId} {
+        allow read: if isAuthenticated() && 
+                   isChatParticipant(chatId);
+        
+        allow create: if isAuthenticated() && 
+                     isChatParticipant(chatId) && 
+                     isValidChatMessageData(request.resource.data);
+        
+        allow update: if isAuthenticated() && 
+                     request.auth.uid == resource.data.senderId;
+        
+        allow delete: if isAuthenticated() && (
+                     request.auth.uid == resource.data.senderId || 
+                     isAdmin());
+      }
+    }
+    
+    // ======== EVENTS MANAGEMENT ========
+    
+    // Events collection (top level)
+    match /events/{eventId} {
+      allow read: if isAuthenticated();
+      
+      allow create: if isAuthenticated() && 
+                   isVerified() && 
+                   isValidEventData(request.resource.data);
+      
+      allow update: if isAuthenticated() && (
+                   (request.auth.uid == resource.data.createdBy && 
+                   canEditEventDetails(eventId)) || 
+                   isAdmin());
+      
+      allow delete: if isAuthenticated() && (
+                   (request.auth.uid == resource.data.createdBy && 
+                   getEventState(eventId) == 'draft') || 
+                   isAdmin());
     }
     
     // ======== SYSTEM COLLECTIONS ========
     
-    // User activities (optimized to minimize reads)
-    match /user_activities/{activityId} {
-      allow read: if isAuthenticated() && (
-                   request.auth.uid == resource.data.userId || 
-                   isAdmin()
-                 );
-      allow create: if isAuthenticated() && 
-                   request.auth.uid == request.resource.data.userId;
-      allow update, delete: if isAdmin();
+    // System settings (admin only)
+    match /system_settings/{settingId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
     }
     
-    // Metadata and system collections
-    match /metadata/{docId} {
+    // Moderation actions
+    match /moderation_actions/{actionId} {
+      allow read: if isAuthenticated() && 
+                 (resource.data.targetUserId == request.auth.uid || 
+                  isModerator() || 
+                  isAdmin());
+      
+      allow create, update: if isAuthenticated() && 
+                          (isModerator() || isAdmin());
+      
+      allow delete: if isAdmin();
+    }
+    
+    // Feature flags
+    match /feature_flags/{flagId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+    
+    // App configurations
+    match /app_config/{configId} {
       allow read: if true;
       allow write: if isAdmin();
-    }
-    
-    // Leadership requests and verifications
-    match /leadership_requests/{requestId} {
-      allow read: if isAuthenticated() && (
-                   request.auth.uid == resource.data.userId || 
-                   isAdmin()
-                 );
-      allow create: if isAuthenticated() && 
-                   request.auth.uid == request.resource.data.userId;
-      allow update: if isAdmin();
-      allow delete: if isAuthenticated() && request.auth.uid == resource.data.userId;
-    }
-    
-    match /leadership_verifications/{verificationId} {
-      allow read: if isAuthenticated() && (
-                   request.auth.uid == resource.data.userId || 
-                   isAdmin()
-                 );
-      allow create: if isAuthenticated() && 
-                   request.auth.uid == request.resource.data.userId;
-      allow update: if isAdmin();
-    }
-    
-    // Auth conversions - restricted access
-    match /auth_conversions/{docId} {
-      allow read: if isAuthenticated() && (
-                   request.auth.uid == resource.data.userId || 
-                   isAdmin()
-                 );
-      allow write: if isAdmin();
-    }
-    
-    // User-Spaces relationship collection rules
-    match /user_spaces/{docId} {
-      allow read: if isAuthenticated();
-      allow write: if isAuthenticated() && isOwner(resource.data.userId);
-    }
-    
-    // Space metrics collection rules
-    match /space_metrics/{spaceId} {
-      allow read: if isAuthenticated();
-      allow write: if 
-        isAuthenticated() && 
-        exists(/databases/$(database)/documents/spaces/$(spaceId)) &&
-        isSpaceAdmin(spaceId);
-    }
-    
-    // Default deny all other access
-    match /{document=**} {
-      allow read, write: if false;
     }
   }
 } 

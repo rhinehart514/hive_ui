@@ -11,6 +11,36 @@ enum SpaceType {
   other
 }
 
+/// Represents the lifecycle state of a space
+enum SpaceLifecycleState {
+  /// Space has been created but has little or no activity
+  created,
+  
+  /// Space has regular activity and engagement
+  active,
+  
+  /// Space has no activity for 30+ days
+  dormant,
+  
+  /// Space has been archived (manually or due to long inactivity)
+  archived,
+}
+
+/// Represents the claim status of a space
+enum SpaceClaimStatus {
+  /// Space is unclaimed (no leader)
+  unclaimed,
+  
+  /// Claim is pending verification
+  pending,
+  
+  /// Space has been claimed by a verified leader
+  claimed,
+  
+  /// Space doesn't require a claim (HIVE-exclusive)
+  notRequired,
+}
+
 /// Entity representing a Space in the domain layer
 class SpaceEntity {
   final String id;
@@ -33,6 +63,12 @@ class SpaceEntity {
   final List<String> eventIds;
   final bool hiveExclusive;
   final Map<String, dynamic> customData;
+  final bool hasMessageBoard;
+  final SpaceLifecycleState lifecycleState;
+  final SpaceClaimStatus claimStatus;
+  final String? claimId;
+  final DateTime? lastActivityAt;
+  final bool isFeatured;
 
   const SpaceEntity({
     required this.id,
@@ -55,6 +91,12 @@ class SpaceEntity {
     this.eventIds = const [],
     this.hiveExclusive = false,
     this.customData = const {},
+    this.hasMessageBoard = true,
+    this.lifecycleState = SpaceLifecycleState.active,
+    this.claimStatus = SpaceClaimStatus.notRequired,
+    this.claimId,
+    this.lastActivityAt,
+    this.isFeatured = false,
   });
 
   /// Returns the icon data for this space
@@ -81,6 +123,56 @@ class SpaceEntity {
     ];
   }
   
+  /// Check if the space is a pre-seeded space
+  bool get isPreSeeded {
+    return !hiveExclusive && 
+        spaceType != SpaceType.hiveExclusive && 
+        spaceType != SpaceType.other;
+  }
+  
+  /// Check if the space requires a leadership claim
+  bool get requiresLeadershipClaim {
+    return isPreSeeded;
+  }
+  
+  /// Check if the space is inactive
+  bool get isInactive {
+    if (lastActivityAt == null) return false;
+    
+    final now = DateTime.now();
+    final difference = now.difference(lastActivityAt!);
+    
+    return difference.inDays > 30;
+  }
+  
+  /// Get a human-readable description of the lifecycle state
+  String get lifecycleStateDescription {
+    switch (lifecycleState) {
+      case SpaceLifecycleState.created:
+        return 'Getting Started';
+      case SpaceLifecycleState.active:
+        return 'Active';
+      case SpaceLifecycleState.dormant:
+        return 'Inactive';
+      case SpaceLifecycleState.archived:
+        return 'Archived';
+    }
+  }
+  
+  /// Get a human-readable description of the claim status
+  String get claimStatusDescription {
+    switch (claimStatus) {
+      case SpaceClaimStatus.unclaimed:
+        return 'Unclaimed';
+      case SpaceClaimStatus.pending:
+        return 'Claim Pending';
+      case SpaceClaimStatus.claimed:
+        return 'Claimed';
+      case SpaceClaimStatus.notRequired:
+        return '';
+    }
+  }
+  
   /// Creates a copy of this SpaceEntity with the given fields replaced with new values
   SpaceEntity copyWith({
     String? id,
@@ -103,6 +195,12 @@ class SpaceEntity {
     List<String>? eventIds,
     bool? hiveExclusive,
     Map<String, dynamic>? customData,
+    bool? hasMessageBoard,
+    SpaceLifecycleState? lifecycleState,
+    SpaceClaimStatus? claimStatus,
+    String? claimId,
+    DateTime? lastActivityAt,
+    bool? isFeatured,
   }) {
     return SpaceEntity(
       id: id ?? this.id,
@@ -125,6 +223,43 @@ class SpaceEntity {
       eventIds: eventIds ?? this.eventIds,
       hiveExclusive: hiveExclusive ?? this.hiveExclusive,
       customData: customData ?? this.customData,
+      hasMessageBoard: hasMessageBoard ?? this.hasMessageBoard,
+      lifecycleState: lifecycleState ?? this.lifecycleState,
+      claimStatus: claimStatus ?? this.claimStatus,
+      claimId: claimId ?? this.claimId,
+      lastActivityAt: lastActivityAt ?? this.lastActivityAt,
+      isFeatured: isFeatured ?? this.isFeatured,
     );
+  }
+  
+  /// Update the space's lifecycle state based on activity
+  SpaceEntity updateLifecycleState() {
+    if (lifecycleState == SpaceLifecycleState.archived) {
+      // Archived spaces stay archived unless manually changed
+      return this;
+    }
+    
+    if (lastActivityAt == null) {
+      // No activity data, default to created if new or active if it has events
+      return copyWith(
+        lifecycleState: eventIds.isEmpty ? 
+            SpaceLifecycleState.created : 
+            SpaceLifecycleState.active
+      );
+    }
+    
+    final now = DateTime.now();
+    final difference = now.difference(lastActivityAt!);
+    
+    if (difference.inDays > 180) {
+      // Auto-archive after 6 months of inactivity
+      return copyWith(lifecycleState: SpaceLifecycleState.archived);
+    } else if (difference.inDays > 30) {
+      // Dormant after 1 month of inactivity
+      return copyWith(lifecycleState: SpaceLifecycleState.dormant);
+    } else {
+      // Otherwise active
+      return copyWith(lifecycleState: SpaceLifecycleState.active);
+    }
   }
 }

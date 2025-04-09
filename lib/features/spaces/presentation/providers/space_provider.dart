@@ -1,12 +1,13 @@
 import 'dart:io';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_ui/features/spaces/domain/entities/space.dart';
-import 'package:hive_ui/features/spaces/domain/repositories/space_repository.dart';
+import 'package:hive_ui/features/spaces/domain/repositories/spaces_repository.dart';
 import 'package:hive_ui/features/spaces/domain/usecases/create_space_usecase.dart';
+import 'package:hive_ui/features/spaces/presentation/providers/spaces_providers.dart' as main_providers;
 
 /// Provider for the current space creation state
 final spaceCreationStateProvider = StateNotifierProvider<SpaceCreationNotifier, SpaceCreationState>((ref) {
-  final spaceRepository = ref.watch(spaceRepositoryProvider);
+  final spaceRepository = ref.watch(main_providers.spacesRepositoryProvider);
   final createSpaceUseCase = CreateSpaceUseCase(spaceRepository);
   return SpaceCreationNotifier(createSpaceUseCase);
 });
@@ -105,17 +106,17 @@ class SpaceCreationNotifier extends StateNotifier<SpaceCreationState> {
         id: '', // ID will be assigned by the backend
         name: state.name,
         description: state.description,
-        privacy: state.privacy,
-        type: state.type,
-        coverImageUrl: '', // URL will be assigned after upload
         ownerId: '', // Current user ID will be assigned
-        memberCount: 1, // Start with current user
+        moderatorIds: const [], // Initially empty - will be set by repository
+        memberIds: const [], // Initially empty - will be set by repository
         createdAt: DateTime.now(),
       );
       
       final result = await _createSpaceUseCase.execute(
         space: space,
         coverImage: state.coverImage,
+        privacy: state.privacy,
+        spaceType: state.type,
       );
       
       state = state.copyWith(isCreating: false);
@@ -135,8 +136,8 @@ class SpaceCreationNotifier extends StateNotifier<SpaceCreationState> {
   }
 }
 
-/// Provider for the space repository
-final spaceRepositoryProvider = Provider<SpaceRepository>((ref) {
-  // In a real implementation, this would be properly injected
-  throw UnimplementedError('SpaceRepository implementation required');
-}); 
+// TODO: Implement SpacesNotifier and SpacesState classes before uncommenting
+// /// Provider for spaces state management
+// final spacesStateProvider = StateNotifierProvider.autoDispose.family<SpacesNotifier, SpacesState, String>(
+//   (ref, spaceId) => SpacesNotifier(ref.watch(spaceRepositoryProvider), spaceId),
+// ); 

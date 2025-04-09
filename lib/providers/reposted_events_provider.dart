@@ -92,10 +92,13 @@ class RepostedEventsNotifier extends StateNotifier<List<RepostedEvent>> {
             major: userData['major'] ?? '',
             residence: userData['residence'] ?? '',
             eventCount: userData['eventCount'] ?? 0,
-            clubCount: userData['clubCount'] ?? 0,
+            spaceCount: userData['spaceCount'] ?? userData['clubCount'] ?? 0,
             friendCount: userData['friendCount'] ?? 0,
             createdAt: _parseTimestamp(userData['createdAt']),
             updatedAt: _parseTimestamp(userData['updatedAt']),
+            interests: userData['interests'] != null 
+                ? List<String>.from(userData['interests']) 
+                : [],
           );
           
           // Create RepostedEvent

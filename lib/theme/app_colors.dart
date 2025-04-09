@@ -1,19 +1,99 @@
 import 'package:flutter/material.dart';
 
+/// App color palette
 class AppColors {
+  /// Primary dark background
+  static const dark = Color(0xFF121212);
+  
+  /// Secondary dark background
+  static const dark2 = Color(0xFF1E1E1E);
+  
+  /// Tertiary dark background
+  static const dark3 = Color(0xFF252525);
+  
+  /// Primary gold color
+  static const gold = Color(0xFFFFD700);
+  
+  /// Lighter gold variant
+  static const goldLight = Color(0xFFFFE455);
+  
+  /// Darker gold variant
+  static const goldDark = Color(0xFFCCAC00);
+  
+  /// Primary accent color
+  static const primary = gold;
+  
+  /// Text color for dark theme
+  static const textDark = Colors.white;
+  
+  /// Secondary text color for dark theme
+  static const textDarkSecondary = Color(0xFFAAAAAA);
+  
+  /// Error color
+  static const error = Color(0xFFE57373);
+  
+  /// Success color
+  static const success = Color(0xFF81C784);
+  
+  /// Warning color
+  static const warning = Color(0xFFFFD54F);
+  
+  /// Info color
+  static const info = Color(0xFF64B5F6);
+  
+  /// Grey scale colors
+  static const grey = Color(0xFF9E9E9E);
+  static const grey100 = Color(0xFFF5F5F5);
+  static const grey200 = Color(0xFFEEEEEE);
+  static const grey300 = Color(0xFFE0E0E0);
+  static const grey400 = Color(0xFFBDBDBD);
+  static const grey500 = Color(0xFF9E9E9E);
+  static const grey600 = Color(0xFF757575);
+  static const grey700 = Color(0xFF616161);
+  static const grey800 = Color(0xFF424242);
+  static const grey900 = Color(0xFF212121);
+  
+  /// Gradient for the glassmorphic container
+  static final glassGradient = LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [
+      const Color(0xFF1A1A1A).withOpacity(0.65),
+      const Color(0xFF252525).withOpacity(0.6),
+    ],
+    stops: const [0.1, 1.0],
+  );
+  
+  /// Gold gradient
+  static const goldGradient = LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [
+      gold,
+      goldDark,
+    ],
+    stops: [0.0, 1.0],
+  );
+  
+  /// Dark gradient
+  static final darkGradient = LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [
+      dark.withOpacity(0.8),
+      dark2.withOpacity(0.85),
+    ],
+    stops: const [0.0, 1.0],
+  );
+
   // Primary colors
   static const Color black =
       Color(0xFF000000); // Pure black
   static const Color white = Color(0xFFFFFFFF);
-  static const Color gold =
-      Color(0xFFFFD700); // Signal yellow, used for interactive elements
   static const Color yellow =
       Color(0xFFFFD700); // Same as gold, maintained for semantic naming
 
   // Background colors - dark gray and subtle variations
-  static const Color grey600 = Color(0xFF151515); // Subtle shade for separation
-  static const Color grey700 = Color(0xFF101010); // Very subtle contrast
-  static const Color grey800 = Color(0xFF080808); // Nearly black
   static const Color surface = Color(0xFF000000); // Pure black background
 
   // Text colors
@@ -57,10 +137,8 @@ class AppColors {
       Color(0xFF000000); // Pure black background
 
   // Status colors - muted tones that don't overwhelm
-  static const Color error = Color(0xFFE57373); // Muted red
-  static const Color success = Color(0xFF81C784); // Muted green
-  static const Color warning = Color(0xFFFFB74D); // Muted orange
-  static const Color info = Color(0xFF64B5F6); // Muted blue
+  static const Color warningStatus = warning; // Muted orange
+  static const Color infoStatus = info; // Muted blue
 
   // Interaction colors
   static const Color ripple = Color(0x14FFFFFF); // white8 - subtle ripple

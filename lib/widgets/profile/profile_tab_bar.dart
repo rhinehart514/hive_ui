@@ -6,6 +6,7 @@ import 'package:hive_ui/models/user_profile.dart';
 
 /// Type of profile tab
 enum ProfileTabType {
+  activity,
   spaces,
   events,
   friends,
@@ -14,18 +15,27 @@ enum ProfileTabType {
 /// Extension on UserProfile to provide additional computed properties
 extension UserProfileStats on UserProfile {
   /// Estimated activity count based on other metrics
-  int get activityCount => (eventCount + clubCount) ~/ 2 + 5;
+  int get activityCount => (eventCount + spaceCount) ~/ 2 + 5;
 
-  // Ensure clubCount reflects the number of followed spaces and handles nulls safely
-  int get calculatedClubCount {
+  // Updated to use spaceCount with followedSpaces as fallback
+  int get calculatedSpaceCount {
     try {
+      // First check for non-zero spaceCount value
+      if (spaceCount > 0) {
+        return spaceCount;
+      }
+      
+      // If spaceCount is 0, check if we have followed spaces
       final spaces = followedSpaces;
       return spaces.isNotEmpty ? spaces.length : 0;
     } catch (e) {
-      debugPrint('Error calculating club count: $e');
+      debugPrint('Error calculating space count: $e');
       return 0; // Safe fallback
     }
   }
+  
+  // For backward compatibility
+  int get calculatedClubCount => calculatedSpaceCount;
 }
 
 /// A persistent tab bar for the profile page
@@ -52,6 +62,7 @@ class ProfileTabBar extends StatelessWidget {
     final spacesCount = profile?.calculatedClubCount ?? 0;
     final eventsCount = profile?.eventCount ?? 0;
     final friendsCount = profile?.friendCount ?? 0;
+    final activityCount = profile?.activityCount ?? 0;
 
     return Material(
       color: AppColors.cardBackground,
@@ -93,6 +104,7 @@ class ProfileTabBar extends StatelessWidget {
             fontSize: isSmallScreen ? 13 : 14,
           ),
           tabs: [
+            _buildTabWithCount('Activity', activityCount, ProfileTabType.activity),
             _buildTabWithCount('Spaces', spacesCount, ProfileTabType.spaces),
             _buildTabWithCount('Events', eventsCount, ProfileTabType.events),
             _buildTabWithCount('Friends', friendsCount, ProfileTabType.friends),
@@ -123,6 +135,9 @@ class ProfileTabBar extends StatelessWidget {
     // Create semantic label for accessibility
     final String semanticLabel;
     switch (type) {
+      case ProfileTabType.activity:
+        semanticLabel = 'Activity tab, $count activities';
+        break;
       case ProfileTabType.spaces:
         semanticLabel = 'Spaces tab, $count spaces';
         break;

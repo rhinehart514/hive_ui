@@ -830,7 +830,7 @@ class SpaceService {
     final userData = userDoc.data();
     
     if (userData != null) {
-      // Get current followedSpaces to calculate the new clubCount
+      // Get current followedSpaces to calculate the new spaceCount
       List<String> followedSpaces = [];
       if (userData['followedSpaces'] is List) {
         followedSpaces = List<String>.from(userData['followedSpaces']);
@@ -855,13 +855,13 @@ class SpaceService {
         }
       }
       
-      // Always update clubCount to match followedSpaces length
-      updateUserData['clubCount'] = followedSpaces.length;
+      // Always update spaceCount to match followedSpaces length
+      updateUserData['spaceCount'] = followedSpaces.length;
       
       // Update the user document
       await userRef.update(updateUserData);
       
-      debugPrint('Updated user document: followedSpaces count = ${followedSpaces.length}, clubCount = ${followedSpaces.length}');
+      debugPrint('Updated user document: followedSpaces count = ${followedSpaces.length}, spaceCount = ${followedSpaces.length}');
     } else {
       // Fallback to basic update if we couldn't get the user data
       if (isJoined) {

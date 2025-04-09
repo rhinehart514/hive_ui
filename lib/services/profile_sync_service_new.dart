@@ -142,10 +142,11 @@ class ProfileSyncService {
           major: 'Undecided',
           residence: 'Off Campus',
           eventCount: 0,
-          clubCount: 0,
+          spaceCount: 0,
           friendCount: 0,
           createdAt: DateTime.now(),
           updatedAt: DateTime.now(),
+          interests: const [],
         );
 
         await firestore
@@ -165,6 +166,14 @@ class ProfileSyncService {
 
   /// Create a repair profile when the normal profile creation fails
   UserProfile _createRepairProfile(String userId, Map<String, dynamic> data) {
+    // Get the space count value, with fallback to clubCount for compatibility
+    int spaceCount = 0;
+    if (data.containsKey('spaceCount')) {
+      spaceCount = data['spaceCount'] as int? ?? 0;
+    } else if (data.containsKey('clubCount')) {
+      spaceCount = data['clubCount'] as int? ?? 0;
+    }
+
     return UserProfile(
       id: userId,
       username: data['username'] as String? ?? 'User',
@@ -173,10 +182,13 @@ class ProfileSyncService {
       major: data['major'] as String? ?? 'Undecided',
       residence: data['residence'] as String? ?? 'Off Campus',
       eventCount: data['eventCount'] as int? ?? 0,
-      clubCount: data['clubCount'] as int? ?? 0,
+      spaceCount: spaceCount,
       friendCount: data['friendCount'] as int? ?? 0,
       createdAt: DateTime.now(),
       updatedAt: DateTime.now(),
+      interests: data['interests'] != null 
+          ? List<String>.from(data['interests']) 
+          : const [],
     );
   }
 
@@ -379,7 +391,7 @@ class ProfileSyncService {
           ? List<String>.from(fields['interests'])
           : profile.interests,
       eventCount: fields['eventCount'] ?? profile.eventCount,
-      clubCount: fields['clubCount'] ?? profile.clubCount,
+      spaceCount: fields['spaceCount'] ?? profile.spaceCount,
       friendCount: fields['friendCount'] ?? profile.friendCount,
       clubAffiliation: fields['clubAffiliation'] ?? profile.clubAffiliation,
       clubRole: fields['clubRole'] ?? profile.clubRole,

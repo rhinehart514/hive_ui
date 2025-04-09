@@ -84,9 +84,9 @@ class OnboardingController extends StateNotifier<OnboardingState> {
     state = state.copyWith(selectedYear: year);
   }
 
-  /// Update the selected field of study
-  void updateSelectedField(String? field) {
-    state = state.copyWith(selectedField: field);
+  /// Updates the selected major
+  void updateSelectedMajor(String? major) {
+    state = state.copyWith(selectedMajor: major);
   }
 
   /// Update the selected residence
@@ -152,10 +152,10 @@ class OnboardingController extends StateNotifier<OnboardingState> {
         username: state.fullName,
         displayName: state.fullName,
         year: state.selectedYear ?? 'Unknown',
-        major: state.selectedField ?? 'Undecided',
+        major: state.selectedMajor ?? 'Undecided',
         residence: state.selectedResidence ?? 'Unknown',
         eventCount: 0,
-        clubCount: state.selectedClubId != null ? 1 : 0,
+        spaceCount: state.selectedClubId != null ? 1 : 0,
         friendCount: 0,
         createdAt: DateTime.now(),
         updatedAt: DateTime.now(),
@@ -175,5 +175,26 @@ class OnboardingController extends StateNotifier<OnboardingState> {
       state = state.copyWith(isCompletingOnboarding: false);
       rethrow;
     }
+  }
+
+  /// Converts the current state to a UserProfile
+  UserProfile toUserProfile(String userId) {
+    return UserProfile(
+      id: userId,
+      username: state.firstName.toLowerCase() + state.lastName.toLowerCase(),
+      displayName: '${state.firstName} ${state.lastName}',
+      firstName: state.firstName,
+      lastName: state.lastName,
+      year: state.selectedYear ?? '',
+      major: state.selectedMajor ?? 'Undecided',
+      residence: state.selectedResidence ?? '',
+      accountTier: state.selectedTier,
+      eventCount: 0,
+      spaceCount: 0,
+      friendCount: 0,
+      createdAt: DateTime.now(),
+      updatedAt: DateTime.now(),
+      interests: state.selectedInterests,
+    );
   }
 }

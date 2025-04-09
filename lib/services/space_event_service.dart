@@ -461,8 +461,8 @@ class SpaceEventService {
           countBySpaceType[spaceType] = (countBySpaceType[spaceType] ?? 0) + 1;
         }
 
-        countBySpaceType.forEach((type, count) {
-          debugPrint('- $type: $count events');
+        countBySpaceType.forEach((type, eventCount) {
+          debugPrint('- $type: $eventCount events');
         });
       }
 
@@ -475,8 +475,8 @@ class SpaceEventService {
           countByReason[reason] = (countByReason[reason] ?? 0) + 1;
         }
 
-        countByReason.forEach((reason, count) {
-          debugPrint('- $reason: $count events');
+        countByReason.forEach((reason, eventCount) {
+          debugPrint('- $reason: $eventCount events');
         });
       }
 
@@ -512,7 +512,7 @@ class SpaceEventService {
       // If spaceId is not provided, try to determine it from organizer name
       final String targetSpaceId =
           spaceId ?? _generateSpaceId(event.organizerName);
-      final Map<String, dynamic> eventData = event.toJson();
+      final Map<String, dynamic> eventData = event.toMap();
 
       // First, ensure the event exists in the global events collection
       final globalEventRef = _firestore.collection('events').doc(event.id);

@@ -1,3 +1,5 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+
 /// The privacy setting for a space
 enum SpacePrivacy {
   /// Visible to anyone, can be joined by anyone
@@ -28,88 +30,127 @@ enum SpaceType {
   hiveExclusive,
 }
 
-/// Represents a space in the HIVE app
+/// Represents a community space in the platform
 class Space {
-  /// Unique identifier for the space
   final String id;
-  
-  /// Name of the space
   final String name;
-  
-  /// Description of the space
   final String description;
-  
-  /// Privacy setting for the space
-  final SpacePrivacy privacy;
-  
-  /// Type of space
-  final SpaceType type;
-  
-  /// URL to the cover image for the space
-  final String coverImageUrl;
-  
-  /// ID of the space owner
+  final String? imageUrl;
   final String ownerId;
-  
-  /// Number of members in the space
-  final int memberCount;
-  
-  /// When the space was created
+  final List<String> moderatorIds;
+  final List<String> memberIds;
   final DateTime createdAt;
+  final Map<String, dynamic>? metadata;
+  final bool isVerified;
   
-  /// Whether the current user is a member of this space
-  final bool isMember;
-  
-  /// Whether the current user is following this space
-  final bool isFollowing;
-  
-  /// Tags associated with this space
-  final List<String> tags;
-  
-  /// Constructor
-  Space({
+  const Space({
     required this.id,
     required this.name,
     required this.description,
-    required this.privacy,
-    required this.type,
-    required this.coverImageUrl,
+    this.imageUrl,
     required this.ownerId,
-    required this.memberCount,
+    required this.moderatorIds,
+    required this.memberIds,
     required this.createdAt,
-    this.isMember = false,
-    this.isFollowing = false,
-    this.tags = const [],
+    this.metadata,
+    this.isVerified = false,
   });
   
-  /// Create a copy of this Space but with the given fields replaced with the new values
+  /// Create an empty space
+  factory Space.empty() {
+    return Space(
+      id: '',
+      name: '',
+      description: '',
+      ownerId: '',
+      moderatorIds: const [],
+      memberIds: const [],
+      createdAt: DateTime.now(),
+    );
+  }
+  
+  /// Check if a user is a member of this space
+  bool isMember(String userId) {
+    return memberIds.contains(userId) || 
+           moderatorIds.contains(userId) || 
+           ownerId == userId;
+  }
+  
+  /// Check if a user is a moderator of this space
+  bool isModerator(String userId) {
+    return moderatorIds.contains(userId) || ownerId == userId;
+  }
+  
+  /// Check if a user is the owner of this space
+  bool isOwner(String userId) {
+    return ownerId == userId;
+  }
+  
+  /// Create a copy of the space with updated fields
   Space copyWith({
     String? id,
     String? name,
     String? description,
-    SpacePrivacy? privacy,
-    SpaceType? type,
-    String? coverImageUrl,
+    String? imageUrl,
     String? ownerId,
-    int? memberCount,
+    List<String>? moderatorIds,
+    List<String>? memberIds,
     DateTime? createdAt,
-    bool? isMember,
-    bool? isFollowing,
-    List<String>? tags,
+    Map<String, dynamic>? metadata,
+    bool? isVerified,
   }) {
     return Space(
       id: id ?? this.id,
       name: name ?? this.name,
       description: description ?? this.description,
-      privacy: privacy ?? this.privacy,
-      type: type ?? this.type,
-      coverImageUrl: coverImageUrl ?? this.coverImageUrl,
+      imageUrl: imageUrl ?? this.imageUrl,
       ownerId: ownerId ?? this.ownerId,
-      memberCount: memberCount ?? this.memberCount,
+      moderatorIds: moderatorIds ?? this.moderatorIds,
+      memberIds: memberIds ?? this.memberIds,
       createdAt: createdAt ?? this.createdAt,
-      isMember: isMember ?? this.isMember,
-      isFollowing: isFollowing ?? this.isFollowing,
-      tags: tags ?? this.tags,
+      metadata: metadata ?? this.metadata,
+      isVerified: isVerified ?? this.isVerified,
     );
+  }
+  
+  /// Convert space to JSON
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'name': name,
+      'description': description,
+      'imageUrl': imageUrl,
+      'ownerId': ownerId,
+      'moderatorIds': moderatorIds,
+      'memberIds': memberIds,
+      'createdAt': Timestamp.fromDate(createdAt),
+      'metadata': metadata,
+      'isVerified': isVerified,
+    };
+  }
+  
+  /// Create space from JSON
+  factory Space.fromJson(Map<String, dynamic> json) {
+    return Space(
+      id: json['id'],
+      name: json['name'],
+      description: json['description'],
+      imageUrl: json['imageUrl'],
+      ownerId: json['ownerId'],
+      moderatorIds: List<String>.from(json['moderatorIds'] ?? []),
+      memberIds: List<String>.from(json['memberIds'] ?? []),
+      createdAt: (json['createdAt'] as Timestamp).toDate(),
+      metadata: json['metadata'],
+      isVerified: json['isVerified'] ?? false,
+    );
+  }
+  
+  /// Create space from Firestore document
+  factory Space.fromDocument(DocumentSnapshot doc) {
+    final data = doc.data() as Map<String, dynamic>;
+    return Space.fromJson({
+      ...data,
+      'id': doc.id,
+    });
   }
 } 

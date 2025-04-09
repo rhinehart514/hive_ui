@@ -1,6 +1,7 @@
 # Script to patch Firebase plugin files for Windows build compatibility
+# IMPORTANT: This script preserves Firebase functionality while fixing Windows compatibility issues
 
-Write-Host "Starting Firebase plugin patching..." -ForegroundColor Cyan
+Write-Host "Starting Firebase plugin patching for Windows compatibility (preserving functionality)..." -ForegroundColor Cyan
 
 # Check if the ephemeral directory exists
 $pluginDir = "flutter/ephemeral/.plugin_symlinks/firebase_auth/windows"
@@ -75,4 +76,4 @@ if (Test-Path $mainCmakeFile) {
     Write-Host "File $mainCmakeFile not found!" -ForegroundColor Yellow
 }
 
-Write-Host "Firebase plugin patching completed!" -ForegroundColor Cyan 
+Write-Host "Firebase plugin patching completed! Firebase functionality preserved for Windows." -ForegroundColor Cyan 

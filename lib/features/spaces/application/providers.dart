@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_ui/features/spaces/application/analytics_service.dart';
+import 'package:hive_ui/features/spaces/data/datasources/spaces_data_source.dart';
 import 'package:hive_ui/features/spaces/data/datasources/spaces_firestore_datasource.dart';
 import 'package:hive_ui/features/spaces/data/repositories/spaces_repository_impl.dart';
 import 'package:hive_ui/features/spaces/domain/entities/space_entity.dart';
@@ -9,6 +10,7 @@ import 'package:hive_ui/features/spaces/domain/usecases/get_joined_spaces_usecas
 import 'package:hive_ui/features/spaces/domain/usecases/join_space_usecase.dart';
 import 'package:hive_ui/features/spaces/domain/usecases/leave_space_usecase.dart';
 import 'package:hive_ui/features/spaces/domain/usecases/search_spaces_usecase.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 // Analytics service provider
 final spacesAnalyticsServiceProvider = Provider<SpacesAnalyticsService>((ref) {
@@ -16,15 +18,15 @@ final spacesAnalyticsServiceProvider = Provider<SpacesAnalyticsService>((ref) {
 });
 
 // Data source provider
-final spacesFirestoreDataSourceProvider =
-    Provider<SpacesFirestoreDataSource>((ref) {
+final spacesDataSourceProvider = Provider<SpacesDataSource>((ref) {
   return SpacesFirestoreDataSource();
 });
 
 // Repository provider
 final spacesRepositoryProvider = Provider<SpacesRepository>((ref) {
-  final dataSource = ref.watch(spacesFirestoreDataSourceProvider);
-  return SpacesRepositoryImpl(dataSource);
+  final dataSource = ref.watch(spacesDataSourceProvider);
+  final auth = FirebaseAuth.instance;
+  return SpacesRepositoryImpl(dataSource, auth: auth);
 });
 
 // Use case providers

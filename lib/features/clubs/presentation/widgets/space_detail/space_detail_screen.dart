@@ -2,31 +2,27 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'dart:ui';
-import 'package:cached_network_image/cached_network_image.dart';
-
-// Theme and Styling
 import 'package:hive_ui/theme/app_colors.dart';
-
-// Models and Entities
 import 'package:hive_ui/models/club.dart';
 import 'package:hive_ui/models/space.dart';
 import 'package:hive_ui/models/event.dart';
 import 'package:hive_ui/features/spaces/domain/entities/space_entity.dart';
 import 'package:hive_ui/features/spaces/domain/entities/space_metrics_entity.dart';
-
-// Providers
 import 'package:hive_ui/features/spaces/presentation/providers/spaces_repository_provider.dart';
 import 'package:hive_ui/features/spaces/presentation/providers/space_providers.dart' as space_providers;
-import 'package:hive_ui/features/spaces/presentation/providers/spaces_async_providers.dart';
 import 'package:hive_ui/core/services/firebase/firebase_services.dart';
-
-// Components
 import 'package:hive_ui/features/clubs/presentation/widgets/space_detail/space_header.dart';
 import 'package:hive_ui/features/clubs/presentation/widgets/space_detail/space_about_tab.dart';
 import 'package:hive_ui/features/clubs/presentation/widgets/space_detail/space_events_tab.dart';
-import 'package:hive_ui/features/clubs/presentation/widgets/space_detail/space_members_tab.dart';
+import 'package:hive_ui/features/spaces/presentation/widgets/space_members_tab.dart';
+import 'package:hive_ui/features/spaces/presentation/widgets/space_message_board.dart';
 import 'package:hive_ui/shared/widgets/error_view.dart';
+import 'package:hive_ui/features/auth/providers/auth_providers.dart';
+import 'package:hive_ui/features/profile/presentation/screens/profile_page.dart';
+import 'package:hive_ui/features/spaces/domain/mappers/space_entity_mapper.dart';
+import 'package:go_router/go_router.dart';
+import 'package:hive_ui/features/moderation/domain/entities/content_report_entity.dart';
+import 'package:hive_ui/components/moderation/report_dialog.dart';
 
 /// A screen to display details of a space or club
 class SpaceDetailScreen extends ConsumerStatefulWidget {
@@ -58,6 +54,7 @@ class _SpaceDetailScreenState extends ConsumerState<SpaceDetailScreen>
   bool _isFollowing = false;
   bool _isSpaceManager = false;
   bool _chatUnlocked = false;
+  bool _isLoading = true;
   
   // Keep tab state alive
   @override
@@ -67,8 +64,8 @@ class _SpaceDetailScreenState extends ConsumerState<SpaceDetailScreen>
   void initState() {
     super.initState();
     
-    // Initialize controllers
-    _tabController = TabController(length: 3, vsync: this);
+    // Initialize controllers with 4 tabs instead of 3
+    _tabController = TabController(length: 4, vsync: this);
     _scrollController = ScrollController();
     
     // Add scroll listener for performance optimization
@@ -78,6 +75,7 @@ class _SpaceDetailScreenState extends ConsumerState<SpaceDetailScreen>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       _refreshSpaceIfNeeded();
+      _checkSpaceStatus();
     });
   }
   
@@ -113,6 +111,61 @@ class _SpaceDetailScreenState extends ConsumerState<SpaceDetailScreen>
     }
   }
   
+  // Check if user is following space and if user is a space manager
+  Future<void> _checkSpaceStatus() async {
+    // Ensure widget is still mounted before proceeding
+    if (!mounted) return;
+    
+    setState(() {
+      _isLoading = true;
+    });
+    
+    try {
+      final repository = ref.read(spaceRepositoryProvider);
+      final currentUser = ref.read(currentUserProvider);
+      
+      // Default values
+      bool hasJoined = false;
+      bool isManager = false;
+      
+      if (currentUser.isNotEmpty && widget.spaceId != null) {
+        final spaceId = widget.spaceId!;
+        final userId = currentUser.id;
+
+        // Perform checks concurrently for efficiency
+        final results = await Future.wait([
+          repository.hasJoinedSpace(spaceId, userId: userId),
+          // TODO: Replace this with a dedicated repository method if possible
+          // Check if the user has the 'admin' role in the members subcollection
+          repository.getSpaceMember(spaceId, userId).then((member) => member?.role == 'admin')
+        ]);
+
+        hasJoined = results[0];
+        isManager = results[1];
+      } 
+      
+      // Update state only if mounted
+      if (mounted) {
+        setState(() {
+          _isFollowing = hasJoined;
+          _isSpaceManager = isManager; // Use the role check result
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error checking space status: $e');
+      // Update state only if mounted
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          // Reset potentially incorrect optimistic states on error
+          _isFollowing = false; 
+          _isSpaceManager = false;
+        });
+      }
+    } 
+  }
+  
   // Handle join/leave space with optimistic updates
   Future<void> _handleJoinToggle() async {
     HapticFeedback.mediumImpact();
@@ -124,12 +177,22 @@ class _SpaceDetailScreenState extends ConsumerState<SpaceDetailScreen>
     
     try {
       final repository = ref.read(spaceRepositoryProvider);
-      final userId = 'current_user_id'; // TODO: Get from auth provider
+      final currentUser = ref.read(currentUserProvider);
+      
+      if (currentUser.isEmpty) {
+        // User is not authenticated, show login prompt
+        _showLoginPrompt();
+        // Revert optimistic update
+        setState(() {
+          _isFollowing = !_isFollowing;
+        });
+        return;
+      }
       
       if (_isFollowing) {
-        await repository.leaveSpace(widget.spaceId!, userId);
+        await repository.joinSpace(widget.spaceId!, userId: currentUser.id);
       } else {
-        await repository.joinSpace(widget.spaceId!, userId);
+        await repository.leaveSpace(widget.spaceId!, userId: currentUser.id);
       }
       
       // Refresh space data in background
@@ -154,12 +217,56 @@ class _SpaceDetailScreenState extends ConsumerState<SpaceDetailScreen>
     }
   }
   
+  // Show login prompt if user is not authenticated
+  void _showLoginPrompt() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Sign In Required', style: GoogleFonts.inter(fontWeight: FontWeight.bold)),
+        content: Text(
+          'You need to sign in to join spaces.',
+          style: GoogleFonts.inter(),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: Text('Cancel', style: GoogleFonts.inter()),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.of(context).pop();
+              // Navigate to login page
+              context.go('/auth/login');
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.gold,
+              foregroundColor: Colors.black,
+            ),
+            child: Text('Sign In', style: GoogleFonts.inter(fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
+  
   @override
   Widget build(BuildContext context) {
     super.build(context); // Required for AutomaticKeepAliveClientMixin
     
     // Check if Firebase is initialized
     final firebaseInitialized = ref.watch(firebaseCoreServiceProvider).isInitialized;
+    
+    // Show loading indicator when checking space status
+    if (_isLoading) {
+      return const Scaffold(
+        backgroundColor: AppColors.black,
+        body: Center(
+          child: CircularProgressIndicator(
+            valueColor: AlwaysStoppedAnimation<Color>(AppColors.gold),
+          ),
+        ),
+      );
+    }
     
     if (!firebaseInitialized) {
       return const Scaffold(
@@ -211,38 +318,20 @@ class _SpaceDetailScreenState extends ConsumerState<SpaceDetailScreen>
     
     // If we have a club or space directly, build the UI with that
     if (widget.club != null || widget.space != null) {
-      final spaceId = widget.club?.id ?? widget.space?.id ?? '';
-      final metrics = SpaceMetricsEntity(
-        spaceId: spaceId,
-        memberCount: widget.club?.memberCount ?? 0,
-        activeMembers: 0,
-        weeklyEvents: 0,
-        monthlyEngagements: 0,
-        lastActivity: DateTime.now(),
-        hasNewContent: false,
-        isTrending: false,
-        activeMembers24h: const [],
-        activityScores: const {},
-        category: SpaceCategory.suggested,
-        size: SpaceSize.small,
-        engagementScore: 0.0,
-      );
+      // Use our mapper to convert Club or Space to SpaceEntity
+      SpaceEntity spaceEntity;
+      if (widget.club != null) {
+        spaceEntity = SpaceEntityMapper.fromClub(widget.club!);
+      } else if (widget.space != null) {
+        spaceEntity = SpaceEntityMapper.fromSpace(widget.space!);
+      } else {
+        return const ErrorView(
+          message: 'Invalid space configuration',
+          icon: Icons.error_outline,
+        );
+      }
       
-      return _buildContent(
-        SpaceEntity(
-          id: spaceId,
-          name: widget.club?.name ?? widget.space?.name ?? '',
-          description: widget.club?.description ?? widget.space?.description ?? '',
-          iconCodePoint: Icons.groups.codePoint,
-          metrics: metrics,
-          createdAt: widget.club?.createdAt ?? DateTime.now(),
-          updatedAt: DateTime.now(),
-          isPrivate: false, // TODO: Map from club/space privacy
-          spaceType: SpaceType.other, // TODO: Map from club/space type
-          imageUrl: '', // TODO: Map from club/space image
-        ),
-        metrics,
-      );
+      return _buildContent(spaceEntity, spaceEntity.metrics);
     }
     
     return const ErrorView(
@@ -256,8 +345,37 @@ class _SpaceDetailScreenState extends ConsumerState<SpaceDetailScreen>
     final eventCount = metrics?.weeklyEvents ?? space.metrics.weeklyEvents;
     _chatUnlocked = memberCount >= 10;
     
+    // Get screen size for adaptive layout
+    final mediaQuery = MediaQuery.of(context);
+    final screenWidth = mediaQuery.size.width;
+    final isSmallScreen = screenWidth < 360;
+    
     return Scaffold(
       backgroundColor: AppColors.black,
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        actions: [
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.more_vert, color: Colors.white),
+            onSelected: (value) {
+              if (value == 'report') {
+                _showReportDialog(space);
+              }
+            },
+            itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
+              const PopupMenuItem<String>(
+                value: 'report',
+                child: ListTile(
+                  leading: Icon(Icons.report_outlined, color: Colors.red),
+                  title: Text('Report Space'),
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
       body: NotificationListener<ScrollNotification>(
         onNotification: (notification) {
           // Only rebuild on scroll end for better performance
@@ -268,31 +386,14 @@ class _SpaceDetailScreenState extends ConsumerState<SpaceDetailScreen>
         },
         child: NestedScrollView(
           controller: _scrollController,
-          physics: const AlwaysScrollableScrollPhysics(),
+          // Use BouncingScrollPhysics for iOS-style physics on all platforms
+          physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
           headerSliverBuilder: (context, innerBoxIsScrolled) {
             return [
               // Space header
               SliverToBoxAdapter(
                 child: SpaceHeader(
-                  club: Club( // TODO: Create proper mapping
-                    id: space.id,
-                    name: space.name,
-                    description: space.description,
-                    category: space.spaceType.toString(),
-                    memberCount: memberCount,
-                    status: 'active',
-                    icon: Icons.groups,
-                    createdAt: space.createdAt,
-                    updatedAt: DateTime.now(),
-                    tags: [],
-                    socialLinks: [],
-                    website: '',
-                    email: '',
-                    meetingTimes: [],
-                    resources: {},
-                    requirements: [],
-                    followersCount: memberCount,
-                  ),
+                  club: SpaceEntityMapper.toClub(space),
                   scrollOffset: _scrollController.hasClients ? _scrollController.offset : 0,
                   isFollowing: _isFollowing,
                   memberCount: memberCount,
@@ -300,35 +401,50 @@ class _SpaceDetailScreenState extends ConsumerState<SpaceDetailScreen>
                   chatUnlocked: _chatUnlocked,
                   onJoinPressed: _handleJoinToggle,
                   extraInfo: _chatUnlocked 
-                    ? "Chat unlocked" 
+                    ? 'Chat unlocked' 
                     : "Need ${10 - memberCount > 0 ? 10 - memberCount : 0} more to unlock",
                 ),
               ),
               
-              // Tab bar
+              // Tab bar with optimized sizing for mobile
               SliverPersistentHeader(
                 delegate: _SliverAppBarDelegate(
                   TabBar(
                     controller: _tabController,
-                    tabs: const [
-                      Tab(text: 'About'),
-                      Tab(text: 'Events'),
-                      Tab(text: 'Members'),
+                    tabs: [
+                      Tab(
+                        text: 'About',
+                        // Adjust height for better touch targets on mobile
+                        height: isSmallScreen ? 40 : 46,
+                      ),
+                      Tab(
+                        text: 'Events',
+                        height: isSmallScreen ? 40 : 46,
+                      ),
+                      Tab(
+                        text: 'Members',
+                        height: isSmallScreen ? 40 : 46,
+                      ),
+                      Tab(
+                        text: 'Discussions',
+                        height: isSmallScreen ? 40 : 46,
+                      ),
                     ],
                     indicatorColor: AppColors.gold,
                     indicatorWeight: 2,
-                    indicatorSize: TabBarIndicatorSize.label,
-                    labelColor: Colors.white,
-                    unselectedLabelColor: Colors.white70,
+                    // Add padding for small screens
+                    labelPadding: EdgeInsets.symmetric(
+                      horizontal: isSmallScreen ? 8 : 16,
+                    ),
+                    // Optimize label styles for better readability
                     labelStyle: GoogleFonts.inter(
-                      fontSize: 15,
+                      fontSize: isSmallScreen ? 14 : 16,
                       fontWeight: FontWeight.w600,
                     ),
                     unselectedLabelStyle: GoogleFonts.inter(
-                      fontSize: 15,
+                      fontSize: isSmallScreen ? 14 : 16,
                       fontWeight: FontWeight.w400,
                     ),
-                    dividerColor: Colors.transparent,
                   ),
                 ),
                 pinned: true,
@@ -337,104 +453,96 @@ class _SpaceDetailScreenState extends ConsumerState<SpaceDetailScreen>
           },
           body: TabBarView(
             controller: _tabController,
+            // Use ClampingScrollPhysics for better performance on TabBarView
+            physics: const ClampingScrollPhysics(),
             children: [
-              // About tab - Lazy load with keep alive
-              KeepAlive(
-                child: SpaceAboutTab(
-                  description: space.description,
-                  aboutItems: [], // TODO: Get from space metadata
-                  onEditDescription: _isSpaceManager ? _showEditDescriptionDialog : null,
-                ),
+              // About tab
+              SpaceAboutTab(
+                description: space.description,
+                aboutItems: const [], // Empty list for now
+                onEditDescription: _isSpaceManager ? () {
+                  // Show edit description dialog
+                  showDialog(
+                    context: context,
+                    builder: (context) => AlertDialog(
+                      title: const Text('Edit Description'),
+                      content: const Text('Edit description functionality'),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(context),
+                          child: const Text('Close'),
+                        ),
+                      ],
+                    ),
+                  );
+                } : null,
               ),
               
-              // Events tab - Lazy load with keep alive
-              KeepAlive(
-                child: FutureBuilder<List<Event>>(
-                  future: (() {
-                    debugPrint('🏛️ Loading events for space: ${space.id}');
-                    debugPrint('Space type: ${space.spaceType}');
-                    return ref.read(spaceRepositoryProvider).getSpaceEvents(space.id);
-                  })(),
-                  builder: (context, snapshot) {
-                    if (snapshot.connectionState == ConnectionState.waiting) {
-                      debugPrint('⌛ Loading events...');
-                      return const Center(
-                        child: CircularProgressIndicator(
-                          valueColor: AlwaysStoppedAnimation<Color>(AppColors.gold),
-                        ),
-                      );
-                    }
-                    
-                    if (snapshot.hasError) {
-                      debugPrint('❌ Error loading events: ${snapshot.error}');
-                      debugPrint('Error stack trace: ${snapshot.stackTrace}');
-                      
-                      // Check if it's a date parsing error
-                      final errorStr = snapshot.error.toString().toLowerCase();
-                      final isDateError = errorStr.contains('timestamp') || 
-                                       errorStr.contains('datetime') ||
-                                       errorStr.contains('date');
-                      
-                      String errorMessage = 'Error loading events';
-                      if (isDateError) {
-                        errorMessage = 'Error loading events: Invalid date format in some events';
-                        // Log for debugging
-                        debugPrint('⚠️ Date parsing error detected. This might indicate inconsistent date formats in Firestore.');
-                      }
-                      
-                      return Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            const Icon(Icons.error_outline, color: Colors.white, size: 48),
-                            const SizedBox(height: 16),
-                            Text(
-                              errorMessage,
-                              style: GoogleFonts.inter(
-                                color: Colors.white,
-                                fontSize: 16,
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            TextButton(
-                              onPressed: () => setState(() {}), // Refresh
-                              child: const Text('Retry'),
-                            )
-                          ],
-                        ),
-                      );
-                    }
-
-                    final events = snapshot.data ?? [];
-                    debugPrint('✨ Loaded ${events.length} events for space ${space.id}');
-                    if (events.isEmpty) {
-                      debugPrint('ℹ️ No events found for this space');
-                    }
-                    
-                    return SpaceEventsTab(
-                      events: events,
-                      onEventTap: _navigateToEventDetails,
-                      onCreateEvent: _isSpaceManager ? _navigateToCreateEvent : null,
-                      isManager: _isSpaceManager,
-                      rsvpStatuses: {},
-                    );
-                  },
-                ),
+              // Events tab
+              FutureBuilder<List<Event>>(
+                future: ref.read(spaceRepositoryProvider).getSpaceEvents(space.id),
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+                  
+                  if (snapshot.hasError) {
+                    return const Center(child: Text('Error loading events'));
+                  }
+                  
+                  final events = snapshot.data ?? [];
+                  
+                  return SpaceEventsTab(
+                    events: events,
+                    onEventTap: (event) {
+                      // Navigate to event details
+                      debugPrint('Navigate to event: ${event.id}');
+                    },
+                    isManager: _isSpaceManager,
+                    onCreateEvent: _isSpaceManager ? () {
+                      // Show create event dialog
+                      debugPrint('Create event for space: ${space.id}');
+                    } : null,
+                  );
+                },
               ),
               
-              // Members tab - Lazy load with keep alive
-              KeepAlive(
-                child: SpaceMembersTab(
-                  members: [], // TODO: Get from members provider
-                  onMemberTap: _navigateToMemberProfile,
-                  onInviteMember: _isSpaceManager ? _showInviteMemberDialog : null,
-                  isManager: _isSpaceManager,
-                ),
+              // Members tab
+              SpaceMembersTab(
+                spaceId: space.id,
               ),
+              
+              // Discussions tab (message board)
+              space.hasMessageBoard
+                ? SpaceMessageBoard(spaceId: space.id)
+                : Center(
+                    child: Text(
+                      'Discussions are not enabled for this space',
+                      style: GoogleFonts.inter(color: Colors.grey),
+                    ),
+                  ),
             ],
           ),
         ),
       ),
+      // Add floating action button for message board
+      floatingActionButton: space.hasMessageBoard ? FloatingActionButton(
+        onPressed: () {
+          // Switch to the Discussions tab
+          _tabController.animateTo(3); // Index of Discussions tab
+          
+          // Add haptic feedback for better UX
+          HapticFeedback.mediumImpact();
+        },
+        backgroundColor: AppColors.gold,
+        tooltip: 'Space Discussions',
+        child: const Icon(
+          Icons.chat_bubble_outline,
+          color: Colors.black,
+        ),
+      ) : null,
+      // Position the FAB in the bottom right, but slightly raised to avoid nav bar
+      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
     );
   }
   
@@ -444,7 +552,7 @@ class _SpaceDetailScreenState extends ConsumerState<SpaceDetailScreen>
     
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         title: Text('Edit Description', style: GoogleFonts.inter()),
         content: TextField(
           controller: controller,
@@ -455,7 +563,7 @@ class _SpaceDetailScreenState extends ConsumerState<SpaceDetailScreen>
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(context).pop(),
+            onPressed: () => Navigator.of(dialogContext).pop(),
             child: const Text('Cancel'),
           ),
           TextButton(
@@ -464,26 +572,26 @@ class _SpaceDetailScreenState extends ConsumerState<SpaceDetailScreen>
                 final repository = ref.read(spaceRepositoryProvider);
                 final space = await repository.getSpaceById(widget.spaceId!);
                 
+                if (!mounted) return;
+                
                 if (space != null) {
                   await repository.updateSpace(
                     space.copyWith(description: controller.text),
                   );
                   
-                  if (mounted) {
-                    Navigator.of(context).pop();
-                    // Refresh space details
-                    ref.invalidate(space_providers.spaceByIdProvider(widget.spaceId!));
-                  }
+                  if (!mounted) return;
+                  Navigator.of(dialogContext).pop();
+                  // Refresh space details
+                  ref.invalidate(space_providers.spaceByIdProvider(widget.spaceId!));
                 }
               } catch (e) {
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(e.toString()),
-                      behavior: SnackBarBehavior.floating,
-                    ),
-                  );
-                }
+                if (!mounted) return;
+                ScaffoldMessenger.of(dialogContext).showSnackBar(
+                  SnackBar(
+                    content: Text(e.toString()),
+                    behavior: SnackBarBehavior.floating,
+                  ),
+                );
               }
             },
             child: const Text('Save'),
@@ -493,28 +601,138 @@ class _SpaceDetailScreenState extends ConsumerState<SpaceDetailScreen>
     );
   }
   
-  // Navigate to event details
+  // Navigate to event details safely
   void _navigateToEventDetails(Event event) {
-    // TODO: Implement navigation to event details
-    debugPrint('Navigate to event details: ${event.title}');
+    HapticFeedback.mediumImpact();
+    if (mounted) {
+      context.pushNamed(
+        'event-details',
+        pathParameters: {'eventId': event.id},
+      );
+    }
   }
   
-  // Navigate to member profile
-  void _navigateToMemberProfile(SpaceMember member) {
-    // TODO: Implement navigation to member profile
-    debugPrint('Navigate to member profile: ${member.name}');
+  // Navigate to member profile safely with proper context usage
+  void _navigateToMemberProfile(String userId, String displayName) {
+    HapticFeedback.mediumImpact();
+    if (mounted) {
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (context) => ProfilePage(userId: userId),
+        ),
+      );
+    }
   }
   
   // Show invite member dialog
-  void _showInviteMemberDialog() {
-    // TODO: Implement invite member dialog
-    debugPrint('Show invite member dialog');
+  void _showInviteMembersDialog() {
+    HapticFeedback.mediumImpact();
+    
+    final TextEditingController emailController = TextEditingController();
+    
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text('Invite Member', style: GoogleFonts.inter(fontWeight: FontWeight.bold)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'Enter email address of the person you want to invite.',
+              style: GoogleFonts.inter(),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: emailController,
+              keyboardType: TextInputType.emailAddress,
+              decoration: InputDecoration(
+                hintText: 'Email address',
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: Text('Cancel', style: GoogleFonts.inter()),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              try {
+                final email = emailController.text.trim();
+                if (email.isEmpty || !email.contains('@')) {
+                  ScaffoldMessenger.of(dialogContext).showSnackBar(
+                    const SnackBar(
+                      content: Text('Please enter a valid email address'),
+                      behavior: SnackBarBehavior.floating,
+                    ),
+                  );
+                  return;
+                }
+                
+                // Close the dialog
+                Navigator.of(dialogContext).pop();
+                
+                // No need to keep repository as unused variable
+                // Just show a snackbar for now
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Invitation sent to $email'),
+                    behavior: SnackBarBehavior.floating,
+                  ),
+                );
+              } catch (e) {
+                ScaffoldMessenger.of(dialogContext).showSnackBar(
+                  SnackBar(
+                    content: Text('Error: $e'),
+                    behavior: SnackBarBehavior.floating,
+                  ),
+                );
+              }
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.gold,
+              foregroundColor: Colors.black,
+            ),
+            child: Text('Send Invite', style: GoogleFonts.inter(fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
   }
   
-  // Navigate to create event page
+  // Navigate to create event page safely
   void _navigateToCreateEvent() {
-    // TODO: Implement navigation to create event page
-    debugPrint('Navigate to create event');
+    HapticFeedback.mediumImpact();
+    if (mounted) {
+      context.pushNamed(
+        'create-event',
+        queryParameters: {'spaceId': widget.spaceId},
+      );
+    }
+  }
+  
+  // Show report dialog
+  void _showReportDialog(SpaceEntity space) {
+    HapticFeedback.mediumImpact();
+    
+    // Use the first admin as the owner ID, if available
+    final String? ownerId = space.admins.isNotEmpty ? space.admins.first : null;
+    
+    showReportDialog(
+      context, 
+      contentId: space.id,
+      contentType: ReportedContentType.space,
+      contentPreview: space.name,
+      ownerId: ownerId,
+    ).then((reported) {
+      if (reported == true) {
+        // Success message already shown by the dialog
+      }
+    });
   }
 }
 

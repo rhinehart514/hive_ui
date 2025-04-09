@@ -81,7 +81,7 @@ class _EventCardContentState extends State<EventCardContent> {
         ),
 
         // Status badge (if event is happening soon or today)
-        if (widget.event.isToday || widget.event.isCancelled)
+        if (_isEventToday() || widget.event.isCancelled)
           Positioned(
             top: 12,
             right: 12,
@@ -214,7 +214,7 @@ class _EventCardContentState extends State<EventCardContent> {
   }
 
   Widget _buildTimeBadge() {
-    final bool isToday = widget.event.isToday;
+    final bool isToday = _isEventToday();
     final bool isTomorrow = _isEventTomorrow();
 
     String dateText;
@@ -318,7 +318,7 @@ class _EventCardContentState extends State<EventCardContent> {
   }
 
   Widget _buildStatusBadge() {
-    final bool isToday = widget.event.isToday;
+    final bool isToday = _isEventToday();
     final bool isCancelled = widget.event.isCancelled;
 
     final Color badgeColor = isCancelled
@@ -440,5 +440,17 @@ class _EventCardContentState extends State<EventCardContent> {
     final period = widget.event.startDate.hour >= 12 ? 'PM' : 'AM';
 
     return '$hour:$minute $period • ${widget.event.location}';
+  }
+
+  // Helper method to check if event is today
+  bool _isEventToday() {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final eventDate = DateTime(
+      widget.event.startDate.year, 
+      widget.event.startDate.month, 
+      widget.event.startDate.day
+    );
+    return eventDate.isAtSameMomentAs(today);
   }
 }

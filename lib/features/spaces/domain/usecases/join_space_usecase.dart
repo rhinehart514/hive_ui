@@ -7,7 +7,12 @@ class JoinSpaceUseCase {
   JoinSpaceUseCase(this.repository);
 
   /// Execute the use case to join a space
-  Future<void> execute(String spaceId) {
-    return repository.joinSpace(spaceId);
+  /// 
+  /// [spaceId] The ID of the space to join
+  /// [userId] Optional user ID to join on behalf of. If not provided, uses the current user.
+  /// 
+  /// Returns true if successful, false otherwise.
+  Future<bool> execute(String spaceId, {String? userId}) {
+    return repository.joinSpace(spaceId, userId: userId);
   }
 }

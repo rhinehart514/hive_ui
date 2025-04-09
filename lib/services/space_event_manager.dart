@@ -106,7 +106,7 @@ class SpaceEventManager {
           .doc(event.id);
 
       // Convert event to data
-      final eventData = event.toJson();
+      final eventData = event.toMap();
       eventData['last_modified'] = FieldValue.serverTimestamp();
       eventData['source'] = event.source.toString();
 
@@ -756,7 +756,7 @@ class SpaceEventManager {
       final eventRef = _firestore.collection('lost_events').doc(event.id);
 
       // Convert event to data
-      final eventData = event.toJson();
+      final eventData = event.toMap();
       eventData['last_modified'] = FieldValue.serverTimestamp();
       eventData['source'] = event.source.toString();
 

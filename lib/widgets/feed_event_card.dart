@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart'; // Needed for context
-import 'package:firebase_auth/firebase_auth.dart'; // Needed for RSVP status
+// Needed for RSVP status
 import '../models/event.dart';
 import '../models/repost_content_type.dart';
 import '../models/user_profile.dart'; // Needed for repostedBy
@@ -35,6 +35,9 @@ class FeedEventCard extends ConsumerWidget { // Changed to ConsumerWidget for po
   
   /// Called when the user reposts the event
   final Function(Event, String?, RepostContentType)? onRepost;
+  
+  /// Called when the user reports the event
+  final Function(Event)? onReport;
 
   // Removed heroTag as it's not used by HiveEventCard
   // Removed isFeatured as it's not directly passed, logic internal/TBD
@@ -50,12 +53,13 @@ class FeedEventCard extends ConsumerWidget { // Changed to ConsumerWidget for po
     this.onTap,
     this.onRsvp,
     this.onRepost,
+    this.onReport,
   }) : super(key: key);
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     // TODO: Determine followsClub status (e.g., from a provider)
-    final bool followsClub = false; 
+    const bool followsClub = false; 
     // TODO: Get todayBoosts (e.g., from a user state provider)
     final List<DateTime> todayBoosts = []; 
 
@@ -72,6 +76,7 @@ class FeedEventCard extends ConsumerWidget { // Changed to ConsumerWidget for po
       onTap: onTap != null ? (e) => onTap!(e) : null,
       onRsvp: onRsvp != null ? (e) => onRsvp!(e) : null,
       onRepost: onRepost, // Pass directly
+      onReport: onReport, // Pass directly
       followsClub: followsClub, // Pass determined/default value
       todayBoosts: todayBoosts, // Pass determined/default value
     );

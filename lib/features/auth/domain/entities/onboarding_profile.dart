@@ -14,7 +14,7 @@ class OnboardingProfile {
   final String? year;
 
   /// Selected field of study/major
-  final String? field;
+  final String? major;
 
   /// Selected residence
   final String? residence;
@@ -39,7 +39,7 @@ class OnboardingProfile {
     required this.firstName,
     required this.lastName,
     this.year,
-    this.field,
+    this.major,
     this.residence,
     required this.accountTier,
     this.clubId,
@@ -53,7 +53,7 @@ class OnboardingProfile {
     String? firstName,
     String? lastName,
     String? year,
-    String? field,
+    String? major,
     String? residence,
     AccountTier? accountTier,
     String? clubId,
@@ -65,7 +65,7 @@ class OnboardingProfile {
       firstName: firstName ?? this.firstName,
       lastName: lastName ?? this.lastName,
       year: year ?? this.year,
-      field: field ?? this.field,
+      major: major ?? this.major,
       residence: residence ?? this.residence,
       accountTier: accountTier ?? this.accountTier,
       clubId: clubId ?? this.clubId,
@@ -83,7 +83,7 @@ class OnboardingProfile {
       firstName.isNotEmpty &&
       lastName.isNotEmpty &&
       year != null &&
-      field != null &&
+      major != null &&
       residence != null;
 
   /// Whether the required minimum number of interests has been selected
@@ -97,10 +97,10 @@ class OnboardingProfile {
       username: fullName.toLowerCase().replaceAll(' ', '_'),
       displayName: fullName,
       year: year ?? 'Unknown',
-      major: field ?? 'Undecided',
+      major: major ?? 'Undecided',
       residence: residence ?? 'Unknown',
       eventCount: 0,
-      clubCount: clubId != null ? 1 : 0,
+      spaceCount: clubId != null ? 1 : 0,
       friendCount: 0,
       createdAt: DateTime.now(),
       updatedAt: DateTime.now(),
@@ -117,7 +117,7 @@ class OnboardingProfile {
         other.firstName == firstName &&
         other.lastName == lastName &&
         other.year == year &&
-        other.field == field &&
+        other.major == major &&
         other.residence == residence &&
         other.accountTier == accountTier &&
         other.clubId == clubId &&
@@ -131,7 +131,7 @@ class OnboardingProfile {
     return firstName.hashCode ^
         lastName.hashCode ^
         year.hashCode ^
-        field.hashCode ^
+        major.hashCode ^
         residence.hashCode ^
         accountTier.hashCode ^
         clubId.hashCode ^

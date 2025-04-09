@@ -121,10 +121,10 @@ class AccountSettingsPage extends ConsumerWidget {
 
                   // Data Export
                   _buildInfoCard(
-                    title: 'Download Your Data',
-                    description: 'Get a copy of your data',
-                    icon: Icons.download_outlined,
-                    onTap: () => _showDataExportDialog(context),
+                    title: 'Profile Data',
+                    description: 'Export or import your profile',
+                    icon: Icons.import_export,
+                    onTap: () => _showProfileDataDialog(context, ref),
                   ),
 
                   const SizedBox(height: 24),
@@ -651,89 +651,57 @@ class AccountSettingsPage extends ConsumerWidget {
     );
   }
 
-  void _showDataExportDialog(BuildContext context) {
+  void _showProfileDataDialog(BuildContext context, WidgetRef ref) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: Colors.grey[900],
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: Text(
-          'Download Your Data',
+          'Profile Data',
           style: GoogleFonts.outfit(
               color: Colors.white, fontWeight: FontWeight.bold),
         ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              'You can download a copy of your data. We will email you when your data is ready to download.',
-              style: GoogleFonts.inter(
-                color: Colors.white.withOpacity(0.8),
-                fontSize: 14,
+        content: SizedBox(
+          width: double.maxFinite,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'Export your profile data to a file or import a previously exported profile.',
+                style: GoogleFonts.inter(
+                  color: Colors.white.withOpacity(0.8),
+                  fontSize: 14,
+                ),
               ),
-            ),
-            const SizedBox(height: 16),
-            _buildDataExportOption(
-              title: 'Profile Information',
-              isSelected: true,
-            ),
-            _buildDataExportOption(
-              title: 'Posts and Comments',
-              isSelected: true,
-            ),
-            _buildDataExportOption(
-              title: 'Events History',
-              isSelected: false,
-            ),
-            _buildDataExportOption(
-              title: 'Messages',
-              isSelected: false,
-            ),
-          ],
+              const SizedBox(height: 24),
+              ElevatedButton(
+                onPressed: () {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Profile export/import feature is being implemented.'),
+                    ),
+                  );
+                  Navigator.pop(context);
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.gold,
+                  foregroundColor: Colors.black,
+                ),
+                child: Text(
+                  'Export Profile',
+                  style: GoogleFonts.inter(fontWeight: FontWeight.w600),
+                ),
+              ),
+            ],
+          ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
             child: Text(
-              'Cancel',
+              'Close',
               style: GoogleFonts.inter(color: Colors.white),
-            ),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.gold,
-              foregroundColor: Colors.black,
-            ),
-            child: Text(
-              'Request Data',
-              style: GoogleFonts.inter(fontWeight: FontWeight.w600),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildDataExportOption({
-    required String title,
-    required bool isSelected,
-  }) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        children: [
-          Icon(
-            isSelected ? Icons.check_box : Icons.check_box_outline_blank,
-            color: isSelected ? AppColors.gold : Colors.white.withOpacity(0.5),
-            size: 20,
-          ),
-          const SizedBox(width: 8),
-          Text(
-            title,
-            style: GoogleFonts.inter(
-              color: Colors.white,
-              fontSize: 14,
             ),
           ),
         ],
