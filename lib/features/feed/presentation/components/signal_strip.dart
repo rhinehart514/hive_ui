@@ -29,6 +29,10 @@ class SignalStrip extends ConsumerWidget {
   
   /// Custom opacity for glass effect
   final double glassOpacity;
+  
+  /// Optional pre-fetched signal content to display
+  /// If provided, this will be used instead of fetching from the repository
+  final List<SignalContent>? customSignalContent;
 
   /// Constructor
   const SignalStrip({
@@ -41,6 +45,7 @@ class SignalStrip extends ConsumerWidget {
     this.signalTypes,
     this.useGlassEffect = true,
     this.glassOpacity = 0.15,
+    this.customSignalContent,
   });
 
   @override
@@ -54,6 +59,7 @@ class SignalStrip extends ConsumerWidget {
       signalTypes: signalTypes,
       useGlassEffect: useGlassEffect,
       glassOpacity: glassOpacity,
+      customSignalContent: customSignalContent,
     );
   }
 } 

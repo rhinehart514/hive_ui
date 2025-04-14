@@ -4,7 +4,7 @@ import 'package:hive_ui/models/space.dart';
 /// Route path constants for the application
 class AppRoutes {
   // Auth routes
-  static const String landing = '/';
+  static const String landing = '/landing';
   static const String signIn = '/sign-in';
   static const String createAccount = '/create-account';
   static const String onboarding = '/onboarding';

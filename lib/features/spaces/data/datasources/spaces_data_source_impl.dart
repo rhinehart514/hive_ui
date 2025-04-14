@@ -5,7 +5,7 @@ import 'package:hive_ui/features/spaces/data/datasources/spaces_data_source.dart
 import 'package:hive_ui/features/spaces/data/models/space_model.dart';
 import 'package:hive_ui/features/spaces/domain/entities/space_entity.dart';
 import 'package:hive_ui/features/spaces/domain/entities/space_member_entity.dart';
-import 'package:hive_ui/models/event.dart';
+import 'package:hive_ui/models/event.dart' as event_model;
 
 /// Implementation of SpacesDataSource that uses Firebase Firestore
 class SpacesDataSourceImpl implements SpacesDataSource {
@@ -545,31 +545,38 @@ class SpacesDataSourceImpl implements SpacesDataSource {
   
   /// Get events for a space
   @override
-  Future<List<Event>> getSpaceEvents(String spaceId) async {
+  Future<List<event_model.Event>> getSpaceEvents(String spaceId, {int limit = 10}) async {
     try {
-      final eventsSnapshot = await _firestore
+      final eventsRef = FirebaseFirestore.instance
+          .collection('spaces')
+          .doc(spaceId)
           .collection('events')
-          .where('spaceId', isEqualTo: spaceId)
-          .orderBy('startDate')
-          .get();
-          
-      return eventsSnapshot.docs.map((doc) {
+          .limit(limit);
+
+      final snapshot = await eventsRef.get();
+
+      return snapshot.docs.map((doc) {
         final data = doc.data();
-        return Event(
+        return event_model.Event(
           id: doc.id,
           title: data['title'] ?? '',
           description: data['description'] ?? '',
           location: data['location'] ?? '',
-          startDate: (data['startDate'] as Timestamp?)?.toDate() ?? DateTime.now(),
-          endDate: (data['endDate'] as Timestamp?)?.toDate() ?? DateTime.now().add(const Duration(hours: 1)),
+          startDate: data['startDate'] is Timestamp 
+              ? (data['startDate'] as Timestamp).toDate() 
+              : DateTime.now(),
+          endDate: data['endDate'] is Timestamp 
+              ? (data['endDate'] as Timestamp).toDate() 
+              : DateTime.now(),
           organizerEmail: data['organizerEmail'] ?? '',
           organizerName: data['organizerName'] ?? '',
-          category: data['category'] ?? 'Other',
-          status: data['status'] ?? 'confirmed',
+          category: data['category'] ?? '',
+          status: data['status'] ?? '',
           link: data['link'] ?? '',
           imageUrl: data['imageUrl'] ?? '',
-          source: EventSource.club,
+          source: event_model.EventSource.club,
           visibility: data['visibility'] ?? 'public',
+          spaceId: spaceId,
         );
       }).toList();
     } catch (e) {

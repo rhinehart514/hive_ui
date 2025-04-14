@@ -8,6 +8,9 @@ import 'package:hive_ui/models/club.dart';
 import 'package:hive_ui/models/event.dart';
 import 'package:hive_ui/models/space_type.dart';
 import 'package:hive_ui/services/firebase_monitor.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
+import 'dart:async';
+import 'dart:ui';
 
 /// Centralized cache service to eliminate redundant Firestore reads
 class OptimizedDataService {
@@ -31,6 +34,11 @@ class OptimizedDataService {
   static const String _spacesKey = 'optimized_spaces_cache';
   static const String _eventsKey = 'optimized_events_cache';
   static const String _lastSyncKey = 'optimized_last_sync';
+  
+  // Offline sync related keys
+  static const String _pendingChangesKey = 'optimized_pending_changes';
+  static const String _lastOnlineKey = 'optimized_last_online';
+  static const String _offlineModeKey = 'optimized_offline_mode';
 
   // Pagination
   static const int _defaultPageSize =
@@ -39,19 +47,296 @@ class OptimizedDataService {
 
   // Pending operations tracking
   static final Map<String, Future<dynamic>> _pendingOperations = {};
+  
+  // Offline changes tracking
+  static final Map<String, Map<String, dynamic>> _pendingChanges = {};
+  static bool _offlineMode = false;
+  static DateTime? _lastOnlineTime;
 
   // Request sequencing
   static int _requestCounter = 0;
   static final Map<String, int> _requestSequence = {};
+  
+  // Connectivity monitoring
+  static StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
+  
+  /// Check if we're in offline mode
+  static bool get isOfflineMode => _offlineMode;
+  
+  /// Get timestamp of when we were last online
+  static DateTime? get lastOnlineTime => _lastOnlineTime;
 
   /// Initialize the service
   static Future<void> initialize() async {
     if (_isInitialized) return;
 
     await _loadFromPersistentCache();
+    await _loadOfflineState();
+    _startConnectivityMonitoring();
     _isInitialized = true;
     debugPrint(
-        'OptimizedDataService initialized with ${_spaceCache.length} spaces and ${_eventCache.length} events');
+        'OptimizedDataService initialized with ${_spaceCache.length} spaces and ${_eventCache.length} events, offline mode: $_offlineMode');
+  }
+  
+  /// Load the offline state from persistent storage
+  static Future<void> _loadOfflineState() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      
+      // Load offline mode flag
+      _offlineMode = prefs.getBool(_offlineModeKey) ?? false;
+      
+      // Load last online timestamp
+      final lastOnlineMs = prefs.getInt(_lastOnlineKey);
+      if (lastOnlineMs != null) {
+        _lastOnlineTime = DateTime.fromMillisecondsSinceEpoch(lastOnlineMs);
+      }
+      
+      // Load pending changes
+      final pendingChangesJson = prefs.getString(_pendingChangesKey);
+      if (pendingChangesJson != null) {
+        final decoded = jsonDecode(pendingChangesJson) as Map<String, dynamic>;
+        decoded.forEach((key, value) {
+          if (value is Map<String, dynamic>) {
+            _pendingChanges[key] = value;
+          }
+        });
+        debugPrint('Loaded ${_pendingChanges.length} pending changes from persistent storage');
+      }
+    } catch (e) {
+      debugPrint('Error loading offline state: $e');
+    }
+  }
+  
+  /// Set the offline mode state
+  static Future<void> setOfflineMode(bool enabled) async {
+    if (_offlineMode == enabled) return;
+    
+    _offlineMode = enabled;
+    
+    if (!enabled) {
+      // We're going online, update the last online time
+      _lastOnlineTime = DateTime.now();
+      
+      // Trigger sync of pending changes
+      await _syncPendingChanges();
+    }
+    
+    // Persist the state
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_offlineModeKey, _offlineMode);
+      
+      if (_lastOnlineTime != null) {
+        await prefs.setInt(_lastOnlineKey, _lastOnlineTime!.millisecondsSinceEpoch);
+      }
+    } catch (e) {
+      debugPrint('Error saving offline mode state: $e');
+    }
+    
+    debugPrint('Offline mode set to: $_offlineMode');
+  }
+  
+  /// Track a change made while offline
+  static Future<void> trackOfflineChange(String entityType, String entityId, Map<String, dynamic> change) async {
+    final key = '${entityType}:${entityId}';
+    
+    // Store in memory
+    if (!_pendingChanges.containsKey(key)) {
+      _pendingChanges[key] = {};
+    }
+    
+    // Merge with existing changes
+    _pendingChanges[key]!.addAll(change);
+    
+    // Persist the changes
+    await _savePendingChanges();
+    
+    debugPrint('Tracked offline change for $entityType:$entityId');
+  }
+  
+  /// Check if an entity has pending offline changes
+  static bool hasOfflineChanges(String entityType, String entityId) {
+    final key = '${entityType}:${entityId}';
+    return _pendingChanges.containsKey(key);
+  }
+  
+  /// Get pending changes for an entity
+  static Map<String, dynamic>? getOfflineChanges(String entityType, String entityId) {
+    final key = '${entityType}:${entityId}';
+    return _pendingChanges[key];
+  }
+  
+  /// Apply offline changes to an entity
+  static T applyOfflineChanges<T>(T entity, String entityType, String entityId) {
+    if (!hasOfflineChanges(entityType, entityId)) {
+      return entity;
+    }
+    
+    final changes = getOfflineChanges(entityType, entityId);
+    if (changes == null) {
+      return entity;
+    }
+    
+    // Handle different entity types
+    if (entity is Space && entityType == 'space') {
+      final spaceJson = (entity as Space).toJson();
+      // Apply changes to the JSON
+      spaceJson.addAll(changes);
+      // Create a new entity with the changes
+      return Space.fromJson(spaceJson) as T;
+    } else if (entity is Event && entityType == 'event') {
+      final eventJson = (entity as Event).toJson();
+      // Apply changes to the JSON
+      eventJson.addAll(changes);
+      // Create a new entity with the changes
+      return Event.fromJson(eventJson) as T;
+    }
+    
+    // Default fallback if entity type isn't handled
+    return entity;
+  }
+  
+  /// Save pending changes to persistent storage
+  static Future<void> _savePendingChanges() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final jsonData = jsonEncode(_pendingChanges);
+      await prefs.setString(_pendingChangesKey, jsonData);
+      debugPrint('Saved ${_pendingChanges.length} pending changes to persistent storage');
+    } catch (e) {
+      debugPrint('Error saving pending changes: $e');
+    }
+  }
+  
+  /// Sync pending changes when going online
+  static Future<void> _syncPendingChanges() async {
+    if (_pendingChanges.isEmpty) {
+      debugPrint('No pending changes to sync');
+      return;
+    }
+    
+    debugPrint('Syncing ${_pendingChanges.length} pending changes');
+    
+    final changesList = List.of(_pendingChanges.entries);
+    final failedChanges = <String, Map<String, dynamic>>{};
+    
+    for (final entry in changesList) {
+      final key = entry.key;
+      final changes = entry.value;
+      
+      // Parse the key (format: entityType:entityId)
+      final parts = key.split(':');
+      if (parts.length != 2) {
+        debugPrint('Invalid change key format: $key');
+        continue;
+      }
+      
+      final entityType = parts[0];
+      final entityId = parts[1];
+      
+      try {
+        bool success = false;
+        
+        if (entityType == 'space') {
+          success = await _syncSpaceChanges(entityId, changes);
+        } else if (entityType == 'event') {
+          success = await _syncEventChanges(entityId, changes);
+        } else {
+          debugPrint('Unsupported entity type for sync: $entityType');
+        }
+        
+        if (success) {
+          // Remove from pending changes
+          _pendingChanges.remove(key);
+          debugPrint('Successfully synced changes for $entityType:$entityId');
+        } else {
+          // Keep track of failed changes
+          failedChanges[key] = changes;
+          debugPrint('Failed to sync changes for $entityType:$entityId');
+        }
+      } catch (e) {
+        // Keep track of failed changes
+        failedChanges[key] = changes;
+        debugPrint('Error syncing changes for $entityType:$entityId: $e');
+      }
+    }
+    
+    // Update pending changes with only the failed ones
+    _pendingChanges.clear();
+    _pendingChanges.addAll(failedChanges);
+    
+    // Save the updated pending changes
+    await _savePendingChanges();
+    
+    debugPrint('Sync completed. ${failedChanges.length} changes failed to sync.');
+  }
+  
+  /// Sync changes for a space entity
+  static Future<bool> _syncSpaceChanges(String spaceId, Map<String, dynamic> changes) async {
+    try {
+      // Find the space collection
+      final spaceTypes = [
+        'student_organizations',
+        'university_organizations',
+        'campus_living',
+        'fraternity_and_sorority',
+        'other'
+      ];
+      
+      // Try each space type to find where this space lives
+      for (final type in spaceTypes) {
+        final docRef = _firestore
+            .collection('spaces')
+            .doc(type)
+            .collection('spaces')
+            .doc(spaceId);
+        
+        final docSnapshot = await docRef.get();
+        
+        if (docSnapshot.exists) {
+          // Update the document
+          await docRef.update(changes);
+          return true;
+        }
+      }
+      
+      // Also check legacy spaces at root level
+      final legacyDocRef = _firestore.collection('spaces').doc(spaceId);
+      final legacySnapshot = await legacyDocRef.get();
+      
+      if (legacySnapshot.exists) {
+        await legacyDocRef.update(changes);
+        return true;
+      }
+      
+      debugPrint('Space $spaceId not found for syncing changes');
+      return false;
+    } catch (e) {
+      debugPrint('Error syncing space changes: $e');
+      return false;
+    }
+  }
+  
+  /// Sync changes for an event entity
+  static Future<bool> _syncEventChanges(String eventId, Map<String, dynamic> changes) async {
+    try {
+      // Find the event document
+      final docRef = _firestore.collection('events').doc(eventId);
+      final docSnapshot = await docRef.get();
+      
+      if (docSnapshot.exists) {
+        // Update the document
+        await docRef.update(changes);
+        return true;
+      }
+      
+      debugPrint('Event $eventId not found for syncing changes');
+      return false;
+    } catch (e) {
+      debugPrint('Error syncing event changes: $e');
+      return false;
+    }
   }
 
   /// Get all spaces with optimized caching
@@ -67,7 +352,15 @@ class OptimizedDataService {
       debugPrint(
           'Returning all spaces from memory cache (${_spaceCache.length} spaces)');
       FirebaseMonitor.recordRead(count: _spaceCache.length, cached: true);
-      return _spaceCache.values.toList();
+      return _applyOfflineChangesToSpaces(_spaceCache.values.toList());
+    }
+
+    // If we're in offline mode, prioritize cache regardless of cache age
+    if (_offlineMode && _spaceCache.isNotEmpty) {
+      debugPrint(
+          'Offline mode: Returning all spaces from memory cache (${_spaceCache.length} spaces)');
+      FirebaseMonitor.recordRead(count: _spaceCache.length, cached: true);
+      return _applyOfflineChangesToSpaces(_spaceCache.values.toList());
     }
 
     // Check for pending operation to avoid duplicate calls
@@ -75,7 +368,13 @@ class OptimizedDataService {
       debugPrint('Reusing pending operation for all spaces');
       await _pendingOperations[cacheKey];
       FirebaseMonitor.recordRead(count: _spaceCache.length, cached: true);
-      return _spaceCache.values.toList();
+      return _applyOfflineChangesToSpaces(_spaceCache.values.toList());
+    }
+
+    // If we're in offline mode and have no cache, return empty list
+    if (_offlineMode && _spaceCache.isEmpty) {
+      debugPrint('Offline mode: No spaces in cache, returning empty list');
+      return [];
     }
 
     // Create operation and store it
@@ -86,11 +385,30 @@ class OptimizedDataService {
       final spaces = await operation;
       _cacheTimes[cacheKey] = DateTime.now();
       _pendingOperations.remove(cacheKey);
-      return spaces;
+      return _applyOfflineChangesToSpaces(spaces);
     } catch (e) {
       _pendingOperations.remove(cacheKey);
+      if (_offlineMode) {
+        // In offline mode, fall back to cache if fetch fails
+        debugPrint('Fetch failed in offline mode, using cache fallback');
+        return _applyOfflineChangesToSpaces(_spaceCache.values.toList());
+      }
       rethrow;
     }
+  }
+  
+  /// Apply any pending offline changes to a list of spaces
+  static List<Space> _applyOfflineChangesToSpaces(List<Space> spaces) {
+    if (_pendingChanges.isEmpty) {
+      return spaces;
+    }
+    
+    return spaces.map((space) {
+      if (hasOfflineChanges('space', space.id)) {
+        return applyOfflineChanges(space, 'space', space.id);
+      }
+      return space;
+    }).toList();
   }
 
   /// Actual spaces fetch operation
@@ -378,7 +696,18 @@ class OptimizedDataService {
       debugPrint(
           'Returning ${limitedEvents.length} events for space $spaceId from memory cache');
       FirebaseMonitor.recordRead(count: limitedEvents.length, cached: true);
-      return limitedEvents;
+      return _applyOfflineChangesToEvents(limitedEvents);
+    }
+
+    // If we're in offline mode, prioritize cache regardless of cache age
+    if (_offlineMode && _spaceEventsCache.containsKey(cacheKey)) {
+      final events = _spaceEventsCache[cacheKey]!;
+      final limitedEvents =
+          events.length > limit ? events.sublist(0, limit) : events;
+      debugPrint(
+          'Offline mode: Returning ${limitedEvents.length} events for space $spaceId from memory cache');
+      FirebaseMonitor.recordRead(count: limitedEvents.length, cached: true);
+      return _applyOfflineChangesToEvents(limitedEvents);
     }
 
     // Check for pending operation
@@ -390,7 +719,13 @@ class OptimizedDataService {
       debugPrint(
           'Returning ${limitedEvents.length} events for space $spaceId from completed operation');
       FirebaseMonitor.recordRead(count: limitedEvents.length, cached: true);
-      return limitedEvents;
+      return _applyOfflineChangesToEvents(limitedEvents);
+    }
+
+    // If we're in offline mode with no cache, return empty list
+    if (_offlineMode && !_spaceEventsCache.containsKey(cacheKey)) {
+      debugPrint('Offline mode: No events for space $spaceId in cache, returning empty list');
+      return [];
     }
 
     // Start operation
@@ -400,11 +735,35 @@ class OptimizedDataService {
     try {
       final events = await operation;
       _pendingOperations.remove(cacheKey);
-      return events;
+      return _applyOfflineChangesToEvents(events);
     } catch (e) {
       _pendingOperations.remove(cacheKey);
+      
+      if (_offlineMode && _spaceEventsCache.containsKey(cacheKey)) {
+        // In offline mode, fall back to cache if fetch fails
+        debugPrint('Fetch failed in offline mode, using cache for events of space $spaceId');
+        final events = _spaceEventsCache[cacheKey]!;
+        final limitedEvents =
+            events.length > limit ? events.sublist(0, limit) : events;
+        return _applyOfflineChangesToEvents(limitedEvents);
+      }
+      
       rethrow;
     }
+  }
+  
+  /// Apply any pending offline changes to a list of events
+  static List<Event> _applyOfflineChangesToEvents(List<Event> events) {
+    if (_pendingChanges.isEmpty) {
+      return events;
+    }
+    
+    return events.map((event) {
+      if (hasOfflineChanges('event', event.id)) {
+        return applyOfflineChanges(event, 'event', event.id);
+      }
+      return event;
+    }).toList();
   }
 
   /// Actual event fetch operation for a space
@@ -759,6 +1118,25 @@ class OptimizedDataService {
     if (!forceRefresh && _spaceCache.containsKey(spaceId)) {
       debugPrint('Returning space $spaceId from memory cache');
       FirebaseMonitor.recordRead(count: 1, cached: true);
+      
+      // Apply any offline changes
+      if (hasOfflineChanges('space', spaceId)) {
+        return applyOfflineChanges(_spaceCache[spaceId]!, 'space', spaceId);
+      }
+      
+      return _spaceCache[spaceId];
+    }
+
+    // If we're in offline mode, prioritize cache regardless of refresh flag
+    if (_offlineMode && _spaceCache.containsKey(spaceId)) {
+      debugPrint('Offline mode: Returning space $spaceId from memory cache');
+      FirebaseMonitor.recordRead(count: 1, cached: true);
+      
+      // Apply any offline changes
+      if (hasOfflineChanges('space', spaceId)) {
+        return applyOfflineChanges(_spaceCache[spaceId]!, 'space', spaceId);
+      }
+      
       return _spaceCache[spaceId];
     }
 
@@ -769,8 +1147,20 @@ class OptimizedDataService {
       await _pendingOperations[cacheKey];
       if (_spaceCache.containsKey(spaceId)) {
         FirebaseMonitor.recordRead(count: 1, cached: true);
+        
+        // Apply any offline changes
+        if (hasOfflineChanges('space', spaceId)) {
+          return applyOfflineChanges(_spaceCache[spaceId]!, 'space', spaceId);
+        }
+        
         return _spaceCache[spaceId];
       }
+      return null;
+    }
+
+    // If we're in offline mode and the space is not in cache, return null
+    if (_offlineMode && !_spaceCache.containsKey(spaceId)) {
+      debugPrint('Offline mode: Space $spaceId not in cache, returning null');
       return null;
     }
 
@@ -781,9 +1171,28 @@ class OptimizedDataService {
     try {
       final space = await operation;
       _pendingOperations.remove(cacheKey);
+      
+      // Apply any offline changes
+      if (space != null && hasOfflineChanges('space', spaceId)) {
+        return applyOfflineChanges(space, 'space', spaceId);
+      }
+      
       return space;
     } catch (e) {
       _pendingOperations.remove(cacheKey);
+      
+      if (_offlineMode && _spaceCache.containsKey(spaceId)) {
+        // In offline mode, fall back to cache if fetch fails
+        debugPrint('Fetch failed in offline mode, using cache for space $spaceId');
+        
+        // Apply any offline changes
+        if (hasOfflineChanges('space', spaceId)) {
+          return applyOfflineChanges(_spaceCache[spaceId]!, 'space', spaceId);
+        }
+        
+        return _spaceCache[spaceId];
+      }
+      
       rethrow;
     }
   }
@@ -854,5 +1263,361 @@ class OptimizedDataService {
       debugPrint('Error fetching space $spaceId: $e');
       return null;
     }
+  }
+
+  /// Update a space with optimistic updates handling offline mode
+  static Future<bool> updateSpace(String spaceId, Map<String, dynamic> updates, {bool force = false}) async {
+    // First check if space exists in cache
+    if (!_spaceCache.containsKey(spaceId)) {
+      // Try to get the space first
+      final space = await getSpaceById(spaceId);
+      if (space == null) {
+        debugPrint('Cannot update space $spaceId - not found');
+        return false;
+      }
+    }
+    
+    // If we're in offline mode or force offline update
+    if (_offlineMode || force) {
+      debugPrint('Updating space $spaceId locally (offline mode)');
+      
+      // Track the change for later sync
+      await trackOfflineChange('space', spaceId, updates);
+      
+      // Update the space in memory cache
+      final space = _spaceCache[spaceId]!;
+      final spaceJson = space.toJson();
+      
+      // Apply updates to the space
+      spaceJson.addAll(updates);
+      
+      // Create updated space
+      final updatedSpace = Space.fromJson(spaceJson);
+      
+      // Update cache
+      _spaceCache[spaceId] = updatedSpace;
+      
+      // Mark cache as updated
+      _cacheTimes['space_$spaceId'] = DateTime.now();
+      
+      return true;
+    }
+    
+    // Online mode - update directly in Firestore
+    try {
+      debugPrint('Updating space $spaceId in Firestore');
+      
+      // Find the space collection
+      final spaceTypes = [
+        'student_organizations',
+        'university_organizations',
+        'campus_living',
+        'fraternity_and_sorority',
+        'other'
+      ];
+      
+      bool updated = false;
+      
+      // Try each space type to find where this space lives
+      for (final type in spaceTypes) {
+        try {
+          final docRef = _firestore
+              .collection('spaces')
+              .doc(type)
+              .collection('spaces')
+              .doc(spaceId);
+          
+          final docSnapshot = await docRef.get();
+          
+          if (docSnapshot.exists) {
+            // Update the document
+            await docRef.update(updates);
+            
+            // Update the space in memory cache
+            if (_spaceCache.containsKey(spaceId)) {
+              final space = _spaceCache[spaceId]!;
+              final spaceJson = space.toJson();
+              
+              // Apply updates to the space
+              spaceJson.addAll(updates);
+              
+              // Create updated space
+              final updatedSpace = Space.fromJson(spaceJson);
+              
+              // Update cache
+              _spaceCache[spaceId] = updatedSpace;
+              
+              // Mark cache as updated
+              _cacheTimes['space_$spaceId'] = DateTime.now();
+            }
+            
+            updated = true;
+            break;
+          }
+        } catch (e) {
+          debugPrint('Error updating space in $type: $e');
+        }
+      }
+      
+      // Also check legacy spaces at root level if not updated yet
+      if (!updated) {
+        try {
+          final legacyDocRef = _firestore.collection('spaces').doc(spaceId);
+          final legacySnapshot = await legacyDocRef.get();
+          
+          if (legacySnapshot.exists) {
+            await legacyDocRef.update(updates);
+            
+            // Update the space in memory cache
+            if (_spaceCache.containsKey(spaceId)) {
+              final space = _spaceCache[spaceId]!;
+              final spaceJson = space.toJson();
+              
+              // Apply updates to the space
+              spaceJson.addAll(updates);
+              
+              // Create updated space
+              final updatedSpace = Space.fromJson(spaceJson);
+              
+              // Update cache
+              _spaceCache[spaceId] = updatedSpace;
+              
+              // Mark cache as updated
+              _cacheTimes['space_$spaceId'] = DateTime.now();
+            }
+            
+            updated = true;
+          }
+        } catch (e) {
+          debugPrint('Error updating legacy space: $e');
+        }
+      }
+      
+      return updated;
+    } catch (e) {
+      debugPrint('Error updating space: $e');
+      
+      // If failed due to network error, do offline update
+      if (e.toString().contains('network') || e.toString().contains('connection')) {
+        debugPrint('Network error, falling back to offline update');
+        return updateSpace(spaceId, updates, force: true);
+      }
+      
+      return false;
+    }
+  }
+
+  /// Update an event with optimistic updates handling offline mode
+  static Future<bool> updateEvent(String eventId, Map<String, dynamic> updates, {bool force = false}) async {
+    // First check if event exists in cache
+    if (!_eventCache.containsKey(eventId)) {
+      // Event not in cache, try to fetch it
+      try {
+        if (_offlineMode) {
+          // Can't fetch in offline mode
+          debugPrint('Cannot update event $eventId - not in cache and offline');
+          return false;
+        }
+        
+        final docRef = _firestore.collection('events').doc(eventId);
+        final docSnapshot = await docRef.get();
+        
+        if (!docSnapshot.exists) {
+          debugPrint('Cannot update event $eventId - not found in Firestore');
+          return false;
+        }
+        
+        // Add to cache
+        final data = docSnapshot.data()!;
+        final processedData = _processFirestoreData(data);
+        final event = Event.fromJson(processedData);
+        _eventCache[eventId] = event;
+      } catch (e) {
+        debugPrint('Error fetching event $eventId: $e');
+        return false;
+      }
+    }
+    
+    // If we're in offline mode or force offline update
+    if (_offlineMode || force) {
+      debugPrint('Updating event $eventId locally (offline mode)');
+      
+      // Track the change for later sync
+      await trackOfflineChange('event', eventId, updates);
+      
+      // Update the event in memory cache
+      final event = _eventCache[eventId]!;
+      final eventJson = event.toJson();
+      
+      // Apply updates to the event
+      eventJson.addAll(updates);
+      
+      // Create updated event
+      final updatedEvent = Event.fromJson(eventJson);
+      
+      // Update cache
+      _eventCache[eventId] = updatedEvent;
+      
+      // Update any event lists that contain this event
+      _updateEventInCaches(eventId, updatedEvent);
+      
+      return true;
+    }
+    
+    // Online mode - update directly in Firestore
+    try {
+      debugPrint('Updating event $eventId in Firestore');
+      
+      final docRef = _firestore.collection('events').doc(eventId);
+      await docRef.update(updates);
+      
+      // Update the event in memory cache
+      if (_eventCache.containsKey(eventId)) {
+        final event = _eventCache[eventId]!;
+        final eventJson = event.toJson();
+        
+        // Apply updates to the event
+        eventJson.addAll(updates);
+        
+        // Create updated event
+        final updatedEvent = Event.fromJson(eventJson);
+        
+        // Update cache
+        _eventCache[eventId] = updatedEvent;
+        
+        // Update any event lists that contain this event
+        _updateEventInCaches(eventId, updatedEvent);
+      }
+      
+      return true;
+    } catch (e) {
+      debugPrint('Error updating event: $e');
+      
+      // If failed due to network error, do offline update
+      if (e.toString().contains('network') || e.toString().contains('connection')) {
+        debugPrint('Network error, falling back to offline update');
+        return updateEvent(eventId, updates, force: true);
+      }
+      
+      return false;
+    }
+  }
+  
+  /// Update an event in all cached lists that contain it
+  static void _updateEventInCaches(String eventId, Event updatedEvent) {
+    // Update in space events caches
+    for (final entry in _spaceEventsCache.entries) {
+      final events = entry.value;
+      final index = events.indexWhere((e) => e.id == eventId);
+      
+      if (index >= 0) {
+        // Replace the event
+        events[index] = updatedEvent;
+      }
+    }
+  }
+
+  /// Start monitoring connectivity changes
+  static void _startConnectivityMonitoring() {
+    _connectivitySubscription = Connectivity().onConnectivityChanged.listen((results) async {
+      final hasConnection = results.isNotEmpty && 
+          results.first != ConnectivityResult.none;
+      
+      final wasOffline = _offlineMode;
+      
+      if (wasOffline && hasConnection) {
+        // We just came back online
+        debugPrint('🔌 Connection restored, transitioning from offline to online mode');
+        await setOfflineMode(false);
+      } else if (!wasOffline && !hasConnection) {
+        // We just went offline
+        debugPrint('🔌 Connection lost, transitioning to offline mode');
+        await setOfflineMode(true);
+      }
+    });
+    
+    // Perform initial check
+    Connectivity().checkConnectivity().then((results) async {
+      final hasConnection = results.isNotEmpty && 
+          results.first != ConnectivityResult.none;
+      
+      if (!hasConnection && !_offlineMode) {
+        debugPrint('🔌 No connection detected during initialization, enabling offline mode');
+        await setOfflineMode(true);
+      } else if (hasConnection && _offlineMode) {
+        debugPrint('🔌 Connection detected during initialization, disabling offline mode');
+        await setOfflineMode(false);
+      }
+    });
+  }
+  
+  /// Clean up resources
+  static void dispose() {
+    _connectivitySubscription?.cancel();
+    _connectivitySubscription = null;
+  }
+
+  /// Prefetch common data for offline use
+  static Future<void> prefetchForOffline() async {
+    if (_offlineMode) {
+      debugPrint('Already in offline mode, skipping prefetch');
+      return;
+    }
+    
+    debugPrint('🔄 Prefetching data for offline use...');
+    
+    try {
+      // Use forceRefresh to bypass cache and ensure fresh data
+      final stopwatch = Stopwatch()..start();
+      
+      // Fetch all spaces
+      final spaces = await getAllSpaces(forceRefresh: true);
+      debugPrint('📋 Prefetched ${spaces.length} spaces for offline use');
+      
+      // Fetch events for some popular spaces
+      // Limit to 10 spaces to avoid excessive reads
+      final popularSpaces = spaces.take(10).toList();
+      int eventCount = 0;
+      
+      for (final space in popularSpaces) {
+        final events = await getEventsForSpace(space.id, limit: 50);
+        eventCount += events.length;
+      }
+      
+      debugPrint('📋 Prefetched $eventCount events for offline use');
+      
+      // Save to persistent cache
+      await _saveToPersistentCache();
+      
+      stopwatch.stop();
+      debugPrint('✅ Prefetch completed in ${stopwatch.elapsedMilliseconds}ms');
+    } catch (e) {
+      debugPrint('❌ Error during offline prefetch: $e');
+    }
+  }
+  
+  /// Check if we have sufficient data cached for offline use
+  static bool hasSufficientOfflineData() {
+    return _spaceCache.length > 10 && _eventCache.length > 20;
+  }
+
+  /// Get all entity IDs with pending changes for a specific entity type
+  static List<String> getIdsWithPendingChanges(String entityType) {
+    final result = <String>[];
+    
+    for (final key in _pendingChanges.keys) {
+      // Parse the key (format: entityType:entityId)
+      final parts = key.split(':');
+      if (parts.length == 2 && parts[0] == entityType) {
+        result.add(parts[1]);
+      }
+    }
+    
+    return result;
+  }
+  
+  /// Get total count of pending changes
+  static int getPendingChangesCount() {
+    return _pendingChanges.length;
   }
 }

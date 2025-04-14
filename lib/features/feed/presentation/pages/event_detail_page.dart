@@ -14,6 +14,7 @@ import 'package:hive_ui/theme/huge_icons.dart';
 import 'package:confetti/confetti.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:hive_ui/features/spaces/data/datasources/spaces_firestore_datasource.dart';
+import 'package:hive_ui/features/events/data/mappers/event_mapper.dart';
 
 // Add the spaceRepositoryProvider
 final spaceRepositoryProvider = Provider<SpaceRepositoryImpl>((ref) {
@@ -65,7 +66,10 @@ class _EventDetailPageState extends ConsumerState<EventDetailPage>
 
     // Initialize related events future
     if (widget.event.spaceId != null) {
-      _relatedEventsFuture = ref.read(spaceRepositoryProvider).getSpaceEvents(widget.event.spaceId!);
+      _relatedEventsFuture = ref
+        .read(spaceRepositoryProvider)
+        .getSpaceEvents(widget.event.spaceId!)
+        .then((domainEvents) => domainEvents.map(EventMapper.toModel).toList());
     } else {
       _relatedEventsFuture = Future.value([]);
     }

@@ -1,4 +1,4 @@
-import 'package:hive_ui/models/event.dart';
+import 'package:hive_ui/features/events/domain/entities/event.dart';
 import 'package:hive_ui/models/attendance_record.dart';
 
 /// Repository interface for events following clean architecture principles

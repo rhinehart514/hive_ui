@@ -1,7 +1,9 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:hive_ui/features/events/domain/repositories/event_repository.dart';
-import 'package:hive_ui/models/event.dart';
+import 'package:hive_ui/features/events/domain/entities/event.dart';
+import 'package:hive_ui/features/events/data/mappers/event_mapper.dart';
+import 'package:hive_ui/models/event.dart' as model;
 import 'package:hive_ui/models/attendance_record.dart';
 import 'package:hive_ui/services/firebase_monitor.dart';
 
@@ -100,7 +102,8 @@ class EventRepositoryImpl implements EventRepository {
           
           // Process timestamps and convert to DateTime
           final processedData = _processTimestamps(data);
-          final event = Event.fromJson(processedData);
+          final modelEvent = model.Event.fromJson(processedData);
+          final event = EventMapper.toEntity(modelEvent);
           events.add(event);
           
           debugPrint('🔍 REPOSITORY: Added event: ${event.title} (${event.id})');
@@ -295,7 +298,8 @@ class EventRepositoryImpl implements EventRepository {
         
         // Process timestamps and convert to DateTime
         final processedData = _processTimestamps(data);
-        return Event.fromJson(processedData);
+        final modelEvent = model.Event.fromJson(processedData);
+        return EventMapper.toEntity(modelEvent);
       }
       
       // If not found in global collection, the event might be in a space subcollection
@@ -337,7 +341,8 @@ class EventRepositoryImpl implements EventRepository {
           
           // Process timestamps and convert to DateTime
           final processedData = _processTimestamps(data);
-          final event = Event.fromJson(processedData);
+          final modelEvent = model.Event.fromJson(processedData);
+          final event = EventMapper.toEntity(modelEvent);
           events.add(event);
         } catch (e) {
           debugPrint('Error processing event ${doc.id}: $e');
@@ -410,7 +415,8 @@ class EventRepositoryImpl implements EventRepository {
           
           // Process timestamps and convert to DateTime
           final processedData = _processTimestamps(data);
-          final event = Event.fromJson(processedData);
+          final modelEvent = model.Event.fromJson(processedData);
+          final event = EventMapper.toEntity(modelEvent);
           events.add(event);
         } catch (e) {
           debugPrint('Error processing event ${doc.id}: $e');
@@ -449,7 +455,8 @@ class EventRepositoryImpl implements EventRepository {
           
           // Process timestamps and convert to DateTime
           final processedData = _processTimestamps(data);
-          final event = Event.fromJson(processedData);
+          final modelEvent = model.Event.fromJson(processedData);
+          final event = EventMapper.toEntity(modelEvent);
           events.add(event);
         } catch (e) {
           debugPrint('Error processing event ${doc.id}: $e');

@@ -2,768 +2,477 @@
 
 ## Overview
 
-This document defines the complete business logic architecture of the HIVE platform at launch and throughout its evolution. HIVE is not just a student events app—it is a purpose-built, adaptive platform designed to structure, govern, and amplify student life across campuses, blending social experience, infrastructure design, and data value capture.
+This document defines the complete business logic architecture of the HIVE platform. HIVE is a student-powered campus layer that reflects the real energy of student life. It gives students psychological control over their experience through dynamic signals, self-organizing communities, and emergent cultural rhythm.
 
-This architecture articulates the rules, behaviors, permissions, identity models, engagement economics, governance structures, and data handling principles that the HIVE platform enforces in both its current and future states. These logic systems are embedded across the frontend, backend, data layers, and institutional integrations.
+HIVE is built on lightweight actions (RSVPs, reposts, reactions), micro-affiliations (Spaces), and real-time resonance, replacing dead systems of record with a living map of what's alive right now on campus. This architecture articulates the behaviors, states, permissions, identity models, engagement patterns, and governance structures that the HIVE platform enforces.
 
-## I. Identity Tiers & Role Governance
+## I. Platform Grammar & Core Constructs
 
-### Role Types
+### Core Constructs
 
-| Role | Description | Access Level |
-|------|-------------|--------------|
-| **Public** | Anyone who downloads the app or accesses the platform | Can view public events and explore Spaces but has no creation or management rights |
-| **Verified** | A user verified as an active student at a participating university | Gains full access to the platform's social and participatory functions |
-| **Verified+** | A student leader or organizational officer | Manages one or more official campus clubs, groups, or Spaces |
-| **Admin** | HIVE Staff member with system maintenance privileges | Platform-wide controls, overrides, and moderation capabilities for platform integrity |
+| Construct | Function | Description | Student Relationship |
+| --- | --- | --- | --- |
+| **Space** | Identity Field | A node of affiliation, community, or orbit | "This is where I belong or observe" |
+| **Signal** | Microexpression | A small action with high interpretive value (RSVP, repost, react) | "This matters to me—even if I don't say why" |
+| **Cluster** | Emergent Grouping | A dynamic network formed by behavior overlap (shared follows, same Spaces) | "These are people like me" |
+| **Pulse** | Energy Snapshot | A moment or topic that is vibrating through campus | "This is what's hot right now" |
+| **Trail** | Memory Thread | A user's evolving footprint through participation and creation | "This is how I got here" |
+| **Gathering** | Coordinated Energy | A time-bound event, meetup, or moment | "We're converging around this" |
+| **Gravity** | Network Pull | The invisible force that draws users toward certain Spaces or content | "I keep seeing this—it's pulling me in" |
+| **Boost** | Signal Amplification | A way to increase visibility or momentum within the network | "This deserves more attention" |
+| **Role** | Structural Function | A user's defined position within a Space or cluster (creator, member, observer) | "This is how I show up here" |
+| **Vibe** | Social Feel | The soft signal or tone of a Space, post, or event | "This feels like my energy" |
 
-### Role Rules
+### System Properties
 
-- Role determines access, visibility, creation privileges, and weight of engagement signals
-- Role assignment is validated through either institutional linkage (SSO, registrar APIs) or verified club leadership claim protocols
-- Role upgrades are governed by secure, auditable workflows
-- Feature access is strictly role-bound
-- Role state is immutable without verification protocol
+- **Dynamic**: HIVE constantly adapts to real-time micro-behaviors
+- **Behavioral-First**: Interaction > intention. HIVE reads what students do *and don't do*
+- **Bottom-Up**: Students shape the platform. Admin and others adapt to it, not vice versa
+- **Structurally Aware**: HIVE operates on defined constructs like Spaces, Signals, Trails
+- **Friction-Responsive**: Every action must lead to feedback. The system acknowledges presence
 
-### Federated Future Support
+## II. Student Archetypes & Role Models
 
-- Role definitions are scoped per institution (multi-tenant structure)
-- Role inheritance is layered—users may have Verified+ in one Space, and basic Verified status elsewhere
-- Institution-specific role requirements and validation methods are configurable
+### Student Archetypes
 
-## II. Role Upgrade Mechanisms
+| Archetype | Behavior | System Impact | Risk |
+|-----------|----------|---------------|------|
+| **The Seeker** | Browses, taps, follows—searching for resonance | Creates gravity, drives demand quietly | Leaves if nothing resonates quickly |
+| **The Reactor** | Reposts, reacts, responds but rarely creates | Amplifies Pulse, contributes to momentum | Feels invisible if there's no feedback loop |
+| **The Joiner** | Joins Spaces, lightly engages, follows cultural flows | Builds participation maps, creates density | Fades into background if not surfaced or acknowledged |
+| **The Builder** | Creates Spaces, runs gatherings, generates cultural architecture | Shapes structure, powers growth | Burns out or bounces to other platforms if under-supported |
+| **The Lurker-Turned-Leader** | Starts as a passive Seeker, eventually builds | Critical for conversion and resilience | Lost if system doesn't offer progressive empowerment |
+| **The Skeptic** | Observes, critiques, distrusts systems | Offers valuable tension, tests legitimacy | Opts out fully if HIVE feels top-down, extractive, or performative |
 
-### Public → Verified
+### Role-Based Logic Modifiers
 
-**Trigger:** Email verification, university SSO, or institutional authentication
+| Logic Role | Behavioral Pattern | Logic Modifications | System Impact |
+| --- | --- | --- | --- |
+| **Seeker** | Browses, hovers, rarely acts | Feed prioritizes soft-entry content; nudges to React or Follow | Reduces bounce rate; increases chance of alignment |
+| **Reactor** | High reactions/reposts, low creation | Feed emphasizes trending content; provides repost feedback loops | Fuels Pulse and social proof loops |
+| **Joiner** | Frequently joins Spaces, RSVPs, lightly engages | Receives more Space-based content in Feed; sees highlights from past joined events | Builds Trail depth and participation density |
+| **Builder** | Creates content, Spaces, events | Feed gives stronger creator feedback; early access to Boost; Trail visible to others (opt-in) | Drives cultural architecture and loop ignition |
+| **Skeptic** | Long-time viewer, no interaction, low trust | Feed shows transparent system messages, peer validation signals, trust-building content | Attempts to earn engagement slowly through proof |
+| **Lurker-Builder** | Initially quiet, then transitions to contributor | Trail shows progression; system boosts early content; Feed nudges others to follow | Converts latent energy into system-building force |
 
-**Steps:**
-1. User initiates verification via onboarding or profile settings
-2. System validates email domain, authenticates via SSO, or links user ID with institution record
-3. Success = role upgrade to Verified; failure = fallback to Public
+## III. Identity Tiers & Permissions
 
-**Outcome:** Gains ability to join Spaces, RSVP to events with memory, and receive personalized feeds
+### Identity Access Tiers
 
-**Future-Safe Considerations:**
-- Must support SAML, OAuth2, and institution-specific APIs
-- Abstract verification flow to plug into different university systems
-- Track verification source and timestamp to build trust metrics
+| Tier | Profile Surface | Interaction Permissions |
+| --- | --- | --- |
+| **Public (non-.edu)** | No Profile | View-only Feed access |
+| **Verified (.edu)** | Private Profile | Full interaction: Join, Drop, Repost, RSVP, Create Spaces |
+| **Verified+** | Public Profile | Builder permissions: Events, Boosts, Rituals, Feed surfacing |
 
-### Verified → Verified+
+### Profile Structure By Tier
 
-**Trigger:** Applies to lead/manage a Space or claim organizational ownership
+#### Verified (Private)
+- Display name (optional)
+- Account status: "Verified Student"
+- Activity Summary (soft Trail)
+- Spaces You're In (toggleable)
+- "Your Motion" (visible to self only)
+- Privacy settings
 
-**Workflow:**
-1. User submits claim via Space creation flow or Club Join Request
-2. System presents organization list (auto-populated or manually created)
-3. User submits proof of leadership (e.g., .edu email + leadership role evidence)
-4. Backend routes request to:
-   - Automated verification (if rules pre-defined)
-   - Manual approval queue (fallback for edge cases)
-5. Once approved, user gains admin capabilities over Space-linked content
+#### Verified+ (Public)
+- Name + blue check
+- Role badge (e.g., "Builder of UB Creatives")
+- Builder Stats
+- Motion Preview
+- Pinned Motion (optional)
+- Public Badge Slot (if earned from Ritual)
 
-**Logic Constraints:**
-- One user can manage multiple Spaces, but role inheritance is scoped
-- Verified+ status can be lost if the leadership term ends or abuse is detected
-- Disputed claims initiate an escalation workflow with override options for institutional stakeholders
-- Spaces may have more than one Verified+ admin; roles should be tiered (Owner, Admin, Contributor)
+### System Triggers & Profile Effects
 
-**Future-Safe Considerations:**
-- Add organizational verification APIs or campus chapter registries
-- Track claim history and allow escalation workflows (e.g., disputes over control)
-- Enable audit trails and Space admin management logs
-- Build override logic for institutional overrides in rare cases
+| Action | Profile Effect |
+| --- | --- |
+| Create Space | "Builder of..." status visible |
+| Host Event | "Hosted [Event]" added to Activity |
+| Join Ritual | "Participated in [Ritual]" logs privately |
+| Earn Badge | Badge appears in profile slot |
+| High motion | Profile may be suggested in Feed or Clusters |
 
-## III. Spaces: Social Infrastructure Layer
+## IV. Core Behavioral Logic
 
-Spaces are the backbone of content creation, engagement tracking, and visibility mapping.
+### Behavior Logic: `Join Space`
 
-### Firestore Implementation
-- Spaces are stored at: `spaces/{spaceType}/spaces/{spaceID}`
+| Field | Description |
+| --- | --- |
+| **Trigger** | User taps "Join" on a Space or accepts an invite |
+| **Immediate Effect** | User added to member list, system logs source and time |
+| **System Logic** | Increases Space gravity; adjusts feed weight; logs join trail; triggers visibility if thresholds are met |
+| **Signal Type** | Affiliation Signal |
+| **State Transitions** | User becomes Member; Space may become Live if dormant |
+| **Visibility** | Visible to Space leaders; may show in Trail or Feed depending on privacy |
 
-### Space Types
+### Behavior Logic: `React`
 
-1. **Student Organizations (`student_org`)**
-   - Formal student organizations
-   - Department or university-sponsored groups
+| Field | Description |
+| --- | --- |
+| **Trigger** | User taps a quick emoji or lightweight reaction on a post or Pulse |
+| **Immediate Effect** | Registers micro-signal; contributes to Pulse heat and post visibility |
+| **System Logic** | Adds behavioral weight to the content; increases feed visibility based on cumulative reactions |
+| **Signal Type** | Expression Signal |
+| **State Transitions** | Content may move from cold → warm → hot states |
+| **Visibility** | Anonymous or semi-anonymous (aggregate only); creator sees reactions; system logs patterns |
 
-2. **University Organizations (`uni_org`)**
-   - Official university departments and programs
+### Behavior Logic: `Repost`
 
-3. **Campus Living (`campus_living`)**
-   - Dorms and housing groups
-   - Living-learning communities
+| Field | Description |
+| --- | --- |
+| **Trigger** | User shares content to their own network or profile feed |
+| **Immediate Effect** | Content appears in follower/peer feed with original attribution |
+| **System Logic** | Increases content's reach and social validation weight; links repost to reputation graph of user |
+| **Signal Type** | Alignment Signal |
+| **State Transitions** | Post may enter trending Pulse or receive momentum flag |
+| **Visibility** | Public; included in Trail; visible in shared feed and post analytics |
 
-4. **Fraternities & Sororities (`fraternity_sorority`)**
-   - Greek life organizations
+### Behavior Logic: `Create Space`
 
-5. **HIVE Exclusive (`hive_exclusive`)**
-   - Interest-based collectives created within HIVE
-   - User-generated community spaces
+| Field | Description |
+| --- | --- |
+| **Trigger** | User initiates a new Space with title, tags, and optional structure |
+| **Immediate Effect** | Space is added to system index; creator becomes default admin |
+| **System Logic** | Requires threshold (e.g., 3 joins) before appearing publicly; system checks tag uniqueness and quality risk |
+| **Signal Type** | Ownership / Identity Formation Signal |
+| **State Transitions** | Space goes from Hidden → Seeded → Live based on join activity and post frequency |
+| **Visibility** | Private at first; becomes public upon reaching thresholds |
 
-6. **Other (`other`)**
-   - Temporary or event-specific groups
-   - Miscellaneous community spaces
+### Behavior Logic: `Pulse`
 
-### Space Origin & Creation Rules
+| Field | Description |
+| --- | --- |
+| **Trigger** | Multiple reactions/reposts in short time frame around the same content or idea |
+| **Immediate Effect** | Creates a visual feedback loop for trending content; flags the post or Space for broader surfacing |
+| **System Logic** | Heat thresholds determine Pulse classification (micro, local, global); Pulse decay over time unless sustained |
+| **Signal Type** | Energy Signal |
+| **State Transitions** | Cold → Warm → Pulse (Trending) → Faded |
+| **Visibility** | Visible in Feed; may generate push notifications depending on settings |
 
-- **Pre-seeded Spaces** (student_org, uni_org, campus_living, fraternity_sorority)
-  - Created by HIVE staff before launch
-  - Automatically populated via institutional data
-  - Not deletable by users
-  - Require Verified+ claim process for management
-  - Can be auto-updated via RSS feeds from institution
+### Behavior Logic: `Boost`
 
-- **User-Created Spaces** (hive_exclusive, other)
-  - Created by Verified users
-  - Fully managed by creators
-  - Can be deleted by Verified+ members
+| Field | Description |
+| --- | --- |
+| **Trigger** | Admin/leader chooses to highlight post or event |
+| **Immediate Effect** | Boosted content surfaces at top of Feed and is visually distinguished |
+| **System Logic** | Limited uses per time period (scarcity model); requires minimum engagement before eligibility |
+| **Signal Type** | Priority / Leadership Signal |
+| **State Transitions** | None, but affects Pulse speed and Feed position |
+| **Visibility** | Public; visibly labeled as Boosted |
 
-### Space Lifecycle
+### Behavior Logic: `Drop`
 
-```
-Created → Active → Dormant → Archived
-```
+| Field | Description |
+| --- | --- |
+| **Trigger** | User adds 1-line post inside a Space |
+| **Immediate Effect** | Content appears in-thread; flags Space as active; notifies participants optionally |
+| **System Logic** | Increases Space activity score; may extend Pulse if engagement follows |
+| **Signal Type** | Participation Signal |
+| **State Transitions** | May move Space from Dormant → Active |
+| **Visibility** | Public within Space; visible in Trail |
 
-- **Created**: Space established, awaiting content/events
-- **Active**: Recent events or user interaction
-- **Dormant**: No activity for 30+ days
-- **Archived**: Manually or systemically locked, read-only
+### Behavior Logic: `Gather` (Events)
 
-### Core Rules
+| Field | Description |
+| --- | --- |
+| **Trigger** | User initiates an event or gathering |
+| **Immediate Effect** | Event published to Feed or Space; RSVP available; system tracks engagement |
+| **System Logic** | Supports RSVP tracking, activity prediction, Trail entry; requires contextual info (time/place/host) |
+| **Signal Type** | Mobilization Signal |
+| **State Transitions** | Draft → Announced → Live → Archived |
+| **Visibility** | Public in Feed; private in invite-only mode |
 
-- Users must be affiliated with a Space to create events
-- Space creation is open to Verified users, but verification is required for full feature unlock
-- Dormancy is automatically triggered after periods of inactivity
-- Spaces are the minimal unit of group identity
-- No anonymous or ad-hoc event creation
-- All user-generated content must anchor to a Space
+## V. System States & Lifecycle
 
-### Space Features
+### Space States
 
-- Role-based admin tiers (Owner, Admin, Editor, Viewer)
-- Internal analytics, event history, and Space health tracking
-- Customizable visibility and join settings
-- Event creation and management tools
-- Member communication channels
+| State | Trigger | Effect | Notes |
+| --- | --- | --- | --- |
+| `Seeded` | Space is created, 0–2 members | Not publicly listed; only accessible via invite or link | Default private mode |
+| `Forming` | 3–10 members joined or 1 post made | Visible in Feed via Joiner's graph; soft searchable | Early alignment phase |
+| `Live` | 10+ members and consistent activity | Fully public and discoverable; contributes to Gravity | Eligible for Boosts and Feed surfacing |
+| `Dormant` | No activity in 14+ days | Feed and search visibility reduced; owner notified | Can reawaken with 1+ contribution |
+| `Legacy` | Archived by creator or auto-faded | Trail-only visibility; not discoverable | Preserves historical footprint |
 
-### Space Governance
+### Pulse States
 
-#### Roles Within Spaces
+| State | Trigger | Effect | Notes |
+| --- | --- | --- | --- |
+| `Cold` | Initial post or low engagement | Appears only in local Feed | Needs amplification to grow |
+| `Warming` | 3+ Reactions or 2+ Reposts in short window | Begins surfacing to Clusters | Temperature tracked over time |
+| `Hot (Pulse)` | 10+ reactions/reposts in short burst | Feed priority across network; Pulse label appears | Triggers Gravity spikes |
+| `Cooling` | Engagement slows > 8h | Feed weight decreases; visible only to Cluster members | Graceful decay logic |
+| `Faded` | No engagement for 24h+ | Archived to Trail if part of meaningful moment | Soft memory, not deletion |
 
-- No single owner; all control is via Verified+ role
-- Verified+ required for:
-  - Editing metadata
-  - Creating events
-  - Using Boosts/Honey Mode
-  - Managing membership
-- Member: Participation rights (must be Verified)
-- Follower: Receives updates (any role)
+### Event States (`Gather`)
 
-#### Leadership Claim Process
+| State | Trigger | Effect | Notes |
+| --- | --- | --- | --- |
+| `Draft` | Created, not yet shared | Only visible to creator or co-organizers | Can be edited freely |
+| `Announced` | Shared to Feed or Space | Feed + calendar listing begins; open RSVP | Activity triggers Trail entries |
+| `Live` | Within 1h of start time | Real-time Feed prioritization | Syncs with notifications if enabled |
+| `Concluded` | End time passed | Feedback prompts issued; archived to Trail | Boost ends automatically |
+| `Highlight` | Receives post-event activity | Converted into Pulse thread or Gallery | Used to extend memory cycle |
 
-- Leadership claims for pre-seeded spaces must be manually approved by HIVE staff
-- Claim status tracked as "unclaimed" | "pending" | "approved"
-- Future implementation will include role history, admin logs, and verified+ audit trails
+## VI. Core System Layers
 
-#### Visibility Rules
+### Discovery Layer
 
-- Pre-seeded: Always public
-- HIVE-exclusive: Public or private (invite-only)
-- All Spaces are search indexed regardless of visibility or type
+This layer enables students—especially unaffiliated, passive, or socially tentative users—to see, sense, and align with what's happening around them on campus. It surfaces motion, not content.
 
-#### Membership Mechanisms
+#### Core Surfaces
+- Feed (Main Scroll)
+- Feed Strip (Top band, horizontally scrollable)
+- HiveLab (via ritual cards embedded in strip)
+- Passive Trail memory + Cluster motion triggers
 
-- Only Verified users can join Spaces
-- Verified+ manages member list, invites, and moderation
-- Open: Anyone can join
-- Approval: Join requests require approval
-- Invitation: Join by invitation only
-- Restricted: Institutional controls (e.g., department Spaces)
-- Membership tracked for personalization and analytics
+#### Discovery Mechanics
+1. **Repost & Quote Flow**
+   - Peer reposts elevate Feed presence
+   - Quote = micro-authorship, creates narrative layer
 
-#### Space Metadata Structure
+2. **Friend Motion Cards**
+   - "Someone you know RSVPed" → passive trust layer
+   - Cluster-based, not based on follow graph
+
+3. **Curiosity Memory**
+   - System tracks taps, lingers, and revisits
+   - Adds low-weight entries to user Trail
+   - Powers silent resurfacing in Feed
+
+4. **Space Suggestions**
+   - Based on Trail overlaps, cluster motion, rituals joined
+   - One-tap join, visible in main Feed
+
+5. **Ritual Strip Prompts**
+   - Emotional, low-barrier entry into the system
+   - Participation reshapes Feed, triggers affinity loops
+   - Always 1 active ritual (campus-wide or micro)
+
+### Affiliation Layer
+
+This layer governs how students align with identity structures inside HIVE—not through bios, chats, or forms, but through lightweight behavioral signals.
+
+#### Key Behaviors & Surfaces
+| Surface | Behavior | System Effect |
+| --- | --- | --- |
+| Feed Suggestion | Tap / linger | Adds curiosity weight; triggers Observer |
+| Join Button | Tap | Adds Member status; Trail + Gravity start |
+| Join Button | Long-press | Adds to Watchlist; soft affiliation |
+| Space Content | Repost / RSVP | Triggers Active tier |
+| Reaffirmation Strip | "Still vibing?" | Adjusts Trail/Gravity based on response |
+| Feed Echo | Multiple Space taps | Suggests formal Join / Watch |
+
+#### Invisible Tiered Affiliation
+| Tier | Trigger | Meaning |
+| --- | --- | --- |
+| Observer | 3+ passive touches (taps, lingers, hovers) | Curiosity detected |
+| Member | Taps Join | Starts Trail + Feed/Space weighting |
+| Active | Posts, RSVPs, rituals inside Space | High Gravity; shown in Builder Dashboard |
+| Dormant | 14+ days inactivity | Downweighted affiliation |
+| Dropped | 21+ days no action or ritual "Ghosted" | Trail archived; removed from weighting |
+
+### Participation Layer
+
+This layer defines how students take visible actions within HIVE through lightweight, expressive, and consequential behaviors.
+
+#### Supported Participation Types
+| Action | Description | Location |
+| --- | --- | --- |
+| **Drop** | 1-line post inside a Space. No replies. | Space |
+| **RSVP** | Tap to attend an event. | Feed / Event |
+| **Repost** | Share content to Feed. | Feed / Space |
+| **Quote** | Repost with a 1-line comment. | Feed / Space |
+| **Vote** | Tap to respond to a poll. | Space |
+| **Boost** | Highlight a Drop to top (Builder-only). | Space |
+| **Watch** | Soft-follow a Space or event. | Feed / Space |
+| **React** | Tap-to-signal interest (e.g. 🔥 👀). | Feed (optional) |
+
+#### Card Lifecycle Logic
+| Card Type | Default Lifespan | Extensions |
+| --- | --- | --- |
+| Drop | 48h | Boost +24h; Quote +12h |
+| Event | Until start time | RSVP resets decay window |
+| Poll | Set by Builder | Votes extend visibility |
+| Quote | 24h | Requotes add time |
+| Boosted Card | 6h pinned | One boost per post |
+
+### Creation Layer
+
+This layer defines how new objects — Spaces, Events, and Rituals — are introduced into the system.
+
+#### Objects That Can Be Created
+| Object | Who Creates It | Surface | Purpose |
+| --- | --- | --- | --- |
+| **Space** | Any student | Feed → Space Tab | Starts a new affiliation node |
+| **Event** | Builder only, or auto-promoted Drop | Inside Space | Creates group convergence |
+| **Ritual** | Builder (inside HiveLab) | HiveLab → Feed | Social interaction scaffolding |
+
+#### Space Creation Flow
+- "Name it. Tag it. Done."
+  - Inputs: Space name, 1-2 tags from system library
+  - Optional: 1-liner description, emoji or logo
+
+#### Event Creation Flow
+- **Builder-Initiated Event**: Tap "Create Event" inside a Space
+  - Inputs: Title, Time, Location, Optional context
+- **Event-As-Post**: 
+  - A student Drops: "movie night @ 8pm, my place"
+  - 3+ people tap "Going?" → System auto-converts Drop to Event
+
+#### Ritual Creation
+- Created inside HiveLab by Builders
+- Limited-time, participation-based
+- Results feed back into Feed → triggers motion
+
+## VII. Core Logic Modules
+
+| Module | Function | Operates On | Outputs To |
+| --- | --- | --- | --- |
+| **Feed Engine** | Personalizes and curates Feed based on behavior, clusters, and recency | Roles, Gravity, Reposts, Pulses | Feed UI, visibility weights |
+| **Pulse Engine** | Detects surging content; tracks energy peaks and decays | Reposts, Reactions, Time | Feed, Notifications, Pulse State |
+| **Gravity Engine** | Calculates directional interest between users, Spaces, and content | Repeat views, soft taps, latent behavior | Feed weight, Cluster edges |
+| **Trail Engine** | Maintains memory record and generates summarizations | Contributions, RSVPs, Joins | Trail display, Feedback loops |
+| **Role Engine** | Interprets behavioral patterns to infer archetype roles | Engagement frequency, action mix, time decay | Feed filters, nudge logic |
+| **Space Lifecycle Engine** | Governs transitions from Seeded → Live → Dormant | Joins, posts, decay timers | Visibility indexing, search scope |
+| **Moderation Engine** | Handles trust, safety, low-signal detection | Flags, post velocity, reports | Visibility throttling, prompts, shadow actions |
+| **Cluster Engine** | Maps behavioral overlap into dynamic social groups | Shared follows, repost chains, Spaces | Feed personalization, suggested content |
+| **Memory Engine** | Surfaces legacy content, throwbacks, or historical echoes | Trail patterns, dormancy, timing | Feed highlights, Trail popups |
+
+### Module Execution Modes
+
+| Module | Execution Mode | Rationale |
+| --- | --- | --- |
+| Feed Engine | Real-Time | Needs to reflect user actions immediately |
+| Pulse Engine | Real-Time | Pulse windows are short-lived; must respond quickly to surges |
+| Gravity Engine | Hybrid | Immediate reaction to some behaviors, batch recalibration nightly |
+| Trail Engine | Batch | Evaluated hourly/daily; used for summary and reflection |
+| Role Engine | Batch | Inferred over time through behavior windows |
+| Space Lifecycle Engine | Batch | Space state transitions based on multi-day activity decay |
+| Moderation Engine | Hybrid | Flagging is instant; visibility throttling may queue or delay |
+| Cluster Engine | Batch | Cluster calculations run periodically; affects Feed in next cycle |
+| Memory Engine | Batch | Triggered by calendar/time logic; no real-time user impact |
+
+## VIII. Implementation Guidelines
+
+### Moderation Scaffolding
+
+| Role | Permissions | Notes |
+| --- | --- | --- |
+| **System (Backend)** | Auto-detection of spam, abuse, bot behavior | Can soft-remove content, throttle reach, issue shadow warnings |
+| **Space Admins (Student Leaders)** | Flag posts, hide from Space view, issue soft warnings | Cannot delete users or posts from system; visibility scoped to Space |
+| **Peer Moderators (Optional)** | Earned role through contribution + feedback | Trusted to guide tone, not enforce rules |
+
+### Moderation Actions
+
+| Action | Who Can Trigger | Effect | System Design Notes |
+| --- | --- | --- | --- |
+| `Flag Post` | Any user | Sends signal to backend moderation queue | Multiple flags increase urgency |
+| `Mute User` | Space Admin | Hides content in that Space only | Does not notify user; reversible |
+| `Shadow Throttle` | System | Temporarily reduces content reach | Used for spam-like behavior |
+| `Soft Ban (Local)` | System | Prevents access to specific Spaces temporarily | Triggered by repeated abuse, not visible to other users |
+| `Feedback Prompt` | System | Encourages user to revise or rethink content | Trust-building over policing |
+
+### Feed Components
+
+1. **Feed Strip (Top-of-Feed Cards)**
+   - Horizontally-scrollable strip that sets the tone, signals activity
+   - Example cards: "Last Night on Campus", "Top Event Today", "Try One Space"
+
+2. **Main Feed Cards**
+   - Event Cards: Standard, Boosted, Reposted
+   - Space Suggestions based on behavior
+   - Friend Motion Cards showing social proof
+   - Ritual Cards for participation
+
+### UX Design Principles
+
+- Every participation option is 1-step max
+- No modals with >1 input
+- No threading, replies, or infinite comments
+- Participation creates modular cards, not content streams
+- System must visibly respond (card moves, Feed changes, Strip updates)
+
+## IX. Data Structures & Firestore Implementation
+
+### Trail Summarization Logic
+
+The Trail system tracks a student's progression through HIVE as a narrative of participation.
+
+#### What a Trail Includes
+- Spaces Joined with join date and re-visit frequency
+- Events Attended with optional highlight recap
+- Posts Created linked to role evolution
+- Reposts / Reactions for engagement signal volume
+- Roles Held (Builder or moderator status)
+
+#### Summarization Logic
+| Trigger | Summary Type | Output |
+| --- | --- | --- |
+| Monthly Engagement | Trail Recap | "This month you joined 2 Spaces, attended 3 events, and reposted 6 items." |
+| Role Transition | Progression Milestone | "You've grown from a Joiner to a Builder. You've now created 3 Spaces." |
+| Dormant Reentry | Highlight Throwback | "Welcome back. You last posted 46 days ago in [Space]." |
+| Milestone Moment | Culture Recognition | "100 reactions received on your contributions – students are resonating with your energy." |
+
+### Profile Data Model
 
 ```json
 {
-  "space_type": "enum",
-  "origin": "preseeded" | "hive",
-  "visibility": "public" | "private",
-  "deletable": true | false,
-  "rss_feed_source": "url | null",
-  "search_indexed": true,
-  "claim_status": "unclaimed" | "pending" | "approved"
+  "userId": "user789",
+  "handle": "@laney",
+  "displayName": "Laney Thompson",
+  "avatarUrl": "...",
+  "status": "verified+",
+  "bio": "Sometimes outside",
+  "spaces": ["space123", "space456"],
+  "builderOf": ["space123"],
+  "trail": {
+    "drops": 6,
+    "events": 3,
+    "promptsVoted": 4,
+    "quotes": 2
+  },
+  "badges": ["campus_madness_2025"],
+  "legacy": {
+    "joinedAt": "2025-04-01T...",
+    "topDrop": "'film kids are unhinged'"
+  }
 }
 ```
 
-#### Event Integration Logic
+### Space Metadata Structure
 
-- All events must belong to a Space
-- Pre-seeded Spaces auto-ingest events via RSS feeds
-- RSS events:
-  - Can be enhanced (media, formatting)
-  - Require Verified+ to report attendance manually (for university integration)
-- HIVE-exclusive events: manually created, fully editable
-
-#### Activity Requirements
-
-- Inactive Spaces (no events for 30+ days) flagged as dormant
-- Abandoned Spaces (no activity for 180+ days) archived
-- Reactivation protocol for archived Spaces
-
-#### Moderation Rules
-
-- Verified+ must uphold community standards
-- Abuse of permissions triggers role review
-- Spaces can be flagged and escalated to HIVE staff or institution
-
-### Future Space Features
-
-- Subspaces for large organizations
-- Space health scoring model (based on interaction/activity)
-- Role history, admin logs, and verified+ audit trails
-- Discovery recommendations (based on user behavior and network)
-
-## IV. Events: Temporal Priority Architecture
-
-Events are the atomic unit of activity in HIVE. Their structure dictates engagement, feed presence, and behavioral memory.
-
-### Event Types
-
-1. **One-time Events**
-   - Standard single occurrence events
-
-2. **Recurring Events**
-   - Weekly, monthly, or custom patterns
-   - Persistent series with individual instances
-
-3. **Multi-day or Series-based Events**
-   - Extended duration events
-   - Related events grouped as a series
-
-4. **Collaborative Events**
-   - Multi-Space sponsored events
-   - Cross-organizational collaborations
-
-### Event Lifecycle
-
-```
-Draft → Published → Live → Completed → Archived
+```json
+{
+  "spaceId": "abc123",
+  "name": "UB Creatives",
+  "tags": ["art", "late night", "chaotic"],
+  "members": ["user123", "user456"],
+  "builders": ["user123"],
+  "events": [...],
+  "drops": [...],
+  "prompts": [...],
+  "quotes": [...],
+  "state": "live",
+  "createdAt": timestamp
+}
 ```
 
-### State Transitions & Rules
-
-1. **Draft**
-   - Editable by Space owners/creators
-   - Not visible in feeds
-   - No time limit in this state
-
-2. **Published**
-   - Visible in feeds according to visibility algorithm
-   - Limited edits allowed (description, details)
-   - Core details locked (time, date, location)
-   - RSVP collection active
-   - Changes to Published events are versioned
-
-3. **Live**
-   - Current ongoing events
-   - Automatically transitions based on event time
-   - Enhanced visibility in feeds
-   - Check-in functionality active
-   - Cannot be edited unless flagged and approved
-
-4. **Completed**
-   - Brief post-event engagement window
-   - Attendance records finalized
-   - Photos/recap content collection
-   - Feedback solicitation period
-   - Triggers post-event engagement capture and analytics
-
-5. **Archived**
-   - Searchable but not in main feed
-   - Analytics and history preserved
-   - Template for future events
-
-### Temporal Logic
-
-- Events become active based on their start time
-- "Remind Me" buttons activate based on time thresholds
-- Feed prioritization changes dynamically based on time proximity
-- Recurring events maintain presence with dynamic visibility
-- Post-event visibility window of 12 hours for engagement
-
-## V. Feed System: Dynamic Attention Economy
-
-The main feed acts as a ranked, personalized stream of high-relevance campus activity, serving as the central surface of the HIVE platform. It functions as the dynamic, personalized, and context-aware discovery layer that connects students with live campus activity, event opportunities, and emerging campus culture.
-
-### Feed Purpose & Philosophy
-
-- Acts as the pulse of student life
-- Activates passive users through ambient belonging
-- Empowers Verified+ users to amplify their events
-- Creates a daily rhythm of relevance, trust, and curiosity
-- Surfaces campus dynamics without overwhelming or fragmenting
-- **NOT chronological** — intentional visibility algorithm informed by behavioral cues, cultural context, and system rules
-
-### Core Feed Components
-
-#### 1. Signal Strip (Top-of-Feed Cards)
-- Horizontally-scrollable strip that sets the tone, signals activity, and provides narrative framing
-- Cards curated by platform logic and updated daily
-- Example card types:
-  - "Last Night on Campus"
-  - "Top Event Today"
-  - "Try One Space"
-  - "Chaos Pulse" (Hivelab activity teaser)
-  - "Underrated Gem: This event blew up unexpectedly"
-- Purpose:
-  - Establish campus rhythm
-  - Provide cultural context
-  - Tease feedback & experimentation (future UGC)
-
-#### 2. Ranked Event Cards
-- Events form the core stack of the feed, including:
-  - Native Events (created by Verified+ users)
-  - Boosted Events (manually elevated by Verified+)
-  - Honey Mode Events (1/month highlight slot per org)
-  - Reposted Events (re-shared with student commentary)
-- Support overlay enhancements:
-  - "Your friend RSVPed"
-  - "Popular with students in your major"
-  - "First-time event from this club"
-
-##### Event Card UX Variants
-
-| Card Type | Visual Treatment |
-|-----------|------------------|
-| **Standard Card** | Title, time, location, RSVP button, club tag |
-| **Boosted Card** | Highlight badge, momentum graph sparkline |
-| **Honey Mode Card** | Spotlight border, enhanced image focus, motion feedback |
-| **Reposted Card** | User handle/quote if available, soft social stamp |
-| **Low RSVP Card** | "Just getting started" hint to boost curiosity |
-| **Last-Minute Card** | Countdown visual + urgency CTA |
-
-#### 3. Discovery Prompts
-- Feed-integrated recommendations shown contextually:
-  - Space Suggestions: For students with no active Spaces
-  - Friend Suggestions: Based on shared RSVPs or Space affiliations
-  - "Try One" CTA: Nudge for lightweight joining behavior
-
-#### 4. Hivelab FAB
-- Persistent Floating Action Button (FAB) for anonymous feedback:
-  - Bug 🐞
-  - Feature 🛠
-  - Chaos 🗩️
-- Supports:
-  - Continuous listening and sentiment collection
-  - Cultural intelligence and vibe mapping
-  - Future UGC surfacing and experimentation
-
-### Scoring System Inputs
-
-- RSVP volume and velocity
-- Reposts and boosts
-- Verified+ endorsements
-- Engagement ratios (views-to-clicks)
-- Time until event begins (urgency score)
-- Personal proximity (past behavior, followed Spaces)
-- Role-weighted interactions (student leader vs. casual student)
-- Content freshness (newer content ranks higher)
-
-### Feed Logic
-
-- Feed is not chronological—it is weighted, adaptive, and responsive to student behavior
-- Some events may be hard-coded for high visibility (admin override, institutional highlight)
-- Cold-start content is rotated in for discovery
-- Events gain prominence 48 hours before start time
-- All Spaces guaranteed minimum visibility
-- New Spaces receive temporary visibility boost
-- Low-engagement content gradually deprioritized, not hidden
-
-### Feed Modes
-
-- Default (For You)
-- Trending / Near You
-- Smart Filters (recurring, sponsored, club-based)
-
-### Fairness Mechanisms
-
-- All Spaces guaranteed minimum visibility
-- New Spaces receive temporary visibility boost
-- Low-engagement content gradually deprioritized, not hidden
-- "Cold start" protections for new events/Spaces
-- Some events (campus-wide, sponsored, critical mass) are forcibly elevated
-
-### Integrity Controls
-
-- Repost caps: Only one reposted version of a given event is shown per user
-- Boost decay: Boosted visibility expires unless momentum is sustained
-- Feed rotation: New orgs and events get visibility slots regardless of volume
-- Honey Mode enforcement: One active Honey event per org per month
-
-### Temporal Logic
-
-#### Daily Rhythms
-- Feed changes subtly across time-of-day:
-  - Morning: Focus on RSVP conversions
-  - Afternoon: Trending and repost-heavy
-  - Evening: Reflection via signal cards + last-minute events
-
-#### Seasonal Modes (Future)
-- Quiet Weeks: Inject calm narratives ("Everyone's in finals mode")
-- Launch Weeks: Heavier promo of new clubs/events
-- Move-In/Club Rush: Event density + Space discoverability
-
-### Strategic Outcomes by User Type
-
-| User Type | Feed Outcome |
-|-----------|-------------|
-| **Passive Student** | Gains ambient awareness, low-pressure entry into engagement |
-| **Curious Lurker** | Sees cultural signals and potential Spaces to explore |
-| **Verified+ Leader** | Sees visibility impact, understands momentum, optimizes timing |
-| **Club Rookie** | Gets rotation-based visibility despite no legacy status |
-
-### Future Evolvability
-
-- Feed tabs (Personal / Trending / Hivelab) as usage grows
-- Experimental UGC surfacing within curated Signal Cards
-- Event threads or micro-reactions scoped by Space
-- Cross-campus signal blending for federated features
-- Reputation scoring for Verified+ content consistency
-
-## VI. Visibility Systems: Boosts, Honey Mode, and Prioritization
-
-### Boost System
-
-**Definition:** Manual visibility nudge that temporarily increases content prominence in feeds. Each Space has limited boosts available per week/month.
-
-**Rules:**
-- Limited to Verified+ accounts only
-- Weekly quota enforced
-- Cooldowns clearly indicated in UI
-- Boost effects are time-boxed
-- History of boosts is logged and auditable
-
-### Honey Mode
-
-**Definition:** Premium visibility state activated once per month per Space. Includes enhanced UI treatment (highlighted card, animation, pinning) and top-tier feed positioning.
-
-**Rules:**
-- Once-per-month per Space limitation
-- Requires event to meet minimum enrichment standards (media, call-to-action)
-- Honey Mode opt-in must include justification or content enrichment
-- Enhanced UI treatment clearly distinguishes these events
-- Effects last for limited duration based on event type
-
-### Priority Enforcement
-
-- All visibility tools are time-boxed and logged
-- Visibility enhancements are integrated into feed scoring
-- Tools do not override moderation or institutional veto logic
-- UI clearly indicates boosted/honey mode content to maintain transparency
-- System prevents abuse through rate limiting
-
-## VII. Interaction Memory & Personalization Engine
-
-All user actions create a persistent interaction memory that informs personalization.
-
-### Tracked Actions
-
-- RSVP decisions and patterns
-- Content reposts and sharing
-- Profile taps and views
-- Event card expansions (indicating interest)
-- "Remind Me" toggles
-- Space follow/unfollow
-- Check-ins and attendance
-
-### Application
-
-- These actions power both algorithmic personalization and reputation systems
-- Used to generate personalized feed scores
-- Feeds evolve over time based on this memory
-- Repeated behaviors build implicit preference clusters
-- Over time, user engagement history will inform:
-  - Suggested events in the feed
-  - Space recommendations
-  - Priority boosts for content
-  - Personalized notifications and reminders
-
-### Decay & Refresh
-
-- Interaction weight fades over time
-- Periodic resets or re-weighting ensure adaptability
-- Recent interactions have stronger weight than historical ones
-- System accommodates changing interests and affiliations
-
-## VIII. UI Principles: Role Parity Enforcement
-
-### Core Rule
-
-- All users, including Verified+ leaders, interact through the same interface
-- No separate admin dashboards or CMS-style portals
-- Management capabilities are contextually embedded in the standard interface
-
-### Rationale
-
-- Maintains cohesion across users
-- Prevents separation between leaders and members
-- Promotes humility and parity in leadership roles
-- Ensures leadership understands the standard user experience
-- Simplifies codebase and maintenance
-
-### Implementation
-
-- Role-specific controls are layered into the general UI
-- Additional controls (e.g., manage event, boost) appear only where relevant
-- UI elements dynamically adapt to user role
-- Complex administrative functions are progressive disclosures rather than separate interfaces
-
-## IX. Governance & Moderation Logic
-
-### Moderation Layers
-
-1. **Community Reporting**
-   - User-initiated flags and reports
-   - Space-level content moderation by owners
-
-2. **Automated Moderation**
-   - Auto-flagging via keyword and behavior triggers
-   - Pattern recognition for problematic content
-
-3. **Institution-level Moderation**
-   - Campus administrator review
-   - Policy enforcement mechanisms
-
-### Escalation Process
-
-1. **Step 1:** Community flags → soft-hide
-2. **Step 2:** Manual review by moderators
-3. **Step 3:** Space or platform-level consequences (content takedown, role revocation)
-
-### Moderation Capabilities
-
-- Space-level content policies
-- Report mechanism for policy violations
-- Multi-level review process
-- Graduated enforcement actions
-
-### Enforcement Actions
-
-- Content removal
-- Temporary restrictions
-- Role revocation
-- Space suspension
-
-### Verified+ Conduct Rules
-
-- Leaders must maintain a reputation score
-- Abuse of Boosts, spam, or misrepresentation leads to penalties
-- Verified+ status can be suspended or revoked
-
-## X. Firestore Rule Architecture
-
-### Enforcement Dimensions
-
-- Document-level role checks
-- Collection-level create/read/write/delete (CRUD) gates
-- Timestamp-based mutation prevention
-- Scoped reads (e.g. can only view data from Spaces you belong to)
-- Role validation on all write operations
-- Ownership verification for management actions
-- Rate limiting for abuse prevention
-- Collection-level creation rights
-- Temporal gating (e.g., cannot modify a Live event post-deadline)
-- Role-scoped queries (prevent unauthorized data visibility or writes)
-
-### Admin Logic
-
-- Centralized policy config file governs rule sets
-- Logs of all elevated actions (e.g. boosts, deletions)
-- Redundancy for auditability and emergency overrides
-
-### API Constraints
-
-- Consistent permission checking
-- Input validation and sanitization
-- Audit logging for sensitive operations
-- Request throttling
-
-### Data Integrity
-
-1. **Validation Requirements**
-   - Event times must be future dates
-   - Spaces must have valid categories
-   - RSVPs cannot exceed capacity limits
-   - Profile information must meet format requirements
-
-2. **Consistency Rules**
-   - Related data updated atomically
-   - Cache invalidation on data changes
-   - Event state transitions logged
-   - Conflict resolution strategy for offline changes
-
-## XI. Data-as-a-Service (DaaS) Architecture
-
-HIVE's long-term value includes offering structured, privacy-preserving data to universities and organizations.
-
-### Core Rule
-
-- All behavioral data must be structured, queryable, and privacy-preserving
-
-### Data Structure
-
-- Event metadata and performance
-- Engagement patterns
-- Space health metrics
-- Participation trends
-- Temporal clustering of student activity
-- User-level micro-behaviors (taps, views, dwell time)
-
-### Governance
-
-- Every data point tagged with source, timestamp, and role scope
-- Consent flows required for personal analytics
-- University-level dashboards scoped to respective tenants
-
-### Ethics & Privacy
-
-- Data must be anonymized before external use
-- No sale of personal user data
-- Institutional insights are value-aligned (retention, wellbeing, resource allocation)
-- Transparent collection with user consent
-- Aggregate over individual when possible
-- Purpose-limited usage
-- Retention policies by data type
-
-### Usage Scenarios
-
-- Institutional insights (admin dashboards - future B2B layer)
-- Behavioral modeling for feed optimization
-- Space health diagnostics
-- User engagement analysis
-
-## XII. Analytics & Insights
-
-### Tracked Metrics
-
-1. **Event Performance**
-   - RSVP-to-attendance conversion
-   - Growth rate compared to previous events
-   - Engagement levels (views, shares, comments)
-   - Demographic distribution
-
-2. **Space Health**
-   - Active member ratio
-   - Event frequency and consistency
-   - Growth trends
-   - Cross-Space participation
-
-3. **User Engagement**
-   - Participation breadth (across Spaces)
-   - Consistency of engagement
-   - Influence score (effect on others' participation)
-   - Content contribution
-
-### Insight Access
-
-- Space owners see Space-level insights
-- Users see personal engagement data
-- Institutional partners see approved aggregate metrics
-- System admins see health monitoring data
-
-### Reporting Capabilities
-
-- Automated weekly summaries
-- Trend analysis dashboards
-- Engagement anomaly detection
-- Comparative benchmarking
-
-## XIII. Integration & Ecosystem Rules
-
-### Calendar Integration
-
-1. **Export Rules**
-   - RSVP'd events automatically exportable
-   - Recurring events handled as series
-   - Updates propagate to external calendars
-   - Rich metadata included in exports
-
-2. **Import Rules**
-   - Space calendars can import external events
-   - Imported events clearly marked
-   - Auto-synchronization options
-
-### Notification System
-
-1. **Notification Types**
-   - Event reminders (24h, 1h before)
-   - Space activity updates
-   - Direct interactions (mentions, messages)
-   - Administrative alerts
-
-2. **Delivery Rules**
-   - User preference controls
-   - Quiet hours respect
-   - Batching for non-urgent notifications
-   - Priority override for critical information
-
-## XIV. Cross-University Federation (Future-Ready Logic)
-
-### Multi-Tenant Foundation
-
-- Each campus = data and access silo
-- Users scoped per campus, but can toggle when eligible
-
-### Logic Implications
-
-- Spaces, events, and feeds are bounded by institution unless explicitly federated
-- Role assignment is independent per institution
-- Federation tools (e.g. regional events, global Spaces) to be layered in modularly
-
-### Implementation Strategy
-
-- Shared authentication but segmented data stores
-- Campus-specific customizations and policies
-- Optional cross-campus discovery for approved content
-
-## XV. Monetization Logic (Planned)
-
-### Sponsored Events
-
-- Paid elevation in feed
-- Must meet enrichment standards
-- Clearly labeled and limited to institutional relevance
-
-### Premium Space Tools
-
-- Analytics upgrades
-- Content scheduling
-- Advanced moderation controls
-
-### Subscription Layer
-
-- Optional for club leaders or institutions
-- Unlocks extended DaaS insights and automation
-
-## XVI. Extensibility Framework
-
-### Plugin Model
-
-- Standard interfaces for extensions
-- Capability scopes and permissions
-- Versioning and compatibility rules
-- Review process for new integrations
-
-### API Gateway Rules
-
-- Authentication requirements
-- Rate limits and quotas
-- Data access constraints
-- Documentation standards
+### Pulse Object
+
+```json
+{
+  "pulseId": "pulse456",
+  "sourceCardId": "drop789",
+  "level": "hot",
+  "decayRate": 0.15,
+  "triggerCount": 12
+}
+```
 
 ## Final Notes
 
-HIVE is more than an events feed or social app—it is a structured campus infrastructure layer for organizing student life, recognizing leadership, and enabling dynamic, participatory networks.
+HIVE is more than an events feed or social app—it is a structured campus infrastructure layer that reflects the real energy of student life. It doesn't impose structure—it lets structure emerge. It doesn't push events—it surfaces energy. It doesn't design for compliance—it evolves through participation.
 
-This business logic framework governs every user interaction, system behavior, and long-term strategic capability. It ensures that HIVE scales with clarity, trust, adaptability, and depth—powering a smarter, more connected, and data-enriched student ecosystem. 
+This business logic framework governs every user interaction, system behavior, and relationship between components. It ensures that HIVE is built following the core principle: HIVE isn't just built for students. It's authored by them. 

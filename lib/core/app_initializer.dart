@@ -4,11 +4,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_ui/core/cache/cache_manager.dart';
 import 'package:hive_ui/core/cache/cache_providers.dart';
 import 'package:hive_ui/core/cache/cache_warmer.dart';
+import 'package:hive_ui/core/cache/hive_initialize.dart';
 import 'package:hive_ui/core/event_bus/app_event_bus.dart';
 import 'package:hive_ui/core/network/connectivity_service.dart';
 import 'package:hive_ui/core/network/offline_queue_manager.dart';
 import 'package:hive_ui/core/refresh/global_refresh_controller.dart';
 import 'package:hive_ui/core/security/sensitive_data_encryption.dart';
+import 'dart:async';
 
 /// Initializes core application components
 class AppInitializer {
@@ -25,6 +27,7 @@ class AppInitializer {
     _initializeCacheManager();
     _initializeConnectivityService();
     await _initializeEncryptionService();
+    await _initializeHive();
     
     _isInitialized = true;
     debugPrint('✅ AppInitializer: Initialization complete!');
@@ -52,10 +55,39 @@ class AppInitializer {
   
   /// Initialize the encryption service
   static Future<void> _initializeEncryptionService() async {
-    // Initialize encryption
-    final encryptionService = SensitiveDataEncryption();
-    await encryptionService.initialize();
-    debugPrint('🔒 AppInitializer: Encryption service initialized');
+    try {
+      // Add timeout for encryption service initialization
+      final timeout = const Duration(seconds: 3);
+      final encryptionService = SensitiveDataEncryption();
+      
+      await encryptionService.initialize().timeout(timeout, onTimeout: () {
+        debugPrint('⏱️ AppInitializer: Encryption service initialization timed out');
+        return;
+      });
+      
+      debugPrint('🔒 AppInitializer: Encryption service initialized');
+    } catch (e) {
+      debugPrint('❌ AppInitializer: Encryption initialization failed: $e');
+      // Continue without encryption in case of failure
+    }
+  }
+  
+  /// Initialize Hive database
+  static Future<void> _initializeHive() async {
+    try {
+      // Add timeout for Hive initialization
+      final timeout = const Duration(seconds: 3);
+      
+      await HiveInitialize.init().timeout(timeout, onTimeout: () {
+        debugPrint('⏱️ AppInitializer: Hive initialization timed out');
+        throw TimeoutException('Hive initialization timed out');
+      });
+      
+      debugPrint('🐝 AppInitializer: Hive database initialized');
+    } catch (e) {
+      debugPrint('❌ AppInitializer: Failed to initialize Hive: $e');
+      // Continue without Hive in case of failure
+    }
   }
   
   /// Initialize Riverpod providers that need to be accessed at startup

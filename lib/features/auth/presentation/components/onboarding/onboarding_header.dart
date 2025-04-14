@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:hive_ui/theme/app_colors.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 /// A header component for onboarding screens
 class OnboardingHeader extends StatelessWidget {
@@ -39,21 +39,21 @@ class OnboardingHeader extends StatelessWidget {
             children: [
               Text(
                 'Step $currentStep of $totalSteps',
-                style: const TextStyle(
-                  color: AppColors.gold,
-                  fontSize: 14,
-                  fontWeight: FontWeight.bold,
+                style: GoogleFonts.inter(
+                  color: Colors.white,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
                 ),
               ),
               const SizedBox(width: 12),
               Expanded(
                 child: ClipRRect(
-                  borderRadius: BorderRadius.circular(2),
+                  borderRadius: BorderRadius.circular(1.5),
                   child: LinearProgressIndicator(
                     value: currentStep / totalSteps,
                     backgroundColor: Colors.white.withOpacity(0.1),
-                    valueColor: const AlwaysStoppedAnimation<Color>(AppColors.gold),
-                    minHeight: 4,
+                    valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
+                    minHeight: 3,
                   ),
                 ),
               ),
@@ -61,30 +61,30 @@ class OnboardingHeader extends StatelessWidget {
           ),
           const SizedBox(height: 24),
         ],
-
+        
         // Title
         Text(
           title,
-          style: const TextStyle(
+          style: GoogleFonts.outfit(
             color: Colors.white,
-            fontSize: 28,
+            fontSize: 24,
             fontWeight: FontWeight.bold,
+            height: 1.2,
           ),
         ),
-
-        // Subtitle
+        
+        // Subtitle if provided
         if (subtitle != null) ...[
           const SizedBox(height: 8),
           Text(
             subtitle!,
-            style: const TextStyle(
-              color: Colors.white70,
+            style: GoogleFonts.inter(
+              color: Colors.white.withOpacity(0.7),
               fontSize: 16,
+              height: 1.4,
             ),
           ),
         ],
-
-        const SizedBox(height: 24),
       ],
     );
   }

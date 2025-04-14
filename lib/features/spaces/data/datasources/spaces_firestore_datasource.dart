@@ -7,7 +7,7 @@ import 'package:hive_ui/features/spaces/data/models/space_metrics_model.dart';
 import 'package:hive_ui/features/spaces/domain/entities/space_entity.dart';
 import 'package:hive_ui/features/spaces/domain/entities/space_member_entity.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:hive_ui/models/event.dart';
+import 'package:hive_ui/models/event.dart' as event_model;
 import 'dart:convert';
 import 'dart:async';
 import 'dart:math';
@@ -821,11 +821,13 @@ class SpacesFirestoreDataSource implements SpacesDataSource {
 
   /// Get events associated with a space
   @override
-  Future<List<Event>> getSpaceEvents(String spaceId) async {
+  Future<List<event_model.Event>> getSpaceEvents(String spaceId, {int limit = 10}) async {
+    debugPrint('Fetching events for space: $spaceId, limit: $limit');
     try {
-      debugPrint('🔍 Fetching events for space: $spaceId');
+      // List to store events
+      final List<event_model.Event> events = [];
       
-      // First, find which collection the space is in
+      // Check all space collections for the specified spaceId
       final spaceTypes = [
         'student_organizations',
         'university',
@@ -834,95 +836,96 @@ class SpacesFirestoreDataSource implements SpacesDataSource {
         'hive_exclusive',
         'other'
       ];
-
-      List<Event> events = [];
       
-      // Try to find and fetch events from each possible space type collection
       for (final spaceType in spaceTypes) {
-        try {
-          debugPrint('👉 Checking $spaceType collection for space $spaceId');
-          
-          final spacePath = FirebaseFirestore.instance
-              .collection('spaces')
-              .doc(spaceType)
-              .collection('spaces')
-              .doc(spaceId);
-              
-          // First verify if the space exists in this collection
-          final spaceDoc = await spacePath.get();
-          if (!spaceDoc.exists) {
-            debugPrint('Space not found in $spaceType collection');
-            continue;
-          }
-          
-          debugPrint('✅ Found space in $spaceType collection, fetching events...');
-          
-          final eventsSnapshot = await spacePath
-              .collection('events')
-              .orderBy('startDate', descending: false)
-              .get();
-
-          debugPrint('📊 Found ${eventsSnapshot.docs.length} events in $spaceType collection');
-
-          // Process each event document
-          for (final eventDoc in eventsSnapshot.docs) {
-            try {
-              final data = eventDoc.data();
-              final event = Event(
-                id: eventDoc.id,
-                title: data['title'] ?? '',
-                description: data['description'] ?? '',
-                startDate: _safeTimestampToDateTime(data['startDate']) ?? DateTime.now(),
-                endDate: _safeTimestampToDateTime(data['endDate']) ?? DateTime.now(),
-                location: data['location'] ?? '',
-                organizerEmail: data['organizerEmail'] ?? '',
-                organizerName: data['organizerName'] ?? '',
-                category: data['category'] ?? '',
-                status: data['status'] ?? '',
-                link: data['link'] ?? '',
-                imageUrl: data['imageUrl'] ?? '',
-                source: _parseEventSource(data['source']),
-                createdBy: data['createdBy'] ?? '',
-                lastModified: _safeTimestampToDateTime(data['lastModified']) ?? DateTime.now(),
-                visibility: data['visibility'] ?? 'public',
-                attendees: List<String>.from(data['attendees'] ?? []),
-                spaceId: spaceId,
-              );
-              events.add(event);
-            } catch (e) {
-              debugPrint('Error processing event document: $e');
-              continue;
-            }
-          }
-
-          // If we found events in this collection, no need to check others
-          if (events.isNotEmpty) {
-            debugPrint('✅ Successfully found and processed ${events.length} events');
-            break;
-          }
-        } catch (e) {
-          debugPrint('Error checking $spaceType collection: $e');
+        debugPrint('Checking $spaceType collection for space: $spaceId');
+        
+        // Get events from the specific space type collection
+        final spaceDoc = await FirebaseFirestore.instance
+            .collection('spaces')
+            .doc(spaceType)
+            .collection('spaces')
+            .doc(spaceId)
+            .get();
+        
+        if (!spaceDoc.exists) {
+          debugPrint('Space not found in $spaceType collection');
           continue;
         }
+        
+        debugPrint('Space found in $spaceType collection, fetching events');
+        
+        // Get events from the events subcollection
+        final now = DateTime.now();
+        final eventsQuery = await FirebaseFirestore.instance
+            .collection('spaces')
+            .doc(spaceType)
+            .collection('spaces')
+            .doc(spaceId)
+            .collection('events')
+            .where('startDate', isGreaterThanOrEqualTo: now)
+            .orderBy('startDate')
+            .limit(limit)
+            .get();
+        
+        debugPrint('Found ${eventsQuery.docs.length} events');
+        
+        // Process each event doc
+        for (final eventDoc in eventsQuery.docs) {
+          try {
+            final eventData = eventDoc.data();
+            eventData['id'] = eventDoc.id;
+            
+            // Convert timestamps to DateTime
+            if (eventData['startDate'] is Timestamp) {
+              eventData['startDate'] = (eventData['startDate'] as Timestamp).toDate();
+            }
+            if (eventData['endDate'] is Timestamp) {
+              eventData['endDate'] = (eventData['endDate'] as Timestamp).toDate();
+            }
+            
+            // Set source type based on collection
+            eventData['source'] = _parseEventSource(spaceType).index;
+            
+            // Create Event object
+            final event = event_model.Event.fromJson(eventData);
+            events.add(event);
+          } catch (e) {
+            debugPrint('Error processing event: $e');
+          }
+        }
+        
+        // If we found events, no need to check other collections
+        if (events.isNotEmpty) {
+          debugPrint('Events found, stopping search');
+          break;
+        }
       }
-
+      
       // Sort events by start date
-      events.sort((a, b) => a.startDate.compareTo(b.startDate));
+      events.sort((a, b) => a.startDate!.compareTo(b.startDate!));
+      
       return events;
-
     } catch (e) {
-      debugPrint('Error fetching space events: $e');
+      debugPrint('Error fetching events: $e');
       return [];
     }
   }
-
-  /// Helper method to parse event source
-  EventSource _parseEventSource(dynamic source) {
-    if (source == null) return EventSource.external;
-    final sourceStr = source.toString().toLowerCase();
-    if (sourceStr == 'user') return EventSource.user;
-    if (sourceStr == 'club') return EventSource.club;
-    return EventSource.external;
+  
+  // Helper to parse event source from space type
+  event_model.EventSource _parseEventSource(String spaceType) {
+    switch (spaceType) {
+      case 'student_organizations':
+        return event_model.EventSource.club;
+      case 'university':
+        return event_model.EventSource.external;
+      case 'greek_life':
+        return event_model.EventSource.club;
+      case 'hive_exclusive':
+        return event_model.EventSource.club;
+      default:
+        return event_model.EventSource.external;
+    }
   }
 
   /// Get the chat ID associated with a space

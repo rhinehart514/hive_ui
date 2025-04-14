@@ -1,6 +1,6 @@
 import 'dart:io';
 import 'package:hive_ui/features/spaces/domain/entities/space_entity.dart';
-import 'package:hive_ui/models/event.dart';
+import 'package:hive_ui/features/events/domain/entities/event.dart' as event_entity;
 import 'package:hive_ui/features/spaces/domain/entities/space_member_entity.dart';
 
 /// Exception thrown when a user has reached their limit of joined spaces
@@ -142,9 +142,10 @@ abstract class SpacesRepository {
   /// Get events for a space
   /// 
   /// [spaceId] The ID of the space
+  /// [limit] Maximum number of events to return
   /// 
   /// Returns a list of events for the space
-  Future<List<Event>> getSpaceEvents(String spaceId);
+  Future<List<event_entity.Event>> getSpaceEvents(String spaceId, {int limit = 10});
 
   /// Check if a space name is already taken
   /// 

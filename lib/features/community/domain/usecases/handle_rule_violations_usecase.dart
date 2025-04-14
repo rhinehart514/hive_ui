@@ -1,3 +1,6 @@
+import 'package:dartz/dartz.dart';
+import 'package:hive_ui/core/error/failures.dart';
+import 'package:hive_ui/features/community/domain/entities/community_policy.dart';
 import 'package:hive_ui/features/community/domain/repositories/community_policy_repository.dart';
 
 /// Use case for handling community rule violations
@@ -8,67 +11,71 @@ class HandleRuleViolationsUseCase {
   /// Constructor
   HandleRuleViolationsUseCase(this._repository);
   
-  /// Get all rule violations for a user in a community
-  Future<List<RuleViolationRecord>> getUserViolations({
-    required String userId,
-    required String communityId,
+  /// Report a violation of community policy
+  Future<Either<Failure, void>> reportViolation({
+    required String contentId,
+    required String contentType,
+    required String reporterId,
+    required String violationType,
+    String? description,
   }) async {
-    return _repository.getUserViolations(
-      userId: userId,
-      communityId: communityId,
-    );
+    try {
+      // Report the violation
+      final result = await _repository.reportViolation(
+        contentId: contentId,
+        contentType: contentType,
+        reporterId: reporterId,
+        violationType: violationType,
+        description: description,
+      );
+
+      return result;
+    } catch (e) {
+      return Left(CommunityPolicyFailure(
+        message: 'Failed to report violation',
+        code: 'REPORT_VIOLATION_ERROR',
+        details: e.toString(),
+      ));
+    }
   }
   
-  /// Record a new rule violation for a user
-  Future<String> recordViolation({
-    required String userId,
-    required String communityId,
-    required String ruleId,
-    required String moderatorId,
-    String? notes,
+  /// Check if content complies with community policy
+  Future<Either<Failure, bool>> checkContentCompliance({
+    required String contentId,
+    required String contentType,
+    String? spaceId,
   }) async {
-    // Record the violation
-    final violationId = await _repository.recordRuleViolation(
-      userId: userId,
-      communityId: communityId,
-      ruleId: ruleId,
-      moderatorId: moderatorId,
-      notes: notes,
-    );
-    
-    // Get the active policy to check if automatic consequences should be applied
-    final policy = await _repository.getActivePolicyForCommunity(communityId);
-    if (policy != null) {
-      // Count existing violations for this user and rule
-      final violations = await _repository.getUserViolations(
-        userId: userId,
-        communityId: communityId,
+    try {
+      // Check content compliance
+      final result = await _repository.checkContentCompliance(
+        contentId: contentId,
+        contentType: contentType,
+        spaceId: spaceId,
       );
-      
-      final violationsForThisRule = violations.where((v) => v.ruleId == ruleId).length;
-      
-      // Find the rule to get its severity
-      final rule = policy.rules.firstWhere(
-        (r) => r.id == ruleId,
-        orElse: () => throw Exception('Rule not found in policy'),
-      );
-      
-      // Check if any automatic consequences should be applied
-      final applicableConsequences = policy.consequences.where((c) => 
-        c.isAutomatic && 
-        c.severity == rule.severity &&
-        c.violationThreshold <= violationsForThisRule
-      ).toList();
-      
-      if (applicableConsequences.isNotEmpty) {
-        // In a real implementation, this would apply the consequences
-        // This could involve calling other repositories or services
-        
-        // Just logging for now
-        print('Automatic consequences would be applied: ${applicableConsequences.map((c) => c.title).join(', ')}');
-      }
+
+      return result;
+    } catch (e) {
+      return Left(CommunityPolicyFailure(
+        message: 'Failed to check content compliance',
+        code: 'CHECK_COMPLIANCE_ERROR',
+        details: e.toString(),
+      ));
     }
-    
-    return violationId;
+  }
+  
+  /// Get active policy rules for a space
+  Future<Either<Failure, List<PolicyRule>>> getSpaceRules(String spaceId) async {
+    try {
+      // Get space-specific rules
+      final result = await _repository.getSpacePolicyRules(spaceId);
+
+      return result;
+    } catch (e) {
+      return Left(CommunityPolicyFailure(
+        message: 'Failed to get space rules',
+        code: 'GET_SPACE_RULES_ERROR',
+        details: e.toString(),
+      ));
+    }
   }
 } 

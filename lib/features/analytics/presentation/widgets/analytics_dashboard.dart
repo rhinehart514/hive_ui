@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:hive_ui/features/analytics/domain/usecases/get_user_insights_usecase.dart';
+import 'package:hive_ui/features/analytics/domain/usecases/get_user_insights_usecase.dart' as usecase;
 import 'package:hive_ui/features/analytics/presentation/controllers/user_insights_controller.dart';
 
 /// A dashboard widget to display user analytics
@@ -8,9 +8,9 @@ class AnalyticsDashboard extends ConsumerStatefulWidget {
   final String userId;
   
   const AnalyticsDashboard({
-    Key? key,
+    super.key,
     required this.userId,
-  }) : super(key: key);
+  });
 
   @override
   ConsumerState<AnalyticsDashboard> createState() => _AnalyticsDashboardState();
@@ -22,26 +22,27 @@ class _AnalyticsDashboardState extends ConsumerState<AnalyticsDashboard> {
     super.initState();
     // Track analytics view
     Future.microtask(() {
-      ref.read(userInsightsControllerProvider).trackAnalyticsView(widget.userId);
+      ref.read(userInsightsControllerProvider(widget.userId).notifier).trackAnalyticsView();
     });
   }
   
   @override
   Widget build(BuildContext context) {
-    final controller = ref.watch(userInsightsControllerProvider);
-    final insightsAsync = controller.getUserInsights(widget.userId);
+    final state = ref.watch(userInsightsControllerProvider(widget.userId));
     
     return RefreshIndicator(
-      onRefresh: () => controller.refreshInsights(widget.userId),
+      onRefresh: () async {
+        await ref.read(userInsightsControllerProvider(widget.userId).notifier).refresh();
+      },
       child: SingleChildScrollView(
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.all(16),
-        child: insightsAsync.when(
+        child: state.insights.when(
           data: (insights) => _buildInsightsDashboard(context, insights),
           loading: () => const Center(child: CircularProgressIndicator()),
           error: (error, stackTrace) => Center(
             child: Text(
-              'Error loading analytics: $error',
+              state.error ?? 'An error occurred',
               style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                 color: Colors.red,
               ),
@@ -52,7 +53,7 @@ class _AnalyticsDashboardState extends ConsumerState<AnalyticsDashboard> {
     );
   }
   
-  Widget _buildInsightsDashboard(BuildContext context, UserInsights insights) {
+  Widget _buildInsightsDashboard(BuildContext context, usecase.UserInsights insights) {
     final textTheme = Theme.of(context).textTheme;
     
     return Column(
@@ -303,24 +304,21 @@ class _AnalyticsDashboardState extends ConsumerState<AnalyticsDashboard> {
   }
   
   Future<void> _exportAnalytics(BuildContext context) async {
-    final controller = ref.read(userInsightsControllerProvider);
+    final controller = ref.read(userInsightsControllerProvider(widget.userId).notifier);
     final scaffoldMessenger = ScaffoldMessenger.of(context);
     
     try {
-      await controller.exportAnalytics(widget.userId);
-      
+      final data = await controller.exportAnalytics();
+      // Handle successful export
       scaffoldMessenger.showSnackBar(
-        const SnackBar(
-          content: Text('Analytics data exported successfully!'),
-          behavior: SnackBarBehavior.floating,
-        ),
+        const SnackBar(content: Text('Analytics data exported successfully')),
       );
     } catch (e) {
+      // Handle export error
       scaffoldMessenger.showSnackBar(
         SnackBar(
           content: Text('Failed to export analytics: $e'),
           backgroundColor: Colors.red,
-          behavior: SnackBarBehavior.floating,
         ),
       );
     }

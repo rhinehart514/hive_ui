@@ -1,0 +1,1985 @@
+**HIVE Phase 1 — Foundational Architecture**
+
+---
+
+## 🔬 Product Thesis (v1)
+
+**HIVE is a student-powered campus layer that reflects the real energy of student life.**
+
+It gives students psychological control over their experience—what they see, where they go, who they align with—not through rigid tools or admin systems, but through dynamic signals, self-organizing communities, and emergent cultural rhythm.
+
+Built on lightweight actions (RSVPs, reposts, reactions), micro-affiliations (Spaces), and real-time resonance, HIVE replaces dead systems of record with a living map of what’s alive right now.
+
+It doesn’t impose structure—it lets structure emerge.
+It doesn’t push events—it surfaces energy.
+It doesn’t design for compliance—it evolves through participation.
+
+HIVE starts with students and student leaders. They are the primary value creators, the cultural architects, and the ones who shape what the system becomes.
+
+And as HIVE evolves, it does so transparently:
+
+> Students will have real say in how the system grows.
+Platform changes, feature logic, and behavioral incentives will be surfaced, tested, and shaped through student input—because the system must stay responsive to those who live inside it.
+> 
+
+**HIVE isn’t just built for students. It’s authored by them.**
+
+---
+
+## 🤹 Platform Grammar (v1)
+
+| Construct | Function | Description | Student Relationship |
+| --- | --- | --- | --- |
+| **Space** | Identity Field | A node of affiliation, community, or orbit | “This is where I belong or observe” |
+| **Signal** | Microexpression | A small action with high interpretive value (RSVP, repost, react) | “This matters to me—even if I don’t say why” |
+| **Cluster** | Emergent Grouping | A dynamic network formed by behavior overlap (shared follows, same Spaces) | “These are people like me” |
+| **Pulse** | Energy Snapshot | A moment or topic that is vibrating through campus | “This is what’s hot right now” |
+| **Trail** | Memory Thread | A user’s evolving footprint through participation and creation | “This is how I got here” |
+| **Gathering** | Coordinated Energy | A time-bound event, meetup, or moment | “We’re converging around this” |
+| **Gravity** | Network Pull | The invisible force that draws users toward certain Spaces or content | “I keep seeing this—it’s pulling me in” |
+| **Boost** | Signal Amplification | A way to increase visibility or momentum within the network | “This deserves more attention” |
+| **Role** | Structural Function | A user’s defined position within a Space or cluster (creator, member, observer) | “This is how I show up here” |
+| **Vibe** | Social Feel | The soft signal or tone of a Space, post, or event | “This feels like my energy” |
+
+---
+
+## 🧠 Student Archetypes (v1)
+
+### 1. The Seeker
+
+- **Behavior**: Browses, taps, follows—searching for resonance
+- **System Impact**: Creates gravity, drives demand quietly
+- **Constructs Touched**: Feed, Signal, Gravity, Vibe
+- **Risk**: Leaves if nothing resonates quickly
+
+### 2. The Reactor
+
+- **Behavior**: Reposts, reacts, responds but rarely creates
+- **System Impact**: Amplifies Pulse, contributes to momentum
+- **Constructs Touched**: Signal, Boost, Vibe
+- **Risk**: Feels invisible if there's no feedback loop
+
+### 3. The Joiner
+
+- **Behavior**: Joins Spaces, lightly engages, follows cultural flows
+- **System Impact**: Builds participation maps, creates density
+- **Constructs Touched**: Space, Trail, Cluster
+- **Risk**: Fades into background if not surfaced or acknowledged
+
+### 4. The Builder
+
+- **Behavior**: Creates Spaces, runs gatherings, generates cultural architecture
+- **System Impact**: Shapes structure, powers growth
+- **Constructs Touched**: Space, Boost, Role, Trail, Gathering
+- **Risk**: Burns out or bounces to other platforms if under-supported
+
+### 5. The Lurker-Turned-Leader
+
+- **Behavior**: Starts as a passive Seeker, eventually builds
+- **System Impact**: Critical for conversion and resilience
+- **Constructs Touched**: All, sequentially
+- **Risk**: Lost if system doesn’t offer progressive empowerment
+
+### 6. The Skeptic
+
+- **Behavior**: Observes, critiques, distrusts systems
+- **System Impact**: Offers valuable tension, tests legitimacy
+- **Constructs Touched**: Feed, Trail, Signal (when engaged)
+- **Risk**: Opts out fully if HIVE feels top-down, extractive, or performative
+
+---
+
+## 🌍 System Properties (World Model)
+
+- **Dynamic**: HIVE constantly adapts to real-time micro-behaviors
+- **Behavioral-First**: Interaction > intention. HIVE reads what students do *and don't do*
+- **Bottom-Up**: Students shape the platform. Admin and others adapt to it, not vice versa
+- **Structurally Aware**: HIVE operates on defined constructs like Spaces, Signals, Trails
+- **Friction-Responsive**: Every action must lead to feedback. The system acknowledges presence
+
+---
+
+## 🔄 Energy Flow (Student System Loop)
+
+1. **Entry** – Student opens HIVE, intrigued by a post or a friend. Begins exploring.
+2. **Micro-Alignment** – Reacts, reposts, browses Spaces. The system starts learning.
+3. **Affiliation** – Joins a Space, follows an orbit. Alignment builds.
+4. **Participation** – Engages more regularly. Starts shaping content or initiating.
+5. **Leadership** – Becomes a Builder. Creates, curates, leads.
+6. **Stagnation / Burnout** – Drops activity. System must detect and either reignite or archive.
+7. **Legacy / Return** – Trail remains. May resurface as alumni, mentor, or trend anchor.
+
+---
+
+## 🤔 Behavioral Drivers (What HIVE Must Respond To)
+
+| Driver | Description | System Response |
+| --- | --- | --- |
+| **FOMO** | Fear of missing meaningful micro-moments | Feed must reflect real-time social activity |
+| **Belonging** | Desire to align with culture, not just content | Spaces must show signs of life and connection |
+| **Curiosity** | Exploration as a default state | No penalty for lurking, discovery is rewarded |
+| **Resistance** | Mistrust of institutional tone | HIVE must sound, look, and *feel* student-first |
+| **Cynicism** | Distrust in systems promising change | Transparency in system logic and iteration roadmap |
+| **Expression** | Want to feel seen even without creating | Lightweight feedback (reactions, reposts) must register impact |
+| **Momentum** | Students move where energy already is | System surfaces early traction to create network pull |
+
+---
+
+**🌟 PHASE 1 COMPLETE**
+
+# Primitives
+
+**HIVE – Phase 2: Behavioral System Modeling**
+
+---
+
+### Behavior Logic Table: `Join Space`
+
+| Field | Description |
+| --- | --- |
+| **Name** | `Join Space` |
+| **Trigger** | User taps “Join” on a Space or accepts an invite |
+| **Immediate Effect** | User added to member list, system logs source and time |
+| **System Logic** | Increases Space gravity; adjusts feed weight; logs join trail; triggers visibility if thresholds are met |
+| **Signal Type** | Affiliation Signal |
+| **State Transitions** | User becomes Member; Space may become Live if dormant |
+| **Visibility** | Visible to Space leaders; may show in Trail or Feed depending on privacy |
+| **Risks / Anti-patterns** | Silent joins; signal distortion through over-joining; spammy Spaces |
+
+---
+
+### Behavior Logic Table: `React`
+
+| Field | Description |
+| --- | --- |
+| **Name** | `React` |
+| **Trigger** | User taps a quick emoji or lightweight reaction on a post or Pulse |
+| **Immediate Effect** | Registers micro-signal; contributes to Pulse heat and post visibility |
+| **System Logic** | Adds behavioral weight to the content; increases feed visibility based on cumulative reactions |
+| **Signal Type** | Expression Signal |
+| **State Transitions** | Content may move from cold → warm → hot states |
+| **Visibility** | Anonymous or semi-anonymous (aggregate only); creator sees reactions; system logs patterns |
+| **Risks / Anti-patterns** | Spam-reacting; misinterpretation of low reaction as low quality; emotional mismatch between content and emoji |
+
+---
+
+### Behavior Logic Table: `Repost`
+
+| Field | Description |
+| --- | --- |
+| **Name** | `Repost` (Boost at individual level) |
+| **Trigger** | User shares content to their own network or profile feed |
+| **Immediate Effect** | Content appears in follower/peer feed with original attribution |
+| **System Logic** | Increases content’s reach and social validation weight; links repost to reputation graph of user |
+| **Signal Type** | Alignment Signal |
+| **State Transitions** | Post may enter trending Pulse or receive momentum flag |
+| **Visibility** | Public; included in Trail; visible in shared feed and post analytics |
+| **Risks / Anti-patterns** | Clout farming; repost without real alignment; false amplification of low-signal content |
+
+---
+
+### Behavior Logic Table: `Create Space`
+
+| Field | Description |
+| --- | --- |
+| **Name** | `Create Space` |
+| **Trigger** | User initiates a new Space with title, tags, and optional structure |
+| **Immediate Effect** | Space is added to system index; creator becomes default admin |
+| **System Logic** | Requires threshold (e.g., 3 joins) before appearing publicly; system checks tag uniqueness and quality risk |
+| **Signal Type** | Ownership / Identity Formation Signal |
+| **State Transitions** | Space goes from Hidden → Seeded → Live based on join activity and post frequency |
+| **Visibility** | Private at first; becomes public upon reaching thresholds |
+| **Risks / Anti-patterns** | Spammy Spaces; duplication of themes; abandoned creator-led shells |
+
+---
+
+### Behavior Logic Table: `Pulse`
+
+| Field | Description |
+| --- | --- |
+| **Name** | `Pulse` (emergent content energy) |
+| **Trigger** | Multiple reactions/reposts in short time frame around the same content or idea |
+| **Immediate Effect** | Creates a visual feedback loop for trending content; flags the post or Space for broader surfacing |
+| **System Logic** | Heat thresholds determine Pulse classification (micro, local, global); Pulse decay over time unless sustained |
+| **Signal Type** | Energy Signal |
+| **State Transitions** | Cold → Warm → Pulse (Trending) → Faded |
+| **Visibility** | Visible in Feed; may generate push notifications depending on settings |
+| **Risks / Anti-patterns** | Manufactured hype; noise-driven surges without substance; fatigue from overexposure |
+
+---
+
+### Behavior Logic Table: `Boost`
+
+| Field | Description |
+| --- | --- |
+| **Name** | `Boost` (org-level signal amplification) |
+| **Trigger** | Admin/leader chooses to highlight post or event |
+| **Immediate Effect** | Boosted content surfaces at top of Feed and is visually distinguished |
+| **System Logic** | Limited uses per time period (scarcity model); requires minimum engagement before eligibility |
+| **Signal Type** | Priority / Leadership Signal |
+| **State Transitions** | None, but affects Pulse speed and Feed position |
+| **Visibility** | Public; visibly labeled as Boosted |
+| **Risks / Anti-patterns** | Boost fatigue; boosting low-quality content; student skepticism if overused |
+
+---
+
+### Behavior Logic Table: `Trail`
+
+| Field | Description |
+| --- | --- |
+| **Name** | `Trail` (student experience footprint) |
+| **Trigger** | System logs key user actions over time (joins, reacts, reposts, events attended) |
+| **Immediate Effect** | Adds to private student profile; surfaces personalized memories or highlights over time |
+| **System Logic** | Compiles structured record of participation; opt-in export or verification for orgs/employers |
+| **Signal Type** | Identity & Continuity Signal |
+| **State Transitions** | Builds slowly over time; becomes more visible after certain thresholds reached |
+| **Visibility** | Private by default; sharable optionally |
+| **Risks / Anti-patterns** | Overtracking; misinterpretation of inactivity; privacy concern if transparency not clear |
+
+---
+
+### Behavior Logic Table: `Follow`
+
+| Field | Description |
+| --- | --- |
+| **Name** | `Follow` (person or Space) |
+| **Trigger** | User chooses to receive updates or stay connected to another user or Space |
+| **Immediate Effect** | Increases feed weight of followed entity; adds to interest map |
+| **System Logic** | Mutual follows trigger Clustering logic; shapes Gravity and Signal personalization |
+| **Signal Type** | Intent / Alignment Signal |
+| **State Transitions** | None directly, but affects dynamic network mapping |
+| **Visibility** | Public or semi-public depending on profile settings |
+| **Risks / Anti-patterns** | Follow-for-status culture; over-personalization filter bubbles |
+
+---
+
+### Behavior Logic Table: `Contribute`
+
+| Field | Description |
+| --- | --- |
+| **Name** | `Contribute` (post/comment/thread inside Space) |
+| **Trigger** | User adds content or discussion into an existing Space |
+| **Immediate Effect** | Content appears in-thread; flags Space as active; notifies participants optionally |
+| **System Logic** | Increases Space activity score; may extend Pulse if engagement follows |
+| **Signal Type** | Participation Signal |
+| **State Transitions** | May move Space from Dormant → Active |
+| **Visibility** | Public within Space; visible in Trail |
+| **Risks / Anti-patterns** | Low effort or off-topic spam; content decay without feedback |
+
+---
+
+### Behavior Logic Table: `Gather`
+
+| Field | Description |
+| --- | --- |
+| **Name** | `Gather` (create time-bound experience) |
+| **Trigger** | User initiates an event or gathering (formal or ambient) |
+| **Immediate Effect** | Event published to Feed or Space; RSVP available; system tracks engagement |
+| **System Logic** | Supports RSVP tracking, activity prediction, Trail entry; requires contextual info (time/place/host) |
+| **Signal Type** | Mobilization Signal |
+| **State Transitions** | Draft → Announced → Live → Archived |
+| **Visibility** | Public in Feed; private in invite-only mode |
+| **Risks / Anti-patterns** | Empty gatherings; repeated no-shows; overused without purpose |
+
+## 🔄 Logic Interaction Map (v1)
+
+This section defines how behaviors influence each other, creating compounding effects across the ecosystem.
+
+| Source Behavior | Influences | Effect Description |
+| --- | --- | --- |
+| `React` | `Pulse` | Reactions accelerate Pulse visibility and lifecycle transitions (cold → warm → hot) |
+| `Repost` | `Pulse`, `Gravity`, `Trail` | Repost propagates visibility, contributes to Pulse surge, adds to reposting user’s Trail |
+| `Join Space` | `Feed`, `Gravity`, `Trail` | Adjusts personalized Feed, strengthens Gravity of Space, logs to Trail |
+| `Create Space` | `Join`, `Contribute`, `Boost` | Triggers invitations and visibility; enables other users to Join and contribute content |
+| `Boost` | `Pulse`, `Feed`, `Gather` | Artificially elevates visibility; can catalyze Pulse or increase RSVP conversion for `Gather` |
+| `Contribute` | `Pulse`, `Trail`, `Space` State | Content activity keeps Spaces warm; influences Pulse; boosts member engagement |
+| `Follow` | `Gravity`, `Cluster` | Enhances feed affinity; contributes to Cluster mapping for social graph recommendation |
+| `Gather` | `Trail`, `Pulse` | Creates moment-based Trail entries and can generate a localized Pulse if RSVPs or reactions spike |
+| `Trail` | `Follow`, `Join`, `Resume` | Longitudinal record of behavior feeds into suggestion logic and public profile signals |
+|  |  |  |
+
+## 📡 Propagation Pathways (v1)
+
+This section maps how content and signals flow across the system—defining how behaviors compound through users, constructs, and time.
+
+### Pathway 1: Post Propagation in Home Feed
+
+| Step | Action | Effect | System Elements Touched |
+| --- | --- | --- | --- |
+| 1 | Builder posts content visible to followers via Home Feed | Content enters Home Feed for followers and nearby clusters; updates content activity state | `Contribute`, `Feed`, `Space` |
+| 2 | Reactors engage | Pulse begins forming; content gains weight in Feed | `React`, `Pulse` |
+| 3 | Reposts by peers | Content moves through network via reposts, triggering secondary feed exposure | `Repost`, `Feed`, `Gravity` |
+| 4 | Seeker follows reposting user | Gravity increases between Seeker and reposting user’s Cluster | `Follow`, `Cluster` |
+| 5 | Joins Space or follows creator from repost context | Join increases Gravity and Trail depth; Space warms | `Join Space`, `Trail` |
+| 6 | New contributor posts again | Propagation loop restarts; may result in Pulse trending |  |
+
+### Pathway 2: Event-Based Gathering Propagation
+
+| Step | Action | Effect | System Elements Touched |
+| --- | --- | --- | --- |
+| 1 | Builder creates a `Gather` event in a Space | Space activity increases, Feed entry created | `Gather`, `Feed`, `Space` |
+| 2 | Event is Boosted by leader | Surfaces in home feed and upcoming timeline | `Boost`, `Feed` |
+| 3 | RSVPs begin, reposts increase | Triggers localized Pulse around event | `React`, `Repost`, `Pulse` |
+| 4 | Attendees follow each other, join Space | Forges Clusters; Trails updated | `Follow`, `Join`, `Trail`, `Cluster` |
+| 5 | Post-event engagement | Highlights created; continued contributions; Trail reflections | `Contribute`, `Trail`, `Pulse` |
+
+### Pathway 3: Passive User-to-Builder Conversion
+
+| Step | Action | Effect | System Elements Touched |
+| --- | --- | --- | --- |
+| 1 | Lurker sees trending content | Signal begins personal Gravity weighting | `Feed`, `Pulse` |
+| 2 | Browses Space without joining | Soft impression logged; Feed adapts |  |
+| 3 | Reacts or reposts for the first time | Trail begins; Pulse impact registered | `React`, `Repost`, `Trail` |
+| 4 | Joins Space, contributes | Role shifts to Joiner; Space activity grows | `Join`, `Contribute` |
+| 5 | Creates a new Space | Role shifts to Builder; system loop restarts | `Create Space`, `Role` |
+
+## 🧠 Role-Based Logic Modifiers (v1)
+
+The system adapts its logic and feedback based on user behavior patterns. Roles are not visible to users directly but shape how the system responds to them.
+
+| Logic Role | Behavioral Pattern | Logic Modifications | System Impact |
+| --- | --- | --- | --- |
+| **Seeker** | Browses, hovers, rarely acts | Feed prioritizes soft-entry content (low-friction posts, ambient moments); nudges to React or Follow | Reduces bounce rate; increases chance of alignment |
+| **Reactor** | High reactions/reposts, low creation | Feed emphasizes trending content and high-vibe energy; provides repost feedback loops | Fuels Pulse and social proof loops |
+| **Joiner** | Frequently joins Spaces, RSVPs, lightly engages | Receives more Space-based content in Feed; sees highlights from past joined events | Builds Trail depth and participation density |
+| **Builder** | Creates content, Spaces, events | Feed gives stronger creator feedback; early access to Boost; Trail visible to others (opt-in) | Drives cultural architecture and loop ignition |
+| **Skeptic** | Long-time viewer, no interaction, low trust | Feed shows transparent system messages, peer validation signals, trust-building content | Attempts to earn engagement slowly through proof |
+| **Lurker-Builder** | Initially quiet, then transitions to contributor | Trail shows progression; system boosts early content; Feed nudges others to follow | Converts latent energy into system-building force |
+
+## 🗺️ System States (v1)
+
+Defines how major objects in the HIVE system change over time based on user activity and energy input. System states are important for visibility, behavior nudges, and backend prioritization.
+
+### Space States
+
+| State | Trigger | Effect | Notes |
+| --- | --- | --- | --- |
+| `Seeded` | Space is created, 0–2 members | Not publicly listed; only accessible via invite or link | Default private mode |
+| `Forming` | 3–10 members joined or 1 post made | Visible in Feed via Joiner's graph; soft searchable | Early alignment phase |
+| `Live` | 10+ members and consistent activity | Fully public and discoverable; contributes to Gravity | Eligible for Boosts and Feed surfacing |
+| `Dormant` | No activity in 14+ days | Feed and search visibility reduced; owner notified | Can reawaken with 1+ contribution |
+| `Legacy` | Archived by creator or auto-faded | Trail-only visibility; not discoverable | Preserves historical footprint |
+
+### Pulse States
+
+| State | Trigger | Effect | Notes |
+| --- | --- | --- | --- |
+| `Cold` | Initial post or low engagement | Appears only in local Feed | Needs amplification to grow |
+| `Warming` | 3+ Reactions or 2+ Reposts in short window | Begins surfacing to Clusters | Temperature tracked over time |
+| `Hot (Pulse)` | 10+ reactions/reposts in short burst | Feed priority across network; Pulse label appears | Triggers Gravity spikes |
+| `Cooling` | Engagement slows > 8h | Feed weight decreases; visible only to Cluster members | Graceful decay logic |
+| `Faded` | No engagement for 24h+ | Archived to Trail if part of meaningful moment | Soft memory, not deletion |
+
+### Event States (`Gather`)
+
+| State | Trigger | Effect | Notes |
+| --- | --- | --- | --- |
+| `Draft` | Created, not yet shared | Only visible to creator or co-organizers | Can be edited freely |
+| `Announced` | Shared to Feed or Space | Feed + calendar listing begins; open RSVP | Activity triggers Trail entries |
+| `Live` | Within 1h of start time | Real-time Feed prioritization | Syncs with notifications if enabled |
+| `Concluded` | End time passed | Feedback prompts issued; archived to Trail | Boost ends automatically |
+| `Highlight` | Receives post-event activity | Converted into Pulse thread or Gallery | Used to extend memory cycle |
+
+## 🛡️ Moderation Scaffolding (v1)
+
+Moderation in HIVE is designed to support trust, safety, and cultural integrity without replicating institutional control. Student leaders do not have the power to "ban" others from the system but may influence visibility within the spaces they steward.
+
+### Moderation Roles
+
+| Role | Permissions | Notes |
+| --- | --- | --- |
+| **System (Backend)** | Auto-detection of spam, abuse, bot behavior | Can soft-remove content, throttle reach, issue shadow warnings |
+| **Space Admins (Student Leaders)** | Flag posts, hide from Space view, issue soft warnings | Cannot delete users or posts from system; visibility scoped to Space |
+| **Peer Moderators (Optional)** | Earned role through contribution + feedback | Trusted to guide tone, not enforce rules |
+
+### Moderation Actions
+
+| Action | Who Can Trigger | Effect | System Design Notes |
+| --- | --- | --- | --- |
+| `Flag Post` | Any user | Sends signal to backend moderation queue | Multiple flags increase urgency |
+| `Mute User` | Space Admin | Hides content in that Space only | Does not notify user; reversible |
+| `Shadow Throttle` | System | Temporarily reduces content reach | Used for spam-like behavior |
+| `Soft Ban (Local)` | System | Prevents access to specific Spaces temporarily | Triggered by repeated abuse, not visible to other users |
+| `Feedback Prompt` | System | Encourages user to revise or rethink content | Trust-building over policing |
+
+Moderation should always:
+
+- Be local before global (start in Spaces)
+- Focus on visibility, not deletion
+- Encourage reform and clarity, not punishment
+
+## 🧬 Trail Summarization Logic (v1)
+
+The Trail system tracks a student's progression through HIVE as a narrative of participation, not just a record of events. Summarization turns raw behavioral data into meaningful, human-readable reflections.
+
+### What a Trail Includes
+
+| Element | Description |
+| --- | --- |
+| `Spaces Joined` | Affiliation log with join date and re-visit frequency |
+| `Events Attended` | List of Gather entries with optional highlight recap |
+| `Posts Created` | Contributions to Spaces or Feed, linked to role evolution |
+| `Reposts / Reactions` | Engagement signal volume, used to infer alignment and resonance |
+| `Roles Held` | Builder or moderator status in specific Spaces over time |
+
+### Summarization Logic
+
+| Trigger | Summary Type | Output |
+| --- | --- | --- |
+| Monthly Engagement | Trail Recap | "This month you joined 2 Spaces, attended 3 events, and reposted 6 items." |
+| Role Transition | Progression Milestone | "You’ve grown from a Joiner to a Builder. You’ve now created 3 Spaces." |
+| Dormant Reentry | Highlight Throwback | "Welcome back. You last posted 46 days ago in [Space]." |
+| Milestone Moment | Culture Recognition | "100 reactions received on your contributions – students are resonating with your energy." |
+
+### 🧠 Core Logic Modules
+
+| Module | Function | Operates On | Outputs To |
+| --- | --- | --- | --- |
+| **Feed Engine** | Personalizes and curates Feed based on behavior, clusters, and recency | Roles, Gravity, Reposts, Pulses | Feed UI, visibility weights |
+| **Pulse Engine** | Detects surging content; tracks energy peaks and decays | Reposts, Reactions, Time | Feed, Notifications, Pulse State |
+| **Gravity Engine** | Calculates directional interest between users, Spaces, and content | Repeat views, soft taps, latent behavior | Feed weight, Cluster edges |
+| **Trail Engine** | Maintains memory record and generates summarizations | Contributions, RSVPs, Joins | Trail display, Feedback loops |
+| **Role Engine** | Interprets behavioral patterns to infer archetype roles | Engagement frequency, action mix, time decay | Feed filters, nudge logic |
+| **Space Lifecycle Engine** | Governs transitions from Seeded → Live → Dormant | Joins, posts, decay timers | Visibility indexing, search scope |
+| **Moderation Engine** | Handles trust, safety, low-signal detection | Flags, post velocity, reports | Visibility throttling, prompts, shadow actions |
+| **Cluster Engine** | Maps behavioral overlap into dynamic social groups | Shared follows, repost chains, Spaces | Feed personalization, suggested content |
+| **Memory Engine** | Surfaces legacy content, throwbacks, or historical echoes | Trail patterns, dormancy, timing | Feed highlights, Trail popups |
+
+---
+
+### 🔄 Module Interaction Flow
+
+1. **User Action** → Feed/Post/Join/etc.
+2. **Trigger Chain**: Pulse Engine, Gravity Engine, Trail Engine all receive updates
+3. **State Evaluation**: Space Lifecycle or Role Engine may transition an object or user
+4. **UI Layer Update**: Feed or Trail receives update → user sees change in real-time or via summary later
+
+---
+
+### 🧩 Logic Definition Format for Each Module (example: Feed Engine)
+
+| Field | Value |
+| --- | --- |
+| **Inputs** | Role score, Pulse state, Gravity links, Trail echoes |
+| **Core Logic** | Weight = Recency × Pulse Strength × Cluster Affinity × Role Fit |
+| **Trigger Conditions** | React, Repost, Join, or new Trail state update |
+| **Output** | Ranked content in Feed, content slot types (Pulse, Space, Trail, Event) |
+| **Feedback Loop** | Re-engagement creates new Pulse, adjusts Gravity, reinforces Trail role |
+
+---
+
+### 🔁 Cross-Engine State Transitions
+
+The logic engines are interconnected and often trigger one another. Below is a cross-engine transition map describing how one engine’s output may influence another’s input or logic state.
+
+| Source Engine | Output Event | Target Engine | Triggered Logic |
+| --- | --- | --- | --- |
+| Pulse Engine | Content reaches "Hot" state | Feed Engine | Feed rank boosted, slot reprioritized |
+| Gravity Engine | New directional weight calculated | Feed Engine | Content surfaced for adjacent users |
+| Trail Engine | Milestone hit (e.g. first event, 100 reactions) | Role Engine | User role shifts from Joiner → Builder |
+| Role Engine | Role change detected | Feed Engine | Content type mix adjusted (Builder gets more analytics, Seeker gets more vibe content) |
+| Cluster Engine | New Cluster formed or strengthened | Feed Engine | Suggested Spaces and users updated |
+| Memory Engine | Anniversary or dormancy match found | Feed Engine & Trail Engine | Feed surfaces throwback; Trail offers reflection prompt |
+| Space Lifecycle | Space becomes Dormant | Feed Engine | Suppresses content unless reactivated |
+| Moderation Engine | Post flagged and shadow-throttled | Pulse Engine & Feed Engine | Removes from Pulse queue, downranks in Feed |
+
+---
+
+### ⏱ Real-Time vs Batch Logic Handling
+
+Defines which modules operate synchronously (real-time, user-visible moments) versus asynchronously (background processing, periodic evaluation).
+
+| Module | Execution Mode | Rationale |
+| --- | --- | --- |
+| Feed Engine | Real-Time | Needs to reflect user actions immediately (e.g. Join, React) |
+| Pulse Engine | Real-Time | Pulse windows are short-lived; must respond quickly to surges |
+| Gravity Engine | Hybrid | Immediate reaction to some behaviors, batch recalibration nightly |
+| Trail Engine | Batch | Evaluated hourly/daily; used for summary and reflection |
+| Role Engine | Batch | Inferred over time through behavior windows |
+| Space Lifecycle Engine | Batch | Space state transitions based on multi-day activity decay |
+| Moderation Engine | Hybrid | Flagging is instant; visibility throttling may queue or delay |
+| Cluster Engine | Batch | Cluster calculations run periodically; affects Feed in next cycle |
+| Memory Engine | Batch | Triggered by calendar/time logic; no real-time user impact |
+
+# **📡 HIVE DISCOVERY LAYER — INTERNAL WHITEPAPER (v1)**
+
+---
+
+## **🧠 Purpose**
+
+The Discovery Layer is the **primary intake system** of HIVE. It enables students—especially unaffiliated, passive, or socially tentative users—to see, sense, and align with what’s happening around them on campus.
+
+**It surfaces motion, not content.** It guides behavior without demanding commitment.
+
+---
+
+## **🎯 Core Goals**
+
+1. **Make curiosity actionable without commitment**
+2. **Surface social energy without social pressure**
+3. **Reflect cultural movement across all student types**
+4. **Ensure cold-start resilience and Feed relevance from Day 1**
+
+---
+
+## **🧱 Core Surfaces**
+
+- **Feed (Main Scroll)**
+- **Feed Strip (Top band, horizontally scrollable)**
+- **HiveLab (via ritual cards embedded in strip)**
+- **Passive Trail memory + Cluster motion triggers**
+
+All discovery motion begins here and flows into Spaces, Rituals, Events, and Trail.
+
+---
+
+## **👤 Personas Supported**
+
+| **Student Type** | **What They Need from Discovery** | **System Response** |
+| --- | --- | --- |
+| Seeker | Low-stakes signal, ambient cues | Feed adapts to taps, lingers, hover; shows echo cards |
+| Joiner | Easy affiliation, relevant matches | Space suggestions + friend motion ripple |
+| Builder | Traction, cultural momentum | Boosting, repost loops, Pulse logic |
+| Skeptic | Trust, authenticity, no pressure | Rituals feel native, Feed avoids admin tone |
+| Floater | Entry point, soft relevance | Mood strip, curiosity memory, light rituals |
+| Ghost Builder | Distribution without exposure | Repost + quote create cultural reach |
+
+---
+
+## **🔄 System Engines Used**
+
+- **Feed Engine** (resurfacing & weighting)
+- **Pulse Engine** (velocity tracking)
+- **Trail Engine** (silent interest tracking)
+- **Gravity Engine** (affinity scoring)
+- **Cluster Engine** (peer mapping)
+
+---
+
+## **🔧 Key Discovery Mechanics**
+
+### **1. Repost & Quote Flow**
+
+- Peer reposts elevate Feed presence
+- Quote = micro-authorship, creates narrative layer
+
+### **2. Friend Motion Cards**
+
+- “Someone you know RSVPed” → passive trust layer
+- Cluster-based, not based on follow graph
+
+### **3. Curiosity Memory**
+
+- System tracks taps, lingers, and revisits
+- Adds low-weight entries to user Trail
+- Powers silent resurfacing in Feed
+
+### **4. Space Suggestions**
+
+- Based on Trail overlaps, cluster motion, rituals joined
+- One-tap join, visible in main Feed
+
+### **5. Ritual Strip Prompts**
+
+- Emotional, low-barrier entry into the system
+- Participation reshapes Feed, triggers affinity loops
+- Always 1 active ritual (campus-wide or micro)
+
+### **6. Vibe-Based Discovery**
+
+- Strip card lets users tap into “energy states” (e.g., chill, hype)
+- Feed reshapes for 12h around that mode
+- Spaces + Events can be tagged with vibe metadata
+
+---
+
+## **🧬 Behavior-Driven Logic (No Content-First Design)**
+
+| **Motion Type** | **Feed Action** | **Result** |
+| --- | --- | --- |
+| Tap Event | Add curiosity score | Reentry Feed priority ↑ |
+| Repost Event | Boost Pulse, show in clusters | Cultural ripple ↑ |
+| Join Space | Reweight Feed, suggest rituals | Affiliation Loop started |
+| Participate in Ritual | Feed bias for aligned topics | Alignment reinforcement |
+| Linger on Space | Watchlist logic triggered | Soft-follow → future surfacing |
+| Friend action nearby | Show “Friend Motion” card | Network proximity awareness |
+
+---
+
+## **🧩 Cold Start Strategy**
+
+- Pre-seed Feed with real events from public org database
+- Pre-load Spaces from org list + ritual tags
+- Show Friend Motion even without actual graph via proximity inference
+- Ritual Strip drives first interaction within 15s
+- Feed uses hover + tap data from first session to adjust curation on day 2
+
+---
+
+## **🔥 Pulse Detection Logic (Discovery → Momentum)**
+
+- Reposts or RSVPs in burst windows elevate content
+- 5+ reposts in 15 min → Pulse state
+- Events, Spaces, and Rituals can all Pulse
+- Microtrend surfaced via:
+    
+    “Late night chill scene is picking up…”
+    
+
+---
+
+## **🔐 Hive Leader-Specific Logic**
+
+- Hive Leader actions receive **3x Pulse weight**
+- Hive Leader repost = high-trust boost in nearby clusters
+- Their Spaces + Events surface faster system-wide
+- Optional Feed card:
+    
+    “This was boosted by a Hive Leader you follow”
+    
+
+---
+
+## **🚨 Anti-Feature-Bloat Rules**
+
+- No comments, likes, or replies in v1
+- No new tabs or modes added for discovery
+- All enhancements must be expressed via:
+    - Strip Cards
+    - Feed prioritization
+    - Ritual participation nudges
+
+---
+
+## **📱 UX Design Pattern: Twitter/X Style Feed**
+
+- Card stack format
+- Strip at top, scrollable
+- Event cards: RSVP, expand, time/location inline
+- Repost + quote mimic tweet/retweet structure
+- Space suggestion = discoverable nodes
+- Mood strip = emotional filter
+
+All Feed behavior = frictionless, lurker-safe, optimized for mobile
+
+---
+
+## **✅ MVP Discovery Layer Is Ready If:**
+
+- Curiosity is remembered and rewarded
+- Motion is shown without requiring followers or affiliation
+- Feed feels ambient, not editorialized
+- Rituals shape Feed in real-time
+- Students can *see their people moving* even if they’re not acting yet
+
+# **✅ HIVE AFFILIATION LAYER — FINAL WHITEPAPER (v1)**
+
+---
+
+## **🧠 PURPOSE**
+
+Affiliation is how students **align with identity structures** inside HIVE—not through bios, chats, or forms, but through **lightweight behavioral signals**.
+
+It governs how students:
+
+- Orbit and explore without pressure
+- Join and shape emerging cultures
+- Progress from Seeker to Builder
+- Leave a Trail of meaningful participation
+
+Spaces are the universal identity field. **Everything is a Space**—whether it’s a club, scene, subculture, or ritual cohort.
+
+---
+
+## **🎯 CORE GOALS**
+
+1. **Let students affiliate softly** before committing
+2. **Reflect identity through motion** (not static profile data)
+3. **Give Builders real member clarity** without noise
+4. **Structure affiliation tiers invisibly**, not as social performance
+5. **Ensure every affiliation has systemic impact**
+
+---
+
+## **🧱 KEY BEHAVIORS + SURFACES**
+
+| **Surface** | **Behavior** | **System Effect** |
+| --- | --- | --- |
+| Feed Suggestion | Tap / linger | Adds curiosity weight; triggers Observer |
+| Join Button | Tap | Adds Member status; Trail + Gravity start |
+| Join Button | Long-press | Adds to Watchlist; soft affiliation |
+| Space Content | Repost / RSVP | Triggers Active tier |
+| Reaffirmation Strip | “Still vibing?” | Adjusts Trail/Gravity based on response |
+| Feed Echo | Multiple Space taps | Suggests formal Join / Watch |
+
+All interactions handled via **Feed, Rituals, or Strip**. No new tabs or overlays.
+
+---
+
+## **🔐 INVISIBLE TIERED AFFILIATION**
+
+| **Tier** | **Trigger** | **Meaning** |
+| --- | --- | --- |
+| Observer | 3+ passive touches (taps, lingers, hovers) | Curiosity detected |
+| Member | Taps Join | Starts Trail + Feed/Space weighting |
+| Active | Posts, RSVPs, rituals inside Space | High Gravity; shown in Builder Dashboard |
+| Dormant | 14+ days inactivity | Downweighted affiliation |
+| Dropped | 21+ days no action or ritual “Ghosted” | Trail archived; removed from weighting |
+
+---
+
+## **🔄 SYSTEM ENGINE CONNECTIONS**
+
+| **Engine** | **Role in Affiliation** |
+| --- | --- |
+| Trail | Tracks affiliation history and reentry cues |
+| Gravity | Determines interest between user ↔ Space |
+| Cluster | Suggests related Spaces + proximity |
+| Role | Classifies user state (Observer → Active) |
+| Feed | Adjusts surface weighting based on affiliation tier |
+
+---
+
+## **🔧 AFFILIATION UX FLOW**
+
+1. **Seeker sees Space in Feed**
+    - Taps once → nothing happens yet
+    - Taps twice → system tags as Observer
+2. **Seeker taps Join**
+    - Trail starts
+    - Feed and Rituals adjust weighting
+    - Builder sees Member increase
+3. **Seeker interacts in Space (RSVP/repost)**
+    - Becomes Active
+    - System logs high-affinity
+    - Role Engine locks in contribution status
+4. **System checks back after 2 weeks**
+    - “Still vibing with [Space]?”
+    - Yes → gravity boost
+    - Ghosting → Trail fade begins
+5. **Multiple Space alignments**
+    - System prompts:
+        
+        “Other students in [X] are watching [Y]”
+        
+    - Cross-Space identity begins forming
+
+---
+
+## **🧬 DESIGN PRINCIPLES**
+
+- **No social pressure**
+- **No profile editing**
+- **No fake engagement layers**
+- **Motion = identity**
+- **You can belong without declaring it**
+
+---
+
+## **🧠 WHY THIS MATTERS**
+
+Without this layer:
+
+- Builders get false signals
+- Seekers remain invisible
+- System can’t reflect or evolve cultural dynamics
+- Discovery breaks into chaos
+
+With this layer:
+
+- Cultural alignment becomes trackable
+- System can loop students into belonging
+- Builders can create Spaces that live—even with silent users
+
+# **✅ HIVE PARTICIPATION LAYER — INTERNAL WHITEPAPER (v1)**
+
+---
+
+## **🧠 PURPOSE**
+
+The Participation Layer defines **how students take visible actions** within HIVE.
+
+Participation is not content. It is **behavior that alters system state.**
+
+This layer creates:
+
+- Input signals (RSVP, Drop, Vote, Repost)
+- Group energy (Spaces stay warm, events gain traction)
+- System feedback (Feed reweights, Pulse ignites, Trail deepens)
+
+If no one participates, the system dies.
+
+---
+
+## **🔁 PRIMARY GOAL**
+
+Build a structure where **every action is lightweight, expressive, and consequential**.
+
+This layer must work for:
+
+- Active students
+- Lurkers
+- Dead orgs
+- Pre-seeded events with zero context
+
+---
+
+## **🔧 SUPPORTED PARTICIPATION TYPES**
+
+| **Action** | **Description** | **Location** |
+| --- | --- | --- |
+| **Drop** | 1-line post inside a Space. No replies. | Space |
+| **RSVP** | Tap to attend an event. | Feed / Event |
+| **Repost** | Share content to Feed. | Feed / Space |
+| **Quote** | Repost with a 1-line comment. | Feed / Space |
+| **Vote** | Tap to respond to a poll. | Space |
+| **Boost** | Highlight a Drop to top (Builder-only). | Space |
+| **Watch** | Soft-follow a Space or event. | Feed / Space |
+| *(v1.1)* **React** | Tap-to-signal interest (e.g. 🔥 👀). | Feed (optional) |
+
+---
+
+## **🧬 SYSTEM OUTPUT FROM PARTICIPATION**
+
+| **Action** | **Triggers** | **System Effect** |
+| --- | --- | --- |
+| Drop | Trail, Pulse | Keeps Space alive; may surface in Feed |
+| RSVP | Trail, Pulse | Event gets Feed priority; Feed reorders |
+| Repost | Pulse, Feed | Boosts visibility to others |
+| Quote | Pulse, Feed | Creates new Feed card |
+| Vote | Trail, Feed tuning | Signals active member; drives Feed logic |
+| Boost | Feed surfacing | Pins Drop to top of Space; visible in Feed |
+| Watch | Trail, Gravity | Adjusts personalization and Feed recs |
+
+---
+
+## **🗂 CARD LIFECYCLE LOGIC (DECAY + EXTENSION)**
+
+Cards decay if untouched. System avoids clutter by default.
+
+| **Card Type** | **Default Lifespan** | **Extensions** |
+| --- | --- | --- |
+| Drop | 48h | Boost +24h; Quote +12h |
+| Event | Until start time | RSVP resets decay window |
+| Poll | Set by Builder | Votes extend visibility |
+| Quote | 24h | Requotes add time |
+| Boosted Card | 6h pinned | One boost per post |
+
+System decays posts softly (fade in color, drop to bottom). Trail stores all for system memory, not UI clutter.
+
+---
+
+## **🧠 FEEDBACK LOOPS**
+
+Every interaction must produce a reaction.
+
+| **Action** | **User Feedback** |
+| --- | --- |
+| Drop | Post appears instantly; may be Boosted |
+| RSVP | RSVP tag shown; triggers possible Strip nudge |
+| Repost | Feed echoes ripple to others |
+| Quote | New Feed card appears (sometimes with view count) |
+| Vote | Sees poll results (post-vote) |
+| Boost | Card moves to top; labeled “Boosted” |
+
+There are **no silent actions except Watch**.
+
+---
+
+## **🕹 UX DESIGN RULES**
+
+- Every participation option is **1-step max**
+- No modals with >1 input
+- No threading, replies, or infinite comments
+- Participation creates **modular cards**, not content streams
+- System must visibly respond (card moves, Feed changes, Strip updates)
+
+---
+
+## **📲 MOBILE IMPLEMENTATION NOTES**
+
+| **Gesture** | **Result** |
+| --- | --- |
+| Tap RSVP / Vote | Logs instantly, triggers feedback |
+| Tap “Drop” | Opens 1-line input modal |
+| Tap Repost | Sends original to user’s Feed |
+| Long-press (Builder) | Triggers Boost |
+| Tap Quote | Opens quote input → creates new Feed card |
+
+---
+
+## **✅ LAYER COMPLETE WHEN:**
+
+- Every action feeds back into the system
+- No participation feels dead-end
+- Students feel presence without needing comments or likes
+- Builders don’t have to post daily to keep Spaces warm
+- Every RSVP, Drop, Quote or Vote moves something
+
+# **✅ HIVE CREATION LAYER — INTERNAL WHITEPAPER (v1)**
+
+---
+
+## **🧠 PURPOSE**
+
+The Creation Layer defines how new objects — **Spaces**, **Events**, and **Rituals** — are introduced into the system.
+
+Creation must be:
+
+- Fast
+- Mobile-first
+- Behavior-driven
+- Feed-integrated
+
+No dashboards. No forms. Only inputs that create motion.
+
+---
+
+## **📦 OBJECTS THAT CAN BE CREATED**
+
+| **Object** | **Who Creates It** | **Surface** | **Purpose** |
+| --- | --- | --- | --- |
+| **Space** | Any student | Feed → Space Tab | Starts a new affiliation node |
+| **Event** | Builder only, or auto-promoted Drop | Inside Space | Creates group convergence |
+| **Ritual** | Builder (inside HiveLab) | HiveLab → Feed | Social interaction scaffolding |
+
+---
+
+## **🔹 1. SPACE CREATION**
+
+### **✅ Flow: “Name it. Tag it. Done.”**
+
+- Inputs:
+    - Space name
+    - Select 1–2 tags from system library
+- Optional:
+    - 1-liner description
+    - Emoji or logo (default = system icon)
+
+### **📲 UX Location:**
+
+- From “+” button on Spaces screen
+- From prompt in Feed (e.g. “Want to start your own?”)
+
+### **🔐 Visibility Logic:**
+
+| **State** | **Criteria** | **Feed/Search Visibility** |
+| --- | --- | --- |
+| Hidden | Created | Only visible to creator |
+| Forming | 3 joins + 1 Drop | Searchable, system-suggested |
+| Live | 10+ joins + active Drops/Events | Eligible for Feed surface, Boost, Pulse |
+| Dormant | No activity 7d | Soft-hidden, archive path |
+| Legacy | Archived | Trail-only memory |
+
+### **🔁 System Actions:**
+
+- Assign creator as Builder (behind-the-scenes role)
+- Track all member motion via Trail
+- Builder can Boost Drops or create Events/Rituals
+
+---
+
+## **🔹 2. EVENT CREATION**
+
+### **✅ Flow A: Builder-Initiated Event**
+
+Tap “Create Event” inside a Space
+
+- Inputs:
+    - Title
+    - Time
+    - Location
+    - Optional context / description
+- Events belong to Spaces
+- Only Builders can initiate
+
+---
+
+### **✅ Flow B: Event-As-Post**
+
+A student Drops: “movie night @ 8pm, my place”
+
+- 3+ people tap “Going?”
+    
+    → System auto-converts Drop to Event
+    
+    → Appears in Space and Feed
+    
+
+**Promotes organic mobilization** without forcing Builders to structure everything.
+
+---
+
+### **🔐 Event Visibility Logic:**
+
+| **State** | **Criteria** | **System Behavior** |
+| --- | --- | --- |
+| Draft | Created, no RSVP | Visible only in Space |
+| Live | 1+ RSVP | Visible to Space members |
+| Feed-Surfaceable | 5+ RSVP or Boost | Appears in Feed |
+| Expired | After event time passes | Archived into Trail |
+
+---
+
+### **🔁 System Actions:**
+
+- RSVP logs Trail entry
+- Repost or Quote triggers Pulse
+- Event can be Boosted if 1+ RSVP
+- Events may be auto-linked to Rituals
+
+---
+
+## **🔹 3. RITUAL CREATION (BUILDER, VIA Hivelab)**
+
+### **✅ Rituals are created inside HiveLab by Builders**
+
+- E.g. Polls, challenges, confessions, one-liner prompts
+- Each Ritual is limited-time, participation-based
+- Results feed back into Feed → triggers motion
+
+---
+
+### **📲 Example Flows:**
+
+- Builder selects: “Run a poll”
+- Inputs question + 2–5 options
+- System runs Ritual for 24–48h
+- After close, results appear as Feed card:
+    
+    “In Design Union, 72% voted for ‘Chaos Night’”
+    
+
+---
+
+### **🔁 System Actions:**
+
+- Vote = Trail signal
+- Result = Pulse input
+- Feed surfaces winning option or cultural sentiment
+
+---
+
+## **🔒 SYSTEM GUARDRAILS**
+
+| **System** | **Purpose** |
+| --- | --- |
+| **Thresholds** | Prevent Feed spam (e.g. min 3 joins before Space is visible) |
+| **Auto-Archive** | Decays Events, Spaces, or Rituals with no interaction |
+| **Role Logic** | Builders manage Boosts, Events, Rituals |
+| **Repost + Quote Integration** | All creations can be echoed into Feed |
+
+# **✅ HIVE CREATION LAYER — INTERNAL WHITEPAPER (v1)**
+
+---
+
+## **🧠 PURPOSE**
+
+The Creation Layer defines how **new structures** are authored into the HIVE system — either by students (Builders) or by the platform itself.
+
+Creation is not content. Creation is **architecture** — it introduces new **nodes of affiliation, convergence, or participation** into the campus network.
+
+---
+
+## **🧱 OBJECT TYPES CREATED THROUGH THIS LAYER**
+
+| **Object** | **Who Can Create** | **Where It Lives** | **System Scope** |
+| --- | --- | --- | --- |
+| **Space** | Any student | Spaces tab, Feed | Node of identity + motion |
+| **Event** | Builder (or auto-promoted Drop) | Inside a Space | Schedules convergence |
+| **Ritual** (Campus-Wide) | Platform / HIVE | Feed Strip | System-wide interaction format |
+| **Space Ritual** | Builder | Inside a Space | Group participation loop |
+
+---
+
+## **🔹 SPACE CREATION**
+
+### **✅ Flow: “Name it. Tag it. Done.”**
+
+- Name input
+- Select tag(s) from system library
+- Auto-generated or emoji icon
+- Optional: 1-liner description
+
+### **📲 UX Entry Points:**
+
+- Spaces tab [+] button
+- Prompt from Feed after interaction pattern
+
+### **🧠 System Rules:**
+
+| **State** | **Trigger** | **Visibility** |
+| --- | --- | --- |
+| Hidden | Created | Only visible to creator |
+| Forming | 3 joins + 1 Drop | Searchable, not in Feed |
+| Live | 10+ joins + motion | Feed-surfaceable, Boostable |
+| Dormant | No action in 7 days | Soft-hidden |
+| Legacy | Manually archived or faded | Trail only |
+- 
+    
+    Creator becomes Builder
+    
+- Builder gets Boost, Event, and Ritual permissions
+- Role can be passed or inherited via system logic (v1.1)
+
+---
+
+## **🔹 EVENT CREATION**
+
+### **✅ Flow A: Builder-Initiated**
+
+- Title
+- Date + time
+- Location
+- Optional context
+
+### **✅ Flow B: Drop → Event (Event-as-Post)**
+
+- Any Drop with 3+ “Going?” → auto-promotes to Event
+- Gets RSVP support and visibility
+
+### **🧠 System Rules:**
+
+- Belongs to a Space
+- RSVP triggers Feed priority
+- Boostable by Builder (only 1 active Boost at a time)
+- Auto-archive after end time + 48h if no motion
+
+---
+
+## **🔹 RITUALS (CAMPUS-WIDE)**
+
+### **✅ Definition:**
+
+Time-limited, platform-authored interactive experiences surfaced in the Feed Strip. Meant to stir mass motion, chaos, or cultural energy.
+
+### **Examples:**
+
+- Campus Confessions
+- 1:1 Pairing Night
+- Vote-to-unlock moments
+- Campus Madness
+
+### **🧠 System Behavior:**
+
+- Always system-authored (not student-created)
+- Participation reshapes Feed + Trail
+- Participation may unlock Space visibility, new content, or hidden prompts
+- Always appears in Feed Strip
+- May echo into Spaces depending on Ritual logic
+
+---
+
+## **🔹 SPACE RITUALS**
+
+### **✅ Definition:**
+
+Builder-created participation formats for a specific Space — used to engage members, align culture, or cohere motion.
+
+### **Formats:**
+
+- Polls
+- Confession prompts
+- Vote-for-X
+- Text challenges
+- Tap-based rituals
+
+### **📲 UX:**
+
+- Builder taps “Create Ritual”
+- Chooses format + inputs
+- Ritual surfaces as a top card in Space
+- Optional expiration timer (default 48h)
+
+### **🧠 System Behavior:**
+
+- Engagement tracked via votes, drops, etc.
+- May surface in Feed if motion threshold hit
+    
+    “Design Union ran a ritual — here’s what happened...”
+    
+- Results optionally summarized in Space memory or Feed pulse
+
+---
+
+## **🔐 SYSTEM-WIDE CREATION GUARDRAILS**
+
+| **Function** | **Purpose** |
+| --- | --- |
+| **Thresholds** | Prevent spam from new creations hitting Feed |
+| **Decay Logic** | Auto-fades Events, Rituals, and Spaces with no motion |
+| **Boost** | Limits visibility acceleration to Builder role only |
+| **System Authorship** | Rituals (campus) are always HIVE-authored |
+| **Role Assignment** | Space creator = Builder; may pass to others in v1.1 |
+| **Promotion Logic** | Drops can evolve into Events; Rituals can drive Pulse |
+
+---
+
+## **🔁 CREATION → PARTICIPATION → FEED LOOP**
+
+1. A student creates a Space.
+2. They drop a line. Others join. It hits visibility threshold.
+3. Builder creates an Event. Members RSVP.
+4. Builder runs a Space Ritual. 60% vote for a chaos night.
+5. The Ritual hits Feed.
+6. A campus-wide Ritual drops that night. The Space ties into it.
+7. Participation data loops into Trail and Cluster logic.
+
+This is HIVE in motion — built, not filled.
+
+---
+
+## **✅ LAYER COMPLETE WHEN…**
+
+- Any student can start a new Space that matters
+- Builders can mobilize others via Events and Space Rituals
+- Feed reflects meaningful motion, not static info
+- Campus-wide Rituals reshape system behavior
+- All creation is cold-start resilient, participatory, and system-aware
+
+# **✅ HIVE PROFILE LAYER — INTERNAL WHITEPAPER (v1)**
+
+---
+
+## **🧠 PURPOSE**
+
+The Profile Layer is not a bio. It’s a **quiet mirror of motion** — what a student has done, where they’ve been, and how they move through the system.
+
+Profile is not the destination. It’s the **evidence.**
+
+---
+
+## **🔐 ACCESS TIERS — IDENTITY PERMISSIONS**
+
+| **Tier** | **Profile Surface** | **Interaction Permissions** |
+| --- | --- | --- |
+| **Public (non-.edu)** | ❌ No Profile | View-only Feed access |
+| **Verified (.edu)** | ✅ Private Profile | Full interaction: Join, Drop, Repost, RSVP, Create Spaces |
+| **Verified+** | ✅ Public Profile | Builder permissions: Events, Boosts, Rituals, Feed surfacing |
+
+---
+
+## **🔲 PROFILE STRUCTURE (By Tier)**
+
+### **🟢 Verified (Private)**
+
+**Default UX Elements:**
+
+- Display name (optional)
+- Account status: “Verified Student”
+- Activity Summary (soft Trail):
+    - “Joined 4 Spaces”
+    - “RSVP’d to 2 Events this month”
+    - “Last participated in: Confession Ritual”
+- Spaces You're In (toggleable)
+- “Your Motion” (visible to self only):
+    - Drops
+    - Reposts
+    - Poll votes
+- Settings:
+    - Allow profile to be public [Y/N]
+    - Show joined Spaces [Y/N]
+    - Hide all activity = ghost mode
+
+---
+
+### **🔵 Verified+ (Public)**
+
+**Profile Elements:**
+
+- Name + blue check
+- Role badge (e.g., “Builder of UB Creatives”)
+- Builder Stats:
+    - “Created 3 Spaces”
+    - “Hosted 6 Events”
+    - “Led 1 Campus Ritual”
+- Motion Preview:
+    - Last Boosted post
+    - “Reposted: ‘Late Night Madness’”
+- Pinned Motion (optional)
+- Public Badge Slot (if earned from Ritual)
+
+---
+
+## **🔄 ACTIVITY (Formerly Trail)**
+
+“Activity” = private memory thread, non-narrative
+
+System-tracked, student-facing only.
+
+Not surfaced unless toggled.
+
+Includes:
+
+- Join timestamps
+- RSVP log
+- Repost + Drop count
+- Past Ritual participation
+- Builder actions (event created, space boosted)
+
+No comments, likes, or public replies ever shown.
+
+---
+
+## **🏅 BADGES — RITUAL-LOCKED ONLY**
+
+- Only earnable via system-wide Rituals (not builder actions)
+- Examples:
+    - “Confession Dropper”
+    - “Campus Chaos Agent”
+    - “Madness Finalist”
+- One badge slot shown on Verified+ profile
+- Badges time-boxed or seasonal (some fade)
+
+No user-generated badges. No fake clout.
+
+---
+
+## **🔐 PRIVACY-FIRST DEFAULTS**
+
+| **Feature** | **Default State** | **Editable?** |
+| --- | --- | --- |
+| Profile visibility | Private (Verified) | Yes |
+| Show joined Spaces | Off | Yes |
+| Show Activity | Off | Yes |
+| Motion memory (Activity) | Logged silently | Always on (private) |
+| Verified+ public profile | Auto-on | No (platform controlled) |
+
+---
+
+## **🧠 SYSTEM TRIGGERS → PROFILE**
+
+| **Action** | **Profile Effect** |
+| --- | --- |
+| Create Space | “Builder of...” status visible |
+| Host Event | “Hosted [Event]” added to Activity |
+| Join Ritual | “Participated in [Ritual]” logs privately |
+| Earn Badge | Badge appears in profile slot |
+| High motion | Profile may be suggested in Feed or Clusters |
+
+---
+
+## **🧱 UX DESIGN PHILOSOPHY**
+
+- No bios
+- No replies
+- No feeds inside profiles
+- Profiles reflect *motion*, not self-description
+- Emergence over customization
+
+---
+
+## **✅ PROFILE LAYER COMPLETE WHEN...**
+
+- Verified users can see motion privately
+- Verified+ users reflect system impact publicly
+- Motion becomes memory, but not vanity
+- Identity is earned, not declared
+- Badges are sacred — system-issued, Ritual-earned only
+
+# **✅ PHASE 5.A — MAIN FEED**
+
+**Section:** UX Surfaces → Logic → Data
+
+**Status:** Documented & Locked
+
+---
+
+## **🧠 PURPOSE**
+
+The Main Feed is HIVE’s living interface — a vertically stacked, behavior-reactive surface that reflects campus energy in real time. It is not a post stream; it’s a motion engine.
+
+The Feed adapts to every student’s Trail, role, and alignment.
+
+Motion isn’t authored — it’s surfaced.
+
+---
+
+## **📲 UX SURFACE STRUCTURE**
+
+### **🔹 Feed Structure:**
+
+css
+
+CopyEdit
+
+[ Pinned Strip – Horizontal Scroll ]
+
+[ Event Card ]
+
+[ Repost Card ]
+
+[ Quote Card ]
+
+[ Ritual Card ]
+
+[ Space Suggestion ]
+
+[ Friend Motion Card ]
+
+---
+
+## **🧱 FEED STRIP (TOP-HORIZONTAL, PINNED)**
+
+### **Mechanics:**
+
+- Always pinned to top
+- Scrollable horizontally
+- Rotates based on motion and time of day
+- Feels like a real-time pulse strip
+
+### **Card Types:**
+
+- 🔥 **Space Heat** → “UB Creatives is heating up”
+- 🎯 **Ritual Launch** → “Confess in 1 line now”
+- ⏳ **Time Marker** → “Finals Week Begins”
+- 📈 **Motion Recap** → “2 of your spaces just got Boosted”
+- 👀 **Peer Proximity** → “You and 2 others RSVP’d to…”
+
+---
+
+## **🧱 FEED BODY (VERTICAL MOTION STACK)**
+
+### **Card Types & Behavior:**
+
+### **📅 Event Card**
+
+- Title, time, location
+- RSVP button (tap = logs, no modal)
+- Tap = detail
+- Long-press (Verified+) = Boost
+
+### **🔁 Repost Card**
+
+- “Laney reposted...”
+- Original Event or Drop shown
+- Tap = view source
+- Repost chain possible
+
+### **💬 Quote Card**
+
+- “Laney: ‘bring snacks’”
+- Tap = event or source Space
+- Requote not available in v1
+
+### **🎯 Ritual Card**
+
+- Campus-wide ritual prompt
+- Tap = full-screen Ritual interaction
+- Completion logs Trail, may resurface in Feed as echo
+
+### **🚀 Space Suggestion**
+
+- “Design Union just got active”
+- Tap = view Space
+- “Join” = logs Trail, changes Feed logic
+
+### **👀 Friend Motion**
+
+- “You and 2 others just viewed this”
+- Tap = event or Space
+- Names hidden unless Verified+ and public
+
+---
+
+## **🕹 GESTURE DESIGN**
+
+| **Gesture** | **Behavior** |
+| --- | --- |
+| Tap | RSVP, Join, Participate |
+| Long-press | Boost (Verified+ only) |
+| Swipe Down | Refresh |
+| Horizontal Swipe (Strip) | Rotate Strip cards |
+| Tap Avatar (if shown) | Opens Profile |
+| Tap Quote | Opens Event or source context |
+
+---
+
+## **❄️ COLD START LOGIC**
+
+New Verified users with no Trail will see:
+
+- 3–5 pre-seeded Event Cards (org events)
+- 2 Space Suggestions
+- 1 active Ritual
+- Strip = Ritual + Event Heat + Time Marker
+- No Friend Motion or Quote cards (until system detects motion)
+
+---
+
+## **🧠 FEED ENGINE LOGIC**
+
+### **Inputs:**
+
+- Join, RSVP, Drop
+- Repost, Quote
+- Ritual participation
+- Cluster affinity
+- Space state changes
+- Verified+ Boosts
+
+### **Weight Formula (simplified):**
+
+ini
+
+CopyEdit
+
+FeedRank = Recency × PulseScore × GravityScore × RoleMultiplier
+
+---
+
+## **⏱ DECAY & EXTENSION RULES**
+
+| **Card** | **Default Lifetime** | **Extended By** |
+| --- | --- | --- |
+| Event | Until start time | RSVP, Quote |
+| Repost | 48h | Quote, Boost |
+| Quote | 24h | Requotes |
+| Ritual | Live duration | Participation |
+| Suggestion | View-count gated | Join or Watch |
+
+---
+
+## **🧾 FEED DATA SCHEMA (CORE MODELS)**
+
+### **FeedCard**
+
+- cardId
+- type: event, repost, quote, ritual, suggest, friend
+- sourceId: eventId, ritualId, spaceId
+- createdBy
+- timestamp
+- weightScore
+- decayAt
+- visibleTo: userId[], role scope
+
+---
+
+### **EngagementLog**
+
+- userId
+- action: rsvp, repost, quote, join, vote
+- targetType: event, ritual, space
+- targetId
+- timestamp
+
+---
+
+### **PulseObject**
+
+- pulseId
+- sourceCardId
+- level: cold, warm, hot
+- decayRate
+- triggerCount
+
+---
+
+## **✅ COMPLETION CRITERIA**
+
+✔ All Feed cards are motion-reactive
+
+✔ Strip adapts to time + energy
+
+✔ Cold start is seeded but responsive
+
+✔ No likes, no comments — only motion
+
+✔ Backend has clean schemas for card, engagement, pulse
+
+✔ System nudges motion, not vanity
+
+✔ Builders can Boost
+
+✔ Rituals can reshape Feed
+
+# **🟪 PHASE 5B — SPACES**
+
+**Section:** UX Surfaces → Logic → Data
+
+**Status:** ✅ Finalized
+
+---
+
+## **🧠 CORE PURPOSE**
+
+A **Space** is a public-facing, motion-responsive container that reflects affiliation, social momentum, and student-driven identity.
+
+Spaces are not chat rooms, they are not static groups — they are live micro-networks. Every action taken in a Space contributes to the system’s network memory, social mapping, and motion architecture.
+
+---
+
+## **📲 UX SURFACE (LIST-BASED STRUCTURE)**
+
+**All Spaces use a vertical scroll format** with structured behavioral sections. Everything is modular.
+
+### **🔝 Top Section**
+
+- **Name + Tags**
+    
+    → Always visible. Tags pulled from public data or Builder-entered.
+    
+    → Tap tag = see similar Spaces.
+    
+- **Join Button**
+    
+    → Students can view everything before joining
+    
+    → Joining is required to interact with Drops or Prompts
+    
+    → Logs to Trail + unlocks social motion
+    
+- **Member Scroll**
+    
+    → Avatars only (priority to Verified+, Builder)
+    
+    → No follower counts
+    
+    → Tap avatar = Profile (if public)
+    
+
+---
+
+### **📄 Behavioral Content Stack (Card Modules)**
+
+Cards surface based on motion and system thresholds. No static ordering — most alive = top.
+
+| **Card** | **Visibility** | **Interaction** |
+| --- | --- | --- |
+| **Upcoming Event** | All users | RSVP, view detail |
+| **Active Prompt** | All users | Members only can vote |
+| **Drop Stream (1-liners)** | All users | Members only can post |
+| **Most Quoted Drop** | All users | Tap = view quotes |
+| **Join Momentum Summary** | All users | View-only |
+| **Past Prompt Results** | All users | View-only |
+| **Reposts with Quote** | All users | View-only, link to Feed |
+
+---
+
+## **❄️ COLD-START CONTENT SOURCES**
+
+If the Builder has not yet engaged:
+
+- Events can be **pre-seeded** via public org calendar
+- System may generate **default Drop**: *“This org is live on HIVE — join to start motion.”*
+- **Join activity** auto-triggers “3 students joined this week” card
+- Feed-adjacent quotes pull into Space for visibility
+
+---
+
+## **🔁 PERMITTED INTERACTIONS (ALL ROLES)**
+
+| **Action** | **Requires Join?** | **Affects Feed?** | **Affects Trail?** |
+| --- | --- | --- | --- |
+| View Drops / Events / Prompts | ❌ | ✅ indirectly | ✅ silently |
+| Join Space | ✅ | ✅ (suggestion, trail heat) | ✅ |
+| RSVP to Event | ❌ | ✅ | ✅ |
+| Drop (1-liner post) | ✅ | ✅ (if tapped/quoted) | ✅ |
+| Quote Event or Drop | ✅ | ✅ | ✅ |
+| Vote on Prompt | ✅ | ✅ (if threshold hit) | ✅ |
+| Boost (Builder-only) | ✅ | ✅ prominently | ✅ |
+
+---
+
+## **🔐 ROLES & PERMISSIONS**
+
+| **Role** | **Set By** | **Powers** |
+| --- | --- | --- |
+| Public | - | View-only |
+| Member | Self-join | Drop, Vote, RSVP |
+| Verified+ | System | Visible badge, feeds into discovery |
+| Builder | System/Manual | Can create Events, Prompts, Boost content |
+
+---
+
+## **🧩 FEATURE + FUNCTIONALITY INVENTORY**
+
+### **📌 Auth & Identity**
+
+- Join Space
+- View Tags + Description
+- View members
+- View Verified+ and Builder visibly
+
+### **📅 Events**
+
+- View + RSVP
+- Avatar RSVP stack
+- Repost or Quote to Feed
+
+### **✏️ Drops (Posts)**
+
+- Add 1-liner (members only)
+- View all
+- Quote to Feed
+- React (in future, low-friction)
+
+### **🗳️ Prompts**
+
+- Vote on builder-created prompt
+- View real-time or archived results
+
+### **🧪 Single-Player Features**
+
+- View-only Trail logging
+- Watch Mode (Space influences Feed w/o join)
+- Soft bookmark (Save silently)
+- Drop drafts (private)
+- Tap-tracking (Drop heat detection)
+
+---
+
+## **⚙️ SYSTEM LOGIC**
+
+### **🧠 Space Object**
+
+json
+
+CopyEdit
+
+{
+
+"spaceId": "abc123",
+
+"name": "UB Creatives",
+
+"tags": ["art", "late night", "chaotic"],
+
+"members": ["user123", "user456"],
+
+"builders": ["user123"],
+
+"events": [...],
+
+"drops": [...],
+
+"prompts": [...],
+
+"quotes": [...],
+
+"state": "live",
+
+"createdAt": timestamp
+
+}
+
+---
+
+## **🔄 SPACE STATE ENGINE**
+
+| **State** | **Trigger** | **System Behavior** |
+| --- | --- | --- |
+| Hidden | Created, no join or motion | Not discoverable |
+| Forming | ≥3 joins or 1 motion | Appears in search |
+| Live | ≥10 joins and recent activity | Feed-suggestible |
+| Dormant | 7d of inactivity | UI collapses, search deprioritized |
+| Legacy | Archived manually or auto-faded (30d+) | Read-only, Trail visible |
+
+---
+
+## **🎯 SPACE IS FUNCTIONAL WHEN...**
+
+- A student can join, view, or interact with motion in < 10s
+- Feed and Trail reflect behavior (even passive)
+- Builders aren't required for motion to begin
+- Cold-started orgs still surface meaningful value
+- Everything inside a Space feeds back into system
+- Spaces decay cleanly if unused
+
+# **PHASE 5C — PROFILE**
+
+**Section:** UX Surfaces → Logic → Data
+
+**Status:** ✅ Finalized
+
+---
+
+## **🧠 CORE PURPOSE**
+
+The Profile is not a resume, not a feed, not a bio.
+
+It is a **reflection of motion** — who you are *based on what you do across the system*.
+
+It should feel earned, living, and ambient.
+
+Not constructed, performative, or fixed.
+
+---
+
+## **🎯 PRIMARY FUNCTIONS**
+
+| **Function** | **Description** |
+| --- | --- |
+| Identity | Who is this student in the context of campus life? |
+| Presence | What are they involved in *right now*? |
+| Memory | What has shaped them inside HIVE? |
+| Access | What do they unlock (Verified, Builder, Rituals)? |
+| Social Mapping | What Spaces are they orbiting, what roles have they played? |
+
+---
+
+## **📲 UX STRUCTURE (LIST + LAYERED MODULAR CARDS)**
+
+Profile is scrollable, non-interactive beyond view and light surfacing.
+
+### **🔝 Top Section (Fixed)**
+
+- **Avatar** (editable)
+- **Name / Display handle**
+- **Status Badge**
+    - Public
+    - Verified (.edu)
+    - Verified+ (student leader)
+- **Role Context** (Builder in X Spaces)
+- **Bio (Optional)** → Max 150 characters
+
+---
+
+### **🧠 Modular Sections (Conditionally Shown)**
+
+Each card appears only if you’ve triggered it. No filler, no forced layout.
+
+### **🔹 Current Spaces (Affiliation)**
+
+- “Currently active in 3 Spaces”
+- Avatars of Spaces (tappable)
+- Sorted by most recent activity
+
+### **🔹 Motion Summary (Trail Snippets)**
+
+- “Last 30 days: 2 Drops, 1 RSVP, 1 Prompt voted”
+- Auto-generated
+- Not editable
+- Visible only if threshold of activity is met
+
+### **🔹 Badge Showcase (System-Wide Rituals Only)**
+
+- “Earned during Campus Madness”
+- Badges are not user-claimable
+- System-assigned via Rituals only
+- Max 3 shown at a time
+
+### **🔹 Builder Credential**
+
+- “Builder of [Space Name]”
+- Tap = view Space
+- Only appears if active in last 14d
+
+### **🔹 Legacy Trail (Deep Echoes)**
+
+- “First joined during Fall Launch Week”
+- “Top Drop was quoted 12x in UB Creatives”
+- Memory-style summarizations (system-generated)
+- Optional visibility toggle (default: private)
+
+---
+
+## **🔐 VISIBILITY MODEL**
+
+| **Section** | **Visible to Public** | **Visible to Verified** | **Notes** |
+| --- | --- | --- | --- |
+| Avatar + Badge | ✅ | ✅ | Always visible |
+| Trail Summary | ❌ | ✅ | Optional toggle on |
+| Spaces | ✅ | ✅ | Based on join visibility |
+| Builder Status | ✅ | ✅ | Shown only if active |
+| Legacy Trail | ❌ | ✅ | Summarized only after activity milestones |
+| Bio | ✅ | ✅ | Optional |
+
+---
+
+## **🔁 INTERACTIONS FROM PROFILE**
+
+| **Action** | **Description** |
+| --- | --- |
+| Tap Space avatar | Opens that Space |
+| Tap badge | Shows Ritual it was earned from |
+| Tap Builder tag | Opens Builder’s Space |
+| Tap “Follow” (future?) | Not in MVP |
+
+---
+
+## **⚙️ SYSTEM LOGIC**
+
+### **🎯 What Triggers Profile Motion**
+
+| **Trigger** | **Profile Effect** |
+| --- | --- |
+| Join Space | Adds to “Current Spaces” |
+| Drop / RSVP | Adds to Motion Summary |
+| Prompt vote | Adds to Motion Summary |
+| Quote Reposted | May surface Top Drop |
+| Builder Role | Adds credential to top |
+| Ritual Participation | Can earn badge (if Ritual = system-wide) |
+| Long-term Activity | Adds Trail Echo summary (e.g. “Joined before X”) |
+
+---
+
+## **🧬 PROFILE DATA MODEL**
+
+json
+
+CopyEdit
+
+{
+
+"userId": "user789",
+
+"handle": "@laney",
+
+"displayName": "Laney Thompson",
+
+"avatarUrl": "...",
+
+"status": "verified+",
+
+"bio": "Sometimes outside",
+
+"spaces": ["space123", "space456"],
+
+"builderOf": ["space123"],
+
+"trail": {
+
+"drops": 6,
+
+"events": 3,
+
+"promptsVoted": 4,
+
+"quotes": 2
+
+},
+
+"badges": ["campus_madness_2025"],
+
+"legacy": {
+
+"joinedAt": "2025-04-01T...",
+
+"topDrop": "‘film kids are unhinged’"
+
+}
+
+}
+
+---
+
+## **🔒 PROFILE DESIGN PRINCIPLES**
+
+- No likes, no follower counts
+- All motion-based
+- Nothing editable beyond name/avatar/bio
+- Feels **earned, not crafted**
+- **No Trail = no credibility**
+
+---
+
+## **✅ PROFILE IS FUNCTIONAL WHEN...**
+
+- A student can open their Profile and understand their motion
+- Other students can view Profile and infer energy + role
+- No content needs to be authored for value to be present
+- Builder roles and Badges feel rare, real, and system-validated
+- Profile is *useful*, not performative
+
+---

@@ -6,8 +6,10 @@ import 'package:hive_ui/features/auth/providers/auth_providers.dart';
 import 'package:hive_ui/features/spaces/domain/entities/space_entity.dart';
 import 'package:hive_ui/features/spaces/presentation/providers/space_providers.dart';
 import 'package:hive_ui/features/spaces/presentation/providers/spaces_repository_provider.dart';
+import 'package:hive_ui/features/spaces/presentation/providers/space_events_model_provider.dart';
 import 'package:hive_ui/features/spaces/presentation/widgets/leadership_claim_dialog.dart';
 import 'package:hive_ui/features/spaces/presentation/widgets/lifecycle_state_indicator.dart';
+import 'package:hive_ui/features/spaces/presentation/widgets/space_detail/space_events_tab.dart';
 import 'package:hive_ui/features/spaces/presentation/widgets/space_members_tab.dart';
 import 'package:hive_ui/features/spaces/presentation/widgets/space_message_board.dart';
 import 'package:hive_ui/theme/app_colors.dart';
@@ -686,72 +688,114 @@ class _SpaceDetailScreenState extends ConsumerState<SpaceDetailScreen>
   }
 
   Widget _buildEventsTab(SpaceEntity space) {
-    // Implementation for events tab
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        if (space.eventIds.isEmpty)
-          Card(
-            color: Colors.black.withOpacity(0.5),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-              side: BorderSide(
-                color: Colors.white.withOpacity(0.1),
-              ),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                children: [
-                  Icon(
-                    Icons.event_busy,
-                    size: 48,
-                    color: Colors.white.withOpacity(0.5),
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    'No upcoming events',
-                    style: GoogleFonts.outfit(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.white,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'This space doesn\'t have any scheduled events at the moment.',
-                    textAlign: TextAlign.center,
-                    style: GoogleFonts.inter(
-                      fontSize: 14,
-                      color: Colors.white.withOpacity(0.7),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  if (_isManager || space.isJoined)
-                    ElevatedButton(
-                      onPressed: () {
-                        // Navigate to create event page
-                        context.push('/spaces/${space.id}/create-event');
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.gold,
-                        foregroundColor: Colors.black,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                      ),
-                      child: Text(
-                        'Create Event',
-                        style: GoogleFonts.inter(
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                ],
-              ),
+    return Consumer(
+      builder: (context, ref, child) {
+        final eventsAsyncValue = ref.watch(spaceEventsModelProvider(space.id));
+        
+        return eventsAsyncValue.when(
+          loading: () => const Center(
+            child: CircularProgressIndicator(
+              valueColor: AlwaysStoppedAnimation<Color>(AppColors.gold),
             ),
           ),
-      ],
+          error: (error, stack) => Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.error_outline,
+                  size: 48,
+                  color: Colors.red[400],
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'Failed to load events',
+                  style: GoogleFonts.outfit(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                TextButton(
+                  onPressed: () {
+                    // Refresh events by invalidating the provider
+                    ref.invalidate(spaceEventsModelProvider(space.id));
+                  },
+                  child: Text('Retry', style: GoogleFonts.inter()),
+                ),
+              ],
+            ),
+          ),
+          data: (events) {
+            if (events.isEmpty) {
+              return Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.event_busy,
+                      size: 48,
+                      color: Colors.white.withOpacity(0.5),
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      'No upcoming events',
+                      style: GoogleFonts.outfit(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.white,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'This space doesn\'t have any scheduled events.',
+                      textAlign: TextAlign.center,
+                      style: GoogleFonts.inter(
+                        fontSize: 14,
+                        color: Colors.white.withOpacity(0.7),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    if (_isManager)
+                      ElevatedButton(
+                        onPressed: () {
+                          // Navigate to create event page
+                          context.push('/spaces/${space.id}/create-event');
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.gold,
+                          foregroundColor: Colors.black,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                        child: Text(
+                          'Create Event',
+                          style: GoogleFonts.inter(
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              );
+            }
+            
+            // Show events list with model events
+            return SpaceEventsTab(
+              events: events,
+              onEventTap: (event) {
+                // Navigate to event details
+                context.push('/events/${event.id}');
+              },
+              onCreateEvent: _isManager ? () {
+                context.push('/spaces/${space.id}/create-event');
+              } : null,
+              isManager: _isManager,
+            );
+          },
+        );
+      },
     );
   }
 

@@ -35,6 +35,10 @@ class SignalStrip extends ConsumerStatefulWidget {
   
   /// Custom opacity for glass effect
   final double glassOpacity;
+  
+  /// Optional pre-fetched signal content to display
+  /// If provided, this will be used instead of fetching from the repository
+  final List<SignalContent>? customSignalContent;
 
   /// Constructor
   const SignalStrip({
@@ -47,6 +51,7 @@ class SignalStrip extends ConsumerStatefulWidget {
     this.signalTypes,
     this.useGlassEffect = true,
     this.glassOpacity = 0.15,
+    this.customSignalContent,
   });
 
   @override
@@ -149,6 +154,37 @@ class _SignalStripState extends ConsumerState<SignalStrip>
   }
   
   Widget _buildSignalContent() {
+    // If custom signal content is provided, use it directly
+    if (widget.customSignalContent != null) {
+      final contentList = widget.customSignalContent!;
+      
+      if (contentList.isEmpty) {
+        return _buildEmptyState();
+      }
+      
+      // Mark the first item as viewed - AFTER the build is complete
+      if (contentList.isNotEmpty) {
+        // Use microtask to schedule after build completion
+        Future.microtask(() {
+          // Make sure the widget is still mounted
+          if (mounted) {
+            ref.read(signalStripProvider.notifier).logContentView(contentList[0].id);
+          }
+        });
+      }
+      
+      return ListView.builder(
+        scrollDirection: Axis.horizontal,
+        physics: const BouncingScrollPhysics(),
+        itemCount: contentList.length,
+        itemBuilder: (context, index) {
+          final content = contentList[index];
+          return _buildSignalCard(content);
+        },
+      );
+    }
+    
+    // Otherwise, fetch from the repository using the provider
     final signalParams = SignalContentParams(
       maxItems: widget.maxCards,
       types: widget.signalTypes,
@@ -254,97 +290,104 @@ class _SignalStripState extends ConsumerState<SignalStrip>
     );
   }
   
+  /// Format a DateTime as a relative time string (e.g. "5m ago", "2h ago")
+  String _getTimeAgo(DateTime dateTime) {
+    final now = DateTime.now();
+    final difference = now.difference(dateTime);
+    
+    if (difference.inMinutes < 1) {
+      return 'Just now';
+    } else if (difference.inMinutes < 60) {
+      return '${difference.inMinutes}m ago';
+    } else if (difference.inHours < 24) {
+      return '${difference.inHours}h ago';
+    } else if (difference.inDays < 7) {
+      return '${difference.inDays}d ago';
+    } else if (difference.inDays < 30) {
+      return '${(difference.inDays / 7).floor()}w ago';
+    } else {
+      return '${(difference.inDays / 30).floor()}mo ago';
+    }
+  }
+  
   Widget _buildCardContent(
-    SignalContent content, 
+    SignalContent content,
     _SignalCardStyle style,
     IconData icon,
   ) {
+    // Get formatted time text
+    final formattedTimeAgo = _getTimeAgo(content.createdAt);
+    
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        // Header row with icon and time
         Row(
           children: [
-            Icon(
-              icon,
-              color: style.accentColor,
-              size: 18,
+            // Icon with background
+            Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: style.iconBackgroundColor,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(
+                icon,
+                size: 20,
+                color: style.iconColor,
+              ),
             ),
+            
             const SizedBox(width: 8),
-            Text(
-              content.title,
-              style: GoogleFonts.inter(
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-                color: style.accentColor,
+            
+            // Time ago text
+            Expanded(
+              child: Text(
+                formattedTimeAgo,
+                style: GoogleFonts.inter(
+                  fontSize: 13,
+                  color: style.iconColor,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
           ],
         ),
-        const SizedBox(height: 8),
+        
+        const SizedBox(height: 12),
+        
+        // Title
+        Text(
+          content.title,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: GoogleFonts.inter(
+            fontSize: 16,
+            fontWeight: FontWeight.w700,
+            color: Colors.white,
+            height: 1.3,
+          ),
+        ),
+        
+        const SizedBox(height: 4),
+        
+        // Description
         Expanded(
           child: Text(
             content.description,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
             style: GoogleFonts.inter(
               fontSize: 14,
               fontWeight: FontWeight.w400,
-              color: Colors.white.withOpacity(0.8),
-              height: 1.3,
+              color: Colors.white.withOpacity(0.7),
+              height: 1.4,
             ),
-            maxLines: 3,
-            overflow: TextOverflow.ellipsis,
-          ),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          'Tap to explore',
-          style: GoogleFonts.inter(
-            fontSize: 12,
-            fontWeight: FontWeight.w500,
-            color: style.secondaryColor.withOpacity(0.7),
           ),
         ),
       ],
     );
-  }
-  
-  _SignalCardStyle _getCardStyle(SignalType type) {
-    switch (type) {
-      case SignalType.lastNight:
-        return _SignalCardStyle(
-          accentColor: Colors.purple.shade300,
-          secondaryColor: Colors.purple.shade200,
-        );
-      case SignalType.topEvent:
-        return const _SignalCardStyle(
-          accentColor: AppColors.yellow,
-          secondaryColor: AppColors.yellow,
-        );
-      case SignalType.trySpace:
-        return _SignalCardStyle(
-          accentColor: Colors.blue.shade300,
-          secondaryColor: Colors.blue.shade200,
-        );
-      case SignalType.hiveLab:
-        return _SignalCardStyle(
-          accentColor: Colors.green.shade300,
-          secondaryColor: Colors.green.shade200,
-        );
-      case SignalType.underratedGem:
-        return _SignalCardStyle(
-          accentColor: Colors.amber.shade300,
-          secondaryColor: Colors.amber.shade200,
-        );
-      case SignalType.universityNews:
-        return _SignalCardStyle(
-          accentColor: Colors.red.shade300,
-          secondaryColor: Colors.red.shade200,
-        );
-      case SignalType.communityUpdate:
-        return _SignalCardStyle(
-          accentColor: Colors.teal.shade300,
-          secondaryColor: Colors.teal.shade200,
-        );
-    }
   }
   
   IconData _getIconForType(SignalType type) {
@@ -354,15 +397,160 @@ class _SignalStripState extends ConsumerState<SignalStrip>
       case SignalType.topEvent:
         return Icons.event;
       case SignalType.trySpace:
-        return Icons.group;
+        return Icons.people;
       case SignalType.hiveLab:
         return Icons.science;
       case SignalType.underratedGem:
-        return Icons.star;
+        return Icons.diamond;
       case SignalType.universityNews:
-        return Icons.campaign;
+        return Icons.school;
       case SignalType.communityUpdate:
-        return Icons.emoji_events;
+        return Icons.campaign;
+      case SignalType.timeMorning:
+        return Icons.wb_sunny;
+      case SignalType.timeAfternoon:
+        return Icons.wb_twilight;
+      case SignalType.timeEvening:
+        return Icons.nightlight_round;
+      case SignalType.spaceHeat:
+        return Icons.local_fire_department;
+      case SignalType.ritualLaunch:
+        return Icons.rocket_launch;
+      case SignalType.friendMotion:
+        return Icons.directions_walk;
+      default:
+        return Icons.info;
+    }
+  }
+
+  _SignalCardStyle _getCardStyle(SignalType type) {
+    switch (type) {
+      case SignalType.lastNight:
+        return _SignalCardStyle(
+          gradientColors: [
+            const Color(0xFF2E0B33).withOpacity(0.7),
+            const Color(0xFF1A062D).withOpacity(0.7),
+          ],
+          iconColor: Colors.purple,
+          iconBackgroundColor: Colors.purple.withOpacity(0.25),
+        );
+      case SignalType.topEvent:
+        return _SignalCardStyle(
+          gradientColors: [
+            const Color(0xFF33190B).withOpacity(0.7),
+            const Color(0xFF1B0D04).withOpacity(0.7),
+          ],
+          iconColor: Colors.orange,
+          iconBackgroundColor: Colors.orange.withOpacity(0.25),
+        );
+      case SignalType.trySpace:
+        return _SignalCardStyle(
+          gradientColors: [
+            const Color(0xFF0B2E33).withOpacity(0.7),
+            const Color(0xFF031F24).withOpacity(0.7),
+          ],
+          iconColor: Colors.teal,
+          iconBackgroundColor: Colors.teal.withOpacity(0.25),
+        );
+      case SignalType.hiveLab:
+        return _SignalCardStyle(
+          gradientColors: [
+            const Color(0xFF33310B).withOpacity(0.7),
+            const Color(0xFF1F1D04).withOpacity(0.7),
+          ],
+          iconColor: AppColors.yellow,
+          iconBackgroundColor: AppColors.yellow.withOpacity(0.25),
+        );
+      case SignalType.underratedGem:
+        return _SignalCardStyle(
+          gradientColors: [
+            const Color(0xFF0B1933).withOpacity(0.7),
+            const Color(0xFF030F24).withOpacity(0.7),
+          ],
+          iconColor: Colors.blue,
+          iconBackgroundColor: Colors.blue.withOpacity(0.25),
+        );
+      case SignalType.universityNews:
+        return _SignalCardStyle(
+          gradientColors: [
+            const Color(0xFF333333).withOpacity(0.7),
+            const Color(0xFF1A1A1A).withOpacity(0.7),
+          ],
+          iconColor: AppColors.white,
+          iconBackgroundColor: AppColors.white.withOpacity(0.25),
+        );
+      case SignalType.communityUpdate:
+        return _SignalCardStyle(
+          gradientColors: [
+            const Color(0xFF152A18).withOpacity(0.7),
+            const Color(0xFF0F1C11).withOpacity(0.7),
+          ],
+          iconColor: Colors.green,
+          iconBackgroundColor: Colors.green.withOpacity(0.25),
+        );
+      case SignalType.timeMorning:
+        return _SignalCardStyle(
+          gradientColors: [
+            const Color(0xFF3B2502).withOpacity(0.7),
+            const Color(0xFF261701).withOpacity(0.7),
+          ],
+          iconColor: Colors.orange,
+          iconBackgroundColor: Colors.orange.withOpacity(0.25),
+        );
+      case SignalType.timeAfternoon:
+        return _SignalCardStyle(
+          gradientColors: [
+            const Color(0xFF33190B).withOpacity(0.7),
+            const Color(0xFF1B0D04).withOpacity(0.7),
+          ],
+          iconColor: AppColors.gold,
+          iconBackgroundColor: AppColors.gold.withOpacity(0.25),
+        );
+      case SignalType.timeEvening:
+        return _SignalCardStyle(
+          gradientColors: [
+            const Color(0xFF0B0F33).withOpacity(0.7),
+            const Color(0xFF060924).withOpacity(0.7),
+          ],
+          iconColor: Colors.indigo,
+          iconBackgroundColor: Colors.indigo.withOpacity(0.25),
+        );
+      case SignalType.spaceHeat:
+        return _SignalCardStyle(
+          gradientColors: [
+            const Color(0xFF330B0B).withOpacity(0.7),
+            const Color(0xFF240606).withOpacity(0.7),
+          ],
+          iconColor: Colors.red,
+          iconBackgroundColor: Colors.red.withOpacity(0.25),
+        );
+      case SignalType.ritualLaunch:
+        return _SignalCardStyle(
+          gradientColors: [
+            const Color(0xFF2E0B33).withOpacity(0.7),
+            const Color(0xFF1A062D).withOpacity(0.7),
+          ],
+          iconColor: Colors.purple,
+          iconBackgroundColor: Colors.purple.withOpacity(0.25),
+        );
+      case SignalType.friendMotion:
+        return _SignalCardStyle(
+          gradientColors: [
+            const Color(0xFF0B2933).withOpacity(0.7),
+            const Color(0xFF061924).withOpacity(0.7),
+          ],
+          iconColor: Colors.cyan,
+          iconBackgroundColor: Colors.cyan.withOpacity(0.25),
+        );
+      default:
+        return _SignalCardStyle(
+          gradientColors: [
+            const Color(0xFF333333).withOpacity(0.7),
+            const Color(0xFF1A1A1A).withOpacity(0.7),
+          ],
+          iconColor: AppColors.white,
+          iconBackgroundColor: AppColors.white.withOpacity(0.25),
+        );
     }
   }
   
@@ -448,11 +636,13 @@ class _SignalStripState extends ConsumerState<SignalStrip>
 
 /// Helper class for styling signal cards
 class _SignalCardStyle {
-  final Color accentColor;
-  final Color secondaryColor;
+  final List<Color> gradientColors;
+  final Color iconColor;
+  final Color iconBackgroundColor;
   
   const _SignalCardStyle({
-    required this.accentColor,
-    required this.secondaryColor,
+    required this.gradientColors,
+    required this.iconColor,
+    required this.iconBackgroundColor,
   });
 } 

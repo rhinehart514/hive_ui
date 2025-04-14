@@ -60,6 +60,12 @@ class DeepLinkService {
     _isInitialized = true;
   }
 
+  /// Public method to handle incoming deep links from external sources
+  Future<void> handleIncomingLink(String link) async {
+    // Just delegate to the private implementation
+    return _handleDeepLink(link);
+  }
+
   /// Process any deep link that comes into the app
   Future<void> _handleDeepLink(String link) async {
     // Prevent re-entrant deep link handling

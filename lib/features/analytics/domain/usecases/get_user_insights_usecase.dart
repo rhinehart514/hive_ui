@@ -1,123 +1,113 @@
+import 'package:dartz/dartz.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:hive_ui/features/analytics/domain/failures/analytics_failures.dart';
 import 'package:hive_ui/features/analytics/domain/entities/analytics_event_entity.dart';
 import 'package:hive_ui/features/analytics/domain/entities/user_metrics_entity.dart';
+import 'package:hive_ui/features/analytics/domain/entities/user_insights.dart' as entities;
 import 'package:hive_ui/features/analytics/domain/repositories/analytics_repository_interface.dart';
+import 'package:hive_ui/features/analytics/domain/providers/repository_providers.dart';
 
-/// Model for representing user insights
+/// Model for representing enriched user insights
 class UserInsights {
-  final UserMetricsEntity metrics;
-  final List<AnalyticsEventEntity> recentEvents;
   final int engagementScore;
   final int? peakActivityHour;
   final String? mostActiveDay;
   final bool isActive;
-  final Map<String, int> categoryBreakdown;
-  
-  UserInsights({
+  final Map<String, int> activityByHour;
+  final Map<String, int> activityByDay;
+  final UserMetricsEntity metrics;
+  final List<AnalyticsEventEntity> recentEvents;
+
+  const UserInsights({
+    required this.engagementScore,
+    required this.peakActivityHour,
+    required this.mostActiveDay,
+    required this.isActive,
+    required this.activityByHour,
+    required this.activityByDay,
     required this.metrics,
     required this.recentEvents,
-    required this.engagementScore,
-    this.peakActivityHour,
-    this.mostActiveDay,
-    required this.isActive,
-    required this.categoryBreakdown,
   });
-}
 
-/// Use case for calculating and retrieving user insights
-class GetUserInsightsUseCase {
-  final AnalyticsRepositoryInterface _repository;
-  
-  GetUserInsightsUseCase(this._repository);
-  
-  /// Get comprehensive insights for a user
-  Future<UserInsights> execute(String userId) async {
-    // Get user metrics
-    final metrics = await _repository.getUserMetrics(userId);
-    if (metrics == null) {
-      throw Exception('Failed to retrieve user metrics');
-    }
+  /// Get category breakdown from metrics and events
+  Map<String, int> get categoryBreakdown {
+    final breakdown = <String, int>{};
     
-    // Get recent events
-    final recentEvents = await _repository.getUserEvents(
-      userId,
-      limit: 100,
-    );
-    
-    // Calculate engagement score
-    final engagementScore = metrics.calculateEngagementScore();
-    
-    // Get peak activity time
-    final peakHour = metrics.getPeakActivityHour();
-    final mostActiveDay = metrics.getMostActiveDay();
-    
-    // Determine if user is active
-    final isActive = metrics.isActiveUser();
-    
-    // Calculate category breakdown
-    final categoryBreakdown = _calculateCategoryBreakdown(recentEvents);
-    
-    return UserInsights(
-      metrics: metrics,
-      recentEvents: recentEvents,
-      engagementScore: engagementScore,
-      peakActivityHour: peakHour,
-      mostActiveDay: mostActiveDay,
-      isActive: isActive,
-      categoryBreakdown: categoryBreakdown,
-    );
-  }
-  
-  /// Calculate breakdown of user activity by category
-  Map<String, int> _calculateCategoryBreakdown(List<AnalyticsEventEntity> events) {
-    final breakdown = <String, int>{
-      'profile': 0,
-      'social': 0,
-      'spaces': 0,
-      'events': 0,
-      'content': 0,
-    };
-    
-    for (final event in events) {
-      switch (event.eventType) {
-        case AnalyticsEventType.profileView:
-        case AnalyticsEventType.profileEdit:
-        case AnalyticsEventType.profileExport:
-        case AnalyticsEventType.profileImport:
-          breakdown['profile'] = (breakdown['profile'] ?? 0) + 1;
-          break;
-          
-        case AnalyticsEventType.friendRequest:
-        case AnalyticsEventType.friendRequestAccepted:
-        case AnalyticsEventType.friendRequestRejected:
-          breakdown['social'] = (breakdown['social'] ?? 0) + 1;
-          break;
-          
-        case AnalyticsEventType.spaceView:
-        case AnalyticsEventType.spaceJoin:
-        case AnalyticsEventType.spaceLeave:
-        case AnalyticsEventType.spaceCreate:
-        case AnalyticsEventType.spaceMessageSent:
-          breakdown['spaces'] = (breakdown['spaces'] ?? 0) + 1;
-          break;
-          
-        case AnalyticsEventType.eventView:
-        case AnalyticsEventType.eventCreate:
-        case AnalyticsEventType.eventEdit:
-        case AnalyticsEventType.eventCancel:
-        case AnalyticsEventType.eventRsvp:
-          breakdown['events'] = (breakdown['events'] ?? 0) + 1;
-          break;
-          
-        case AnalyticsEventType.contentCreate:
-        case AnalyticsEventType.contentEdit:
-        case AnalyticsEventType.contentView:
-        case AnalyticsEventType.contentShare:
-        case AnalyticsEventType.contentReaction:
-          breakdown['content'] = (breakdown['content'] ?? 0) + 1;
-          break;
-      }
-    }
+    // Add base metrics
+    breakdown['Content'] = metrics.contentCreated;
+    breakdown['Engagement'] = metrics.contentEngagement;
+    breakdown['Spaces'] = metrics.spacesJoined;
+    breakdown['Events'] = metrics.eventsAttended;
     
     return breakdown;
   }
-} 
+}
+
+final getUserInsightsUseCaseProvider = Provider<GetUserInsightsUseCase>((ref) {
+  return GetUserInsightsUseCase(
+    repository: ref.watch(analyticsRepositoryInterfaceProvider),
+  );
+});
+
+/// Use case for calculating and retrieving enriched user insights
+class GetUserInsightsUseCase {
+  final AnalyticsRepositoryInterface repository;
+
+  const GetUserInsightsUseCase({required this.repository});
+
+  Future<Either<AnalyticsFailure, UserInsights>> call(String userId) async {
+    try {
+      // Get base metrics
+      final metricsResult = await repository.getUserMetrics(userId);
+      
+      return metricsResult.fold(
+        (failure) => Left(failure),
+        (metrics) async {
+          if (metrics == null) {
+            return Left(MetricsLoadFailure(
+              userId: userId,
+              originalException: 'No metrics found for user',
+            ));
+          }
+          
+          // Get recent events
+          final eventsResult = await repository.getUserEvents(userId);
+          
+          return eventsResult.fold(
+            (failure) => Left(failure),
+            (events) {
+              // Calculate enriched insights
+              return Right(UserInsights(
+                engagementScore: metrics.calculateEngagementScore(),
+                peakActivityHour: metrics.getPeakActivityHour(),
+                mostActiveDay: metrics.getMostActiveDay(),
+                isActive: metrics.isActiveUser(),
+                activityByHour: metrics.activityByHour,
+                activityByDay: metrics.activityByDay,
+                metrics: metrics,
+                recentEvents: events,
+              ));
+            },
+          );
+        },
+      );
+    } catch (e) {
+      return Left(MetricsLoadFailure(
+        userId: userId,
+        originalException: e,
+      ));
+    }
+  }
+}
+
+class InteractionTrend {
+  final String type;
+  final int count;
+  final DateTime timestamp;
+
+  InteractionTrend({
+    required this.type,
+    required this.count,
+    required this.timestamp,
+  });
+}

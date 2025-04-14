@@ -78,4 +78,25 @@ class AppColors {
   
   // Create swatch for primary color
   static final MaterialColor primarySwatch = createSwatch(gold);
+
+  /// Main app colors
+  static const Color primaryDark = Color(0xFF1E1E1E);
+  static const Color primaryBackground = Color(0xFF121212);
+  static const Color secondaryBackground = Color(0xFF252525);
+  
+  /// Accent colors
+  static const Color accentGold = gold;
+  static const Color accentBlue = Color(0xFF64B5F6);
+  static const Color accentGreen = Color(0xFF81C784);
+  static const Color accentRed = Color(0xFFE57373);
+  
+  /// Text colors
+  static const Color textPrimary = Color(0xFFFFFFFF);
+  static const Color textSecondary = Color(0xFFB8B8B8);
+  static const Color textHint = Color(0xFF757575);
+  
+  /// Other UI colors
+  static const Color divider = Color(0xFF424242);
+  static const Color cardBackground = Color(0xFF2D2D2D);
+  static const Color shadowColor = Color(0x80000000);
 } 

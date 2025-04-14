@@ -7,9 +7,6 @@ import 'package:hive_ui/theme/app_colors.dart';
 import 'package:hive_ui/theme/app_theme.dart';
 import 'package:hive_ui/providers/profile_provider.dart';
 import 'package:hive_ui/models/user_profile.dart';
-import 'package:hive_ui/services/club_service.dart';
-// Add optimized club adapter
-// Add service initializer
 import 'package:hive_ui/services/user_preferences_service.dart';
 import 'package:hive_ui/features/auth/providers/auth_providers.dart';
 import 'package:hive_ui/models/club.dart';
@@ -25,7 +22,13 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'dart:async';
 import 'package:hive_ui/core/navigation/app_bar_builder.dart';
-import 'package:flutter/foundation.dart' show kDebugMode;
+import 'package:hive_ui/features/auth/presentation/components/onboarding/name_page.dart';
+import 'package:hive_ui/features/auth/presentation/components/onboarding/year_page.dart';
+import 'package:hive_ui/features/auth/presentation/components/onboarding/field_page.dart';
+import 'package:hive_ui/features/auth/presentation/components/onboarding/residence_page.dart';
+import 'package:hive_ui/features/auth/presentation/components/onboarding/interests_page.dart';
+import 'package:hive_ui/features/auth/presentation/components/onboarding/account_tier_page.dart';
+import 'package:hive_ui/features/auth/presentation/utils/haptic_utils.dart';
 
 class OnboardingProfilePage extends ConsumerStatefulWidget {
   final bool skipToDefaults;
@@ -296,14 +299,23 @@ class _OnboardingProfilePageState extends ConsumerState<OnboardingProfilePage>
       setState(() {
         _isCompletingOnboarding = true;
       });
-      
       // Get current user ID
       final userId = _firebaseAuth.currentUser?.uid;
       if (userId == null) {
         debugPrint('Cannot complete onboarding: No user ID available');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('No authenticated user found'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+        setState(() {
+          _isCompletingOnboarding = false;
+        });
         return;
       }
-      
       // Create user profile data
       final profile = UserProfile(
         id: userId,
@@ -320,23 +332,41 @@ class _OnboardingProfilePageState extends ConsumerState<OnboardingProfilePage>
         accountTier: _selectedTier,
         interests: _selectedInterests,
       );
-      
       // Save to Firestore
+      try {
       await _firestore.collection('users').doc(userId).set(profile.toJson());
-      
+      } catch (e) {
+        debugPrint('Error saving profile to Firestore: $e');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Error saving profile to server: ${e.toString()}'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+        setState(() {
+          _isCompletingOnboarding = false;
+        });
+        return;
+      }
       // Save to local preferences 
       await UserPreferencesService.storeProfile(profile);
-      
       // Mark onboarding as completed
       await UserPreferencesService.setOnboardingCompleted(true);
-      
       if (mounted) {
-        // Navigate to home
         context.go('/home');
       }
     } catch (e) {
       debugPrint('Error completing onboarding: $e');
-      // Show error if needed
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error completing onboarding: ${e.toString()}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     } finally {
       if (mounted) {
         setState(() {
@@ -1193,8 +1223,8 @@ class _OnboardingProfilePageState extends ConsumerState<OnboardingProfilePage>
   void _nextPage() {
     debugPrint('_nextPage called - navigating to next onboarding page');
 
-    // Add stronger haptic feedback for better physical confirmation
-    HapticFeedback.mediumImpact();
+    // Add better haptic feedback for page transitions
+    HapticUtils.pageTransition(forward: true);
 
     // Special case for non-degree seeking students to skip field selection
     if (_pageController.page?.round() == 1 &&
@@ -1203,8 +1233,8 @@ class _OnboardingProfilePageState extends ConsumerState<OnboardingProfilePage>
       // Skip the field of study page and go directly to residence
       _pageController.animateToPage(
         3, // Index of residence page
-        duration: const Duration(milliseconds: 500),
-        curve: Curves.easeInOutCubic,
+        duration: const Duration(milliseconds: 450),
+        curve: Curves.easeOutCubic, // iOS-style deceleration curve
       );
       return;
     }
@@ -1215,11 +1245,11 @@ class _OnboardingProfilePageState extends ConsumerState<OnboardingProfilePage>
 
     debugPrint('Navigating from page $currentPage to page $targetPage');
 
-    // Normal page navigation
+    // Normal page navigation with improved iOS-style animation
     _pageController.animateToPage(
       targetPage,
-      duration: const Duration(milliseconds: 500),
-      curve: Curves.easeInOutCubic,
+      duration: const Duration(milliseconds: 450),
+      curve: Curves.easeOutCubic, // iOS-style deceleration curve
     );
   }
 
@@ -1230,10 +1260,12 @@ class _OnboardingProfilePageState extends ConsumerState<OnboardingProfilePage>
       return;
     }
 
-    HapticFeedback.lightImpact();
+    // Add better haptic feedback for backward navigation
+    HapticUtils.pageTransition(forward: false);
+    
     _pageController.previousPage(
-      duration: const Duration(milliseconds: 500),
-      curve: Curves.easeInOutCubic,
+      duration: const Duration(milliseconds: 450),
+      curve: Curves.easeOutCubic, // iOS-style deceleration curve
     );
   }
 
@@ -1253,8 +1285,8 @@ class _OnboardingProfilePageState extends ConsumerState<OnboardingProfilePage>
         // Allow the system back button to navigate to previous onboarding pages
         if (_currentPage > 0) {
           _pageController.previousPage(
-            duration: const Duration(milliseconds: 400),
-            curve: Curves.easeInOut,
+            duration: const Duration(milliseconds: 450),
+            curve: Curves.easeOutCubic, // iOS-style deceleration curve
           );
           return false;
         }
@@ -1270,1897 +1302,133 @@ class _OnboardingProfilePageState extends ConsumerState<OnboardingProfilePage>
         body: PageView(
           controller: _pageController,
           physics: const NeverScrollableScrollPhysics(),
+          // Add a page transition effect similar to iOS
+          pageSnapping: true,
+          clipBehavior: Clip.none,
           children: [
-            _buildNamePage(),
-            _buildYearPage(),
-            _buildFieldPage(),
-            _buildResidencePage(),
-            _buildInterestsPage(),
-            _buildAccountTierPage(),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildNamePage() {
-    // Get the current page from the controller (this is the first page)
-    final currentPage =
-        _pageController.hasClients ? (_pageController.page ?? 0).round() : 0;
-    const totalPages = 6;
-
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(
-          24, 32, 24, 24), // Reduced top padding from 64 to 32
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'What\'s your name?',
-            style: GoogleFonts.outfit(
-              color: Colors.white,
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Let\'s get to know you',
-            style: GoogleFonts.inter(
-              color: Colors.white70,
-              fontSize: 16,
-            ),
-          ),
-          const SizedBox(height: 32),
-
-          // Use a constrained layout to prevent fields from growing too large
-          // and to ensure consistent appearance across device sizes
-          ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 500),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // First Name Field - with overflow protection
-                TextField(
-                  controller: _firstNameController,
-                  style: GoogleFonts.inter(color: Colors.white),
-                  decoration: InputDecoration(
-                    labelText: 'First Name',
-                    labelStyle: GoogleFonts.inter(color: Colors.white70),
-                    enabledBorder: const UnderlineInputBorder(
-                      borderSide: BorderSide(color: Colors.white24),
-                    ),
-                    focusedBorder: const UnderlineInputBorder(
-                      borderSide: BorderSide(color: AppColors.gold),
-                    ),
-                    contentPadding: const EdgeInsets.symmetric(vertical: 8),
-                  ),
-                  cursorColor: AppColors.gold,
-                  textInputAction: TextInputAction.next,
-                  maxLength: 30, // Prevent excessively long names
-                  buildCounter: (context,
-                      {required currentLength, required isFocused, maxLength}) {
-                    return null; // Hide the counter
-                  },
-                ),
-                const SizedBox(height: 16),
-
-                // Last Name Field - with overflow protection
-                TextField(
-                  controller: _lastNameController,
-                  style: GoogleFonts.inter(color: Colors.white),
-                  decoration: InputDecoration(
-                    labelText: 'Last Name',
-                    labelStyle: GoogleFonts.inter(color: Colors.white70),
-                    enabledBorder: const UnderlineInputBorder(
-                      borderSide: BorderSide(color: Colors.white24),
-                    ),
-                    focusedBorder: const UnderlineInputBorder(
-                      borderSide: BorderSide(color: AppColors.gold),
-                    ),
-                    contentPadding: const EdgeInsets.symmetric(vertical: 8),
-                  ),
-                  cursorColor: AppColors.gold,
-                  textInputAction: TextInputAction.done,
-                  maxLength: 30, // Prevent excessively long names
-                  buildCounter: (context,
-                      {required currentLength, required isFocused, maxLength}) {
-                    return null; // Hide the counter
-                  },
-                  onSubmitted: (_) {
-                    // Auto-advance when user hits done on keyboard
+            NamePage(
+              firstNameController: _firstNameController,
+              lastNameController: _lastNameController,
+              onContinue: () {
+                // Only proceed if names are valid
                     if (_isNameValid()) {
                       _nextPage();
-                    }
-                  },
-                ),
-              ],
-            ),
-          ),
-
-          // Push content to bottom using an Expanded widget
-          const Expanded(child: SizedBox()),
-
-          // Progress indicator above the continue button
-          _buildProgressIndicator(6, currentPage),
-          const SizedBox(height: 16),
-          _buildContinueButton(
-            onPressed: _isNameValid() ? _nextPage : null,
-          ),
-          const SizedBox(
-              height: 40), // Extra space for keyboard and bottom safe area
-        ],
-      ),
-    );
-  }
-
-  Widget _buildYearPage() {
-    // Get the current page from the controller
-    final currentPage =
-        _pageController.hasClients ? (_pageController.page ?? 0).round() : 0;
-
-    final List<Map<String, dynamic>> yearOptions = [
-      {
-        'year': 'Freshman',
-        'description':
-            'First year of college. Life is good, parties are better.',
-      },
-      {
-        'year': 'Sophomore',
-        'description': 'Still figuring it out, but with more confidence.',
-      },
-      {
-        'year': 'Junior',
-        'description': 'Internships, leadership roles, and the halfway mark.',
-      },
-      {
-        'year': 'Senior',
-        'description':
-            'Job market about to cook us y\'all. AI gods, HAVE MERCY PLEASE!',
-      },
-      {
-        'year': 'Masters',
-        'description': 'I didn\'t forget you this time.',
-      },
-      {
-        'year': 'PhD',
-        'description':
-            'Please sign up for HIVE team at the Hive website at thehiveuni.com.',
-      },
-      {
-        'year': 'Non-Degree Seeking',
-        'description': 'I wish I had a better description for you.',
-      },
-    ];
-
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(
-          24, 32, 24, 24), // Reduced top padding from 64 to 32
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'What year are you in?',
-            style: GoogleFonts.outfit(
-              color: Colors.white,
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'We\'ll connect you with events and groups relevant to your year.',
-            style: GoogleFonts.inter(
-              color: Colors.white70,
-              fontSize: 16,
-            ),
-          ),
-          const SizedBox(height: 24),
-
-          // Direct selection of years with descriptions
-          Expanded(
-            child: ListView.builder(
-              physics: const ClampingScrollPhysics(),
-              itemCount: yearOptions.length,
-              itemBuilder: (context, index) {
-                final option = yearOptions[index];
-                final String year = option['year'] as String;
-                final bool isSelected = _selectedYear == year;
-
-                // Control the animation based on selection state
-                if (isSelected) {
-                  _yearDescriptionControllers[year]?.forward();
                 } else {
-                  _yearDescriptionControllers[year]?.reverse();
+                  // Provide improved error feedback
+                  HapticUtils.errorFeedback();
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Please enter both first and last name'),
+                      backgroundColor: Colors.redAccent,
+                      duration: Duration(seconds: 2),
+                    ),
+                  );
                 }
-
-                return GestureDetector(
-                  onTap: () {
-                    HapticFeedback.selectionClick();
-                    setState(() {
-                      _selectedYear = year;
-
-                      // Filter fields based on the selected year
-                      _filterFields('');
-
-                      // No auto-navigation - only use continue button
-                    });
-                  },
-                  child: Container(
-                    margin: const EdgeInsets.only(bottom: 12),
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: isSelected
-                          ? AppColors.gold.withOpacity(0.1)
-                          : const Color(0xFF1E1E1E),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: isSelected ? AppColors.gold : Colors.white24,
-                        width: isSelected ? 2 : 1,
-                      ),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Row(
-                          children: [
-                            // Selection indicator
-                            Container(
-                              width: 24,
-                              height: 24,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: isSelected
-                                    ? AppColors.gold
-                                    : Colors.transparent,
-                                border: Border.all(
-                                  color: isSelected
-                                      ? AppColors.gold
-                                      : Colors.white54,
-                                  width: 2,
-                                ),
-                              ),
-                              child: isSelected
-                                  ? const Center(
-                                      child: Icon(
-                                        Icons.check,
-                                        size: 16,
-                                        color: Colors.black,
-                                      ),
-                                    )
-                                  : null,
-                            ),
-                            const SizedBox(width: 16),
-                            // Year text
-                            Expanded(
-                              child: Text(
-                                year,
-                                style: TextStyle(
-                                  color: isSelected
-                                      ? AppColors.gold
-                                      : Colors.white,
-                                  fontSize: 16,
-                                  fontWeight: isSelected
-                                      ? FontWeight.w600
-                                      : FontWeight.normal,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-
-                        // Description text with proper transitions
-                        ClipRect(
-                          child: AnimatedBuilder(
-                            animation: _yearDescriptionControllers[year] ??
-                                AnimationController(
-                                    vsync: this, duration: Duration.zero),
-                            builder: (context, child) {
-                              final Animation<double> sizeAnimation =
-                                  _yearDescriptionControllers[year]?.drive(
-                                          CurveTween(
-                                              curve: Curves.easeInOut)) ??
-                                      const AlwaysStoppedAnimation(0.0);
-
-                              return SizeTransition(
-                                sizeFactor: sizeAnimation,
-                                axisAlignment: -1.0,
-                                child: Padding(
-                                  padding: const EdgeInsets.only(
-                                      left: 40, top: 8, right: 8, bottom: 4),
-                                  child: FadeTransition(
-                                    opacity: sizeAnimation,
-                                    child: Text(
-                                      option['description'] ?? '',
-                                      style: GoogleFonts.inter(
-                                        color: Colors.white70,
-                                        fontSize: 14,
-                                        height: 1.3,
-                                      ),
-                                      overflow: TextOverflow.visible,
-                                    ),
-                                  ),
-                                ),
-                              );
-                            },
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                );
               },
+              isNameValid: _isNameValid(),
+              progressIndicator: _buildProgressIndicator(6, 0),
             ),
-          ),
-
-          // Progress indicator above the continue button
-          _buildProgressIndicator(6, currentPage),
-          const SizedBox(height: 16),
-          _buildContinueButton(
-            onPressed: _selectedYear != null ? _nextPage : null,
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildFieldPage() {
-    // Get the current page from the controller
-    final currentPage =
-        _pageController.hasClients ? (_pageController.page ?? 0).round() : 0;
-    const totalPages = 6;
-
-    // Define the container background color once for consistency
-    const containerBgColor = Color(0xFF1E1E1E);
-
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(
-          24, 32, 24, 24), // Reduced top padding from 64 to 32
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'What are you studying?',
-            style: GoogleFonts.outfit(
-              color: Colors.white,
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'This helps us suggest relevant events and groups.',
-            style: GoogleFonts.inter(
-              color: Colors.white70,
-              fontSize: 16,
-            ),
-          ),
-          const SizedBox(height: 16),
-
-          // Search field for filtering
-          Container(
-            decoration: BoxDecoration(
-              color: containerBgColor,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.white24),
-            ),
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: TextField(
-              style: const TextStyle(color: Colors.white),
-              decoration: const InputDecoration(
-                fillColor: containerBgColor, // Match container background color
-                filled: true, // Enable background fill
-                border: InputBorder.none,
-                hintText: 'Search fields...',
-                hintStyle: TextStyle(color: Colors.white54),
-                icon: Icon(Icons.search, color: Colors.white54),
-                // Remove visible underline
-                enabledBorder: InputBorder.none,
-                focusedBorder: InputBorder.none,
-                disabledBorder: InputBorder.none,
-              ),
-              onChanged: _filterFields,
-            ),
-          ),
-          const SizedBox(height: 16),
-
-          // List of fields
-          Expanded(
-            child: ListView.builder(
-              physics: const ClampingScrollPhysics(),
-              itemCount: _filteredFields.length,
-              itemBuilder: (context, index) {
-                final field = _filteredFields[index];
-                final bool isSelected = _selectedMajor == field;
-
-                return GestureDetector(
-                  onTap: () {
-                    HapticFeedback.selectionClick();
-                    setState(() {
-                      _selectedMajor = field;
-                      _fieldSearchQuery = ''; // Clear search after selection
-                      _filteredFields = []; // Clear filtered list
-                      _searchFocusNode.unfocus(); // Dismiss keyboard
-                    });
+            YearPage(
+              selectedYear: _selectedYear,
+              years: _years,
+              onYearSelected: (year) {
+                setState(() => _selectedYear = year);
+              },
+              progressIndicator: _buildProgressIndicator(6, 1),
+              onContinue: () {
+                if (_selectedYear != null) {
                     _nextPage();
-                  },
-                  child: Container(
-                    margin: const EdgeInsets.only(bottom: 12),
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: isSelected
-                          ? AppColors.gold.withOpacity(0.1)
-                          : const Color(0xFF1E1E1E),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: isSelected ? AppColors.gold : Colors.white24,
-                        width: isSelected ? 2 : 1,
-                      ),
+                } else {
+                  HapticUtils.errorFeedback();
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Please select your current year'),
+                      backgroundColor: Colors.redAccent,
+                      duration: Duration(seconds: 2),
                     ),
-                    child: Row(
-                      children: [
-                        // Selection indicator
-                        Container(
-                          width: 24,
-                          height: 24,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: isSelected
-                                ? AppColors.gold
-                                : Colors.transparent,
-                            border: Border.all(
-                              color:
-                                  isSelected ? AppColors.gold : Colors.white54,
-                              width: 2,
-                            ),
-                          ),
-                          child: isSelected
-                              ? const Center(
-                                  child: Icon(
-                                    Icons.check,
-                                    size: 16,
-                                    color: Colors.black,
-                                  ),
-                                )
-                              : null,
-                        ),
-                        const SizedBox(width: 16),
-                        // Field name
-                        Expanded(
-                          child: Text(
-                            field,
-                            style: TextStyle(
-                              color: isSelected ? AppColors.gold : Colors.white,
-                              fontSize: 16,
-                              fontWeight: isSelected
-                                  ? FontWeight.w600
-                                  : FontWeight.normal,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                );
-              },
-            ),
-          ),
-
-          // Progress indicator and continue button
-          _buildProgressIndicator(6, currentPage),
-          const SizedBox(height: 16),
-          _buildContinueButton(
-            onPressed: _selectedMajor != null ? _nextPage : null,
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildResidencePage() {
-    // Get the current page from the controller
-    final currentPage =
-        _pageController.hasClients ? (_pageController.page ?? 0).round() : 0;
-    const totalPages = 6;
-
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(
-          24, 32, 24, 24), // Reduced top padding from 64 to 32
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Where do you live?',
-            style: GoogleFonts.outfit(
-              color: Colors.white,
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'We\'ll connect you with events and groups relevant to your location.',
-            style: GoogleFonts.inter(
-              color: Colors.white70,
-              fontSize: 16,
-            ),
-          ),
-          const SizedBox(height: 24),
-
-          // Direct selection of residences with descriptions
-          Expanded(
-            child: ListView.builder(
-              physics: const ClampingScrollPhysics(),
-              itemCount: _filteredResidences.length,
-              itemBuilder: (context, index) {
-                final residence = _filteredResidences[index];
-                final bool isSelected = _selectedResidence == residence;
-
-                return GestureDetector(
-                  onTap: () {
-                    HapticFeedback.selectionClick();
-                    setState(() {
-                      _selectedResidence = residence;
-                    });
-                  },
-                  child: Container(
-                    margin: const EdgeInsets.only(bottom: 12),
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: isSelected
-                          ? AppColors.gold.withOpacity(0.1)
-                          : const Color(0xFF1E1E1E),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: isSelected ? AppColors.gold : Colors.white24,
-                        width: isSelected ? 2 : 1,
-                      ),
-                    ),
-                    child: Row(
-                      children: [
-                        // Selection indicator
-                        Container(
-                          width: 24,
-                          height: 24,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: isSelected
-                                ? AppColors.gold
-                                : Colors.transparent,
-                            border: Border.all(
-                              color:
-                                  isSelected ? AppColors.gold : Colors.white54,
-                              width: 2,
-                            ),
-                          ),
-                          child: isSelected
-                              ? const Center(
-                                  child: Icon(
-                                    Icons.check,
-                                    size: 16,
-                                    color: Colors.black,
-                                  ),
-                                )
-                              : null,
-                        ),
-                        const SizedBox(width: 16),
-                        // Residence name
-                        Expanded(
-                          child: Text(
-                            residence,
-                            style: TextStyle(
-                              color: isSelected ? AppColors.gold : Colors.white,
-                              fontSize: 16,
-                              fontWeight: isSelected
-                                  ? FontWeight.w600
-                                  : FontWeight.normal,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                );
-              },
-            ),
-          ),
-
-          // Progress indicator above the continue button
-          _buildProgressIndicator(6, currentPage),
-          const SizedBox(height: 16),
-          _buildContinueButton(
-            onPressed: _selectedResidence != null ? _nextPage : null,
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildInterestsPage() {
-    // Get the current page from the controller
-    final currentPage =
-        _pageController.hasClients ? (_pageController.page ?? 0).round() : 0;
-    const totalPages = 6;
-
-    // Sort interests alphabetically and create a filtered state
-    final List<String> sortedInterests = [..._interestOptions]
-      ..sort((a, b) => a.compareTo(b));
-
-    final List<String> filteredInterests = _searchQuery.isEmpty
-        ? sortedInterests
-        : sortedInterests
-            .where((interest) =>
-                interest.toLowerCase().contains(_searchQuery.toLowerCase()) ||
-                _smartMatchInterest(interest, _searchQuery))
-            .toList();
-
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 32, 24, 24), // Reduced top padding
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Header section
-          Text(
-            'What are you into?',
-            style: GoogleFonts.outfit(
-              color: Colors.white,
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Select 5-10 interests to personalize your experience.',
-            style: GoogleFonts.inter(
-              color: Colors.white70,
-              fontSize: 16,
-            ),
-          ),
-          const SizedBox(height: 20),
-
-          // Subtle selection counter
-          Row(
-            children: [
-              Text(
-                '${_selectedInterests.length}/$_maxInterests',
-                style: GoogleFonts.inter(
-                  color: Colors.white,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(2),
-                  child: LinearProgressIndicator(
-                    value: _selectedInterests.length / _minInterests > 1
-                        ? 1
-                        : _selectedInterests.length / _minInterests,
-                    backgroundColor: Colors.white.withOpacity(0.1),
-                    valueColor: AlwaysStoppedAnimation<Color>(
-                      _selectedInterests.length >= _minInterests
-                          ? AppColors.success
-                          : Colors.white.withOpacity(0.5),
-                    ),
-                    minHeight: 3,
-                  ),
-                ),
-              ),
-              if (_selectedInterests.length < _minInterests) ...[
-                const SizedBox(width: 8),
-                Text(
-                  'Select ${_minInterests - _selectedInterests.length} more',
-                  style: GoogleFonts.inter(
-                    color: Colors.white54,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w400,
-                  ),
-                ),
-              ],
-            ],
-          ),
-
-          const SizedBox(height: 16),
-
-          // Interests grid in a scrollable container
-          Expanded(
-            child: Container(
-              decoration: BoxDecoration(
-                color: Colors.black.withOpacity(0.2),
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Made search less prevalent - smaller, more subtle search button that expands on tap
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-                    child: AnimatedSize(
-                      duration: const Duration(milliseconds: 300),
-                      curve: Curves.easeOutCubic,
-                      child: _searchQuery.isNotEmpty || _isSearchFocused
-                          ? Container(
-                              decoration: BoxDecoration(
-                                color: Colors.white.withOpacity(0.05),
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(
-                                    color: Colors.white.withOpacity(0.1)),
-                              ),
-                              child: TextField(
-                                controller: _searchController,
-                                focusNode: _searchFocusNode,
-                                style: GoogleFonts.inter(color: Colors.white),
-                                decoration: InputDecoration(
-                                  hintText: 'Search interests...',
-                                  hintStyle:
-                                      GoogleFonts.inter(color: Colors.white38),
-                                  border: InputBorder.none,
-                                  enabledBorder: InputBorder.none,
-                                  focusedBorder: InputBorder.none,
-                                  disabledBorder: InputBorder.none,
-                                  // Match container color
-                                  fillColor: Colors.white.withOpacity(0.05),
-                                  filled: true,
-                                  prefixIcon: Icon(Icons.search,
-                                      color: Colors.white.withOpacity(0.5),
-                                      size: 20),
-                                  contentPadding: const EdgeInsets.symmetric(
-                                      vertical: 12, horizontal: 16),
-                                  suffixIcon: _searchQuery.isNotEmpty
-                                      ? IconButton(
-                                          icon: Icon(Icons.clear,
-                                              color:
-                                                  Colors.white.withOpacity(0.5),
-                                              size: 18),
-                                          onPressed: () {
-                                            setState(() {
-                                              _searchQuery = '';
-                                              _searchController.clear();
-                                            });
-                                          },
-                                        )
-                                      : null,
-                                ),
-                                onChanged: (query) {
-                                  setState(() {
-                                    _searchQuery = query;
-                                  });
-                                },
-                              ),
-                            )
-                          : GestureDetector(
-                              onTap: () {
-                                setState(() {
-                                  _isSearchFocused = true;
-                                  Future.delayed(
-                                      const Duration(milliseconds: 100), () {
-                                    if (_searchFocusNode.canRequestFocus) {
-                                      _searchFocusNode.requestFocus();
-                                    }
-                                  });
-                                });
-                              },
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 12, vertical: 8),
-                                decoration: BoxDecoration(
-                                  color: Colors.white.withOpacity(0.05),
-                                  borderRadius: BorderRadius.circular(24),
-                                  border: Border.all(
-                                      color: Colors.white.withOpacity(0.1)),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(Icons.search,
-                                        color: Colors.white.withOpacity(0.5),
-                                        size: 16),
-                                    const SizedBox(width: 8),
-                                    Text(
-                                      'Search interests',
-                                      style: GoogleFonts.inter(
-                                        color: Colors.white38,
-                                        fontSize: 13,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                    ),
-                  ),
-
-                  // Interest chips with fluid layout using Wrap instead of GridView
-                  Expanded(
-                    child: filteredInterests.isEmpty
-                        ? Center(
-                            child: Text(
-                              'No matching interests found',
-                              style: GoogleFonts.inter(
-                                color: Colors.white54,
-                                fontSize: 14,
-                              ),
-                            ),
-                          )
-                        : SingleChildScrollView(
-                            physics: const ClampingScrollPhysics(),
-                            padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-                            child: Wrap(
-                              spacing:
-                                  6, // Reduced horizontal spacing between chips
-                              runSpacing:
-                                  8, // Reduced vertical spacing between lines
-                              alignment: WrapAlignment
-                                  .start, // Align items to start of each row
-                              children: filteredInterests.map((interest) {
-                                final isSelected =
-                                    _selectedInterests.contains(interest);
-
-                                // Enhanced animation chips with fluid sizing based on content
-                                return GestureDetector(
-                                  onTap: () {
-                                    _toggleInterest(interest);
-
-                                    // Add haptic feedback
-                                    HapticFeedback.selectionClick();
-                                  },
-                                  child: AnimatedContainer(
-                                    duration: const Duration(milliseconds: 300),
-                                    curve: Curves.easeOutCubic,
-                                    // Make chips smaller to fit at least 3 across
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 12, vertical: 6),
-                                    decoration: BoxDecoration(
-                                      color: isSelected
-                                          ? AppColors.gold.withOpacity(0.15)
-                                          : Colors.black.withOpacity(0.3),
-                                      borderRadius: BorderRadius.circular(16),
-                                      border: Border.all(
-                                        color: isSelected
-                                            ? AppColors.gold
-                                            : Colors.white.withOpacity(0.2),
-                                        width: isSelected ? 1.0 : 0.5,
-                                      ),
-                                      boxShadow: isSelected
-                                          ? [
-                                              BoxShadow(
-                                                color: AppColors.gold
-                                                    .withOpacity(0.15),
-                                                blurRadius: 5,
-                                                spreadRadius: 0,
-                                                offset: const Offset(0, 2),
-                                              )
-                                            ]
-                                          : null,
-                                    ),
-                                    // Smaller scale effect for selected items
-                                    transform: isSelected
-                                        ? (Matrix4.identity()..scale(1.05))
-                                        : Matrix4.identity(),
-                                    transformAlignment: Alignment.center,
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Text(
-                                          interest,
-                                          style: GoogleFonts.inter(
-                                            color: isSelected
-                                                ? AppColors.gold
-                                                : Colors.white,
-                                            fontSize: 12, // Smaller text size
-                                            fontWeight: isSelected
-                                                ? FontWeight.w600
-                                                : FontWeight.w400,
-                                            letterSpacing: 0.2,
-                                          ),
-                                        ),
-                                        // Animated checkmark on the same line as text
-                                        AnimatedContainer(
-                                          duration:
-                                              const Duration(milliseconds: 300),
-                                          width: isSelected ? 16 : 0,
-                                          curve: Curves.easeInOut,
-                                          child: AnimatedOpacity(
-                                            opacity: isSelected ? 1.0 : 0.0,
-                                            duration: const Duration(
-                                                milliseconds: 200),
-                                            child: const Padding(
-                                              padding: EdgeInsets.only(
-                                                  left: 4),
-                                              child: Icon(
-                                                Icons.check_circle,
-                                                color: AppColors.gold,
-                                                size: 12,
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                );
-                              }).toList(),
-                            ),
-                          ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-
-          const SizedBox(height: 24),
-
-          // Progress indicator above the continue button
-          _buildProgressIndicator(6, currentPage),
-          const SizedBox(height: 16),
-          _buildContinueButton(
-            onPressed:
-                _selectedInterests.length >= _minInterests ? _nextPage : null,
-          ),
-          
-          // Add skip option with defaults
-          const SizedBox(height: 12),
-          GestureDetector(
-            onTap: () {
-              _skipWithDefaultInterests();
-              HapticFeedback.lightImpact();
-            },
-            child: Padding(
-              padding: const EdgeInsets.all(8.0),
-              child: Text(
-                'Skip with recommended interests',
-                style: GoogleFonts.inter(
-                  color: Colors.white.withOpacity(0.6),
-                  fontSize: 14,
-                  decoration: TextDecoration.underline,
-                ),
-              ),
-            ),
-          ),
-          
-          const SizedBox(height: 24), // Extra space at bottom for mobile
-        ],
-      ),
-    );
-  }
-
-  Widget _buildAccountTierPage() {
-    // Get the current page from the controller
-    final currentPage =
-        _pageController.hasClients ? (_pageController.page ?? 0).round() : 0;
-    const totalPages = 6;
-
-    // Check user email domain for verified tier
-    final userEmail = _firebaseAuth.currentUser?.email ?? '';
-    final canSelectVerifiedTiers =
-        userEmail.toLowerCase().endsWith('buffalo.edu') || kDebugMode;
-
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 32, 24, 24), // Reduced top padding
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Choose your account type',
-            style: AppTheme.displayMedium,
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Select the account tier that best suits your needs',
-            style: AppTheme.bodyLarge.copyWith(
-              color: AppColors.textSecondary,
-            ),
-          ),
-
-          // Debug panel for testing - only visible in debug mode for developers
-          // Never shown to actual users
-
-          if (!canSelectVerifiedTiers)
-            Padding(
-              padding: const EdgeInsets.only(top: 12),
-              child: Text(
-                'Note: Verified tiers require a buffalo.edu email address',
-                style: AppTheme.bodyMedium.copyWith(
-                  color: AppColors.error,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ),
-
-          if (canSelectVerifiedTiers)
-            Padding(
-              padding: const EdgeInsets.only(top: 12),
-              child: Text(
-                'You\'ve been automatically verified with your buffalo.edu email',
-                style: AppTheme.bodyMedium.copyWith(
-                  color: AppColors.success,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ),
-          const SizedBox(height: 24),
-
-          // Account tier selection
-          Expanded(
-            child: SingleChildScrollView(
-              child: Column(
-                children: [
-                  _buildTierCard(
-                    title: 'Public',
-                    description: 'Basic access for everyone',
-                    benefits: [
-                      'Browse public events',
-                      'View club information',
-                    ],
-                    restrictions: [
-                      'No RSVP access',
-                      'Limited messaging',
-                    ],
-                    isSelected: _selectedTier == AccountTier.public,
-                    isExpanded: _expandedTier == AccountTier.public,
-                    tierIcon: Icons.public,
-                    iconColor: Colors.grey,
-                    onTap: () {
-                      // Add a small delay before state changes to avoid rendering issues
-                      Future.microtask(() {
-                        if (mounted) {
-                          setState(() {
-                            // Toggle expansion first
-                            if (_expandedTier == AccountTier.public) {
-                              _selectedTier = AccountTier.public;
-                              _expandedTier = null;
-                              // Add haptic feedback when selected
-                              HapticFeedback.mediumImpact();
-                            } else {
-                              _expandedTier = AccountTier.public;
-                            }
-                          });
-                        }
-                      });
-                    },
-                  ),
-                  const SizedBox(height: 20),
-                  _buildTierCard(
-                    title: 'Verified',
-                    description: canSelectVerifiedTiers
-                        ? 'You\'re already verified with your buffalo.edu email'
-                        : 'For UB students with buffalo.edu email',
-                    benefits: [
-                      'Full RSVP access',
-                      'Messaging with other verified users'
-                    ],
-                    isSelected: _selectedTier == AccountTier.verified,
-                    isExpanded: _expandedTier == AccountTier.verified,
-                    tierIcon: Icons.verified,
-                    iconColor:
-                        Colors.blue, // Always blue regardless of selection
-                    onTap: () {
-                      // Add a small delay before state changes to avoid rendering issues
-                      Future.microtask(() {
-                        // Only allow selection if user has buffalo.edu email
-                        if (canSelectVerifiedTiers) {
-                          if (mounted) {
-                            setState(() {
-                              // If already expanded, toggle selection instead of just collapsing
-                              if (_expandedTier == AccountTier.verified) {
-                                _selectedTier = AccountTier.verified;
-                                _expandedTier = null;
-                                // Add haptic feedback when selected
-                                HapticFeedback.mediumImpact();
-                              } else {
-                                _expandedTier = AccountTier.verified;
-                              }
-                            });
-                          }
-                        } else {
-                          // Show edu email input dialog
-                          _showEduEmailInputDialog();
-                        }
-                      });
-                    },
-                  ),
-                  const SizedBox(height: 20),
-                  _buildTierCard(
-                    title: 'Verified+',
-                    description: 'For student leaders and club officers',
-                    benefits: [
-                      'Create and manage events',
-                      'Promote your club',
-                      'Analytics dashboard'
-                    ],
-                    isSelected: _selectedTier == AccountTier.verifiedPlus,
-                    isExpanded: _expandedTier == AccountTier.verifiedPlus,
-                    tierIcon: Icons.verified,
-                    iconColor: AppColors.gold,
-                    onTap: () {
-                      // Only allow selection if user has buffalo.edu email
-                      if (canSelectVerifiedTiers) {
-                        // Use full screen for verified+ flow
-                        _showFullScreenVerifiedPlusFlow();
-                      } else {
-                        // Show edu email input dialog
-                        _showEduEmailInputDialog();
-                      }
-                    },
-                  ),
-                  // Add bottom padding to ensure content doesn't get cut off
-                  const SizedBox(height: 20),
-                ],
-              ),
-            ),
-          ),
-          // Progress indicator above the continue button
-          _buildProgressIndicator(6, currentPage),
-          const SizedBox(height: 16),
-          _buildContinueButton(
-            onPressed: () {
-              try {
-                debugPrint(
-                    'Continue button pressed for tier: ${_selectedTier.name}');
-                // Get current email state
-                final bool hasBuffaloEmail =
-                    _userEmail.toLowerCase().endsWith('buffalo.edu');
-
-                // Handle each tier explicitly
-                switch (_selectedTier) {
-                  case AccountTier.verifiedPlus:
-                    if (hasBuffaloEmail) {
-                      // Make sure club and role are selected (should be set from dialog)
-                      if (_selectedClub != null && _selectedClubRole != null) {
-                        // Complete onboarding directly - we've already collected club info
-                        _completeOnboardingAndNavigate();
-                      } else {
-                        // Something went wrong, prompt user to select their club
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content:
-                                Text('Please select your club and role first.'),
-                            duration: Duration(seconds: 2),
-                          ),
-                        );
-
-                        // Show the dialog again
-                        _showClubLeaderVerificationDialog();
-                      }
-                    } else {
-                      // Not a buffalo.edu email - enforce the rule
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text(
-                              'Verified+ tier requires a buffalo.edu email address.'),
-                          duration: Duration(seconds: 3),
-                        ),
-                      );
-                      setState(() {
-                        _selectedTier = AccountTier.public;
-                      });
-                      // Show verification dialog
-                      _showEduEmailInputDialog();
-                    }
-                    break;
-
-                  case AccountTier.verified:
-                    if (hasBuffaloEmail) {
-                      // Complete onboarding directly
-                      _completeOnboardingAndNavigate();
-                    } else {
-                      // Not a buffalo.edu email - enforce the rule
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text(
-                              'Verified tier requires a buffalo.edu email address.'),
-                          duration: Duration(seconds: 3),
-                        ),
-                      );
-                      setState(() {
-                        _selectedTier = AccountTier.public;
-                      });
-                      // Show verification dialog
-                      _showEduEmailInputDialog();
-                    }
-                    break;
-
-                  case AccountTier.public:
-                  default:
-                    // Complete onboarding for public tier - fixed to ensure it always processes
-                    debugPrint('Completing onboarding for public tier account');
-                    _completeOnboardingAndNavigate();
-                    break;
+                  );
                 }
-              } catch (e) {
-                // Log any errors
-                debugPrint('Error in account tier selection: $e');
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('An error occurred. Please try again.'),
-                    duration: Duration(seconds: 2),
-                  ),
-                );
-              }
-            },
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildTierCard({
-    required String title,
-    required String description,
-    List<String>? benefits,
-    List<String>? restrictions,
-    required bool isSelected,
-    required bool isExpanded,
-    required IconData tierIcon,
-    required Color iconColor,
-    required VoidCallback onTap,
-  }) {
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 300),
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: isSelected
-            ? AppColors.gold.withOpacity(0.1)
-            : const Color(0xFF1E1E1E),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: isSelected ? AppColors.gold : Colors.white24,
-          width: isSelected ? 2 : 1,
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          GestureDetector(
-            onTap: onTap,
-            behavior: HitTestBehavior.opaque,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                // Icon and title
-                Expanded(
-                  child: Row(
-                    children: [
-                      // No container for any icons
-                      Icon(
-                        tierIcon,
-                        color: title == 'Verified' ? Colors.blue : iconColor,
-                        size: 28,
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              title,
-                              style: GoogleFonts.inter(
-                                color:
-                                    isSelected ? AppColors.gold : Colors.white,
-                                fontSize: 18,
-                                fontWeight: FontWeight.w600,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            // Description with a height limit to prevent overflow
-                            SizedBox(
-                              height:
-                                  36, // Fixed height to prevent layout shifts
-                              child: Text(
-                                description,
-                                style: GoogleFonts.inter(
-                                  color: Colors.white70,
-                                  fontSize: 14,
-                                ),
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-
-                // Selection and expansion indicator
-                Container(
-                  width: 24,
-                  height: 24,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: isSelected ? AppColors.gold : Colors.transparent,
-                    border: Border.all(
-                      color: isSelected ? AppColors.gold : Colors.white24,
-                      width: isSelected ? 0 : 1,
-                    ),
-                  ),
-                  child: isSelected
-                      ? const Icon(
-                          Icons.check,
-                          size: 16,
-                          color: Colors.black,
-                        )
-                      : null,
-                ),
-              ],
-            ),
-          ),
-
-          // Expandable content
-          AnimatedContainer(
-            duration: const Duration(milliseconds: 300),
-            height: isExpanded ? (benefits?.length ?? 0) * 32.0 + 24 : 0,
-            curve: Curves.easeInOut,
-            child: AnimatedOpacity(
-              opacity: isExpanded ? 1.0 : 0.0,
-              duration: const Duration(milliseconds: 300),
-              child: SingleChildScrollView(
-                physics: const NeverScrollableScrollPhysics(),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const SizedBox(height: 16),
-                    const Divider(color: Colors.white24),
-                    const SizedBox(height: 8),
-                    if (benefits != null && benefits.isNotEmpty)
-                      ...benefits.map((benefit) => Padding(
-                            padding: const EdgeInsets.only(bottom: 8.0),
-                            child: Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Icon(
-                                  Icons.check_circle_outline,
-                                  color: Colors.green,
-                                  size: 18,
-                                ),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: Text(
-                                    benefit,
-                                    style: GoogleFonts.inter(
-                                      color: Colors.white,
-                                      fontSize: 14,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          )),
-                    if (restrictions != null && restrictions.isNotEmpty)
-                      ...restrictions.map((restriction) => Padding(
-                            padding: const EdgeInsets.only(bottom: 8.0),
-                            child: Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Icon(
-                                  Icons.cancel_outlined,
-                                  color: Colors.red,
-                                  size: 18,
-                                ),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: Text(
-                                    restriction,
-                                    style: GoogleFonts.inter(
-                                      color: Colors.white70,
-                                      fontSize: 14,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          )),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildClubDetailsPage() {
-    // Get the current page from the controller
-    final currentPage =
-        _pageController.hasClients ? (_pageController.page ?? 0).round() : 0;
-    const totalPages = 6;
-
-    // If _clubs is null or empty, start loading them now
-    if (_clubs.isEmpty && !_isLoadingClubs) {
-      Future.microtask(() => _fetchClubs());
-    }
-
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 64, 24, 24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Org details',
-            style: GoogleFonts.outfit(
-              color: Colors.white,
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Tell us about your leadership role',
-            style: GoogleFonts.inter(
-              color: Colors.white70,
-              fontSize: 16,
-            ),
-          ),
-          const SizedBox(height: 24),
-
-          // Club search with SearchSelect
-          _isLoadingClubs
-              ? const Center(
-                  child: Column(
-                    children: [
-                      CircularProgressIndicator(
-                        valueColor:
-                            AlwaysStoppedAnimation<Color>(AppColors.gold),
-                        strokeWidth: 2,
-                      ),
-                      SizedBox(height: 16),
-                      Text(
-                        'Loading clubs...',
-                        style: TextStyle(color: Colors.white70),
-                      ),
-                    ],
-                  ),
-                )
-              : _clubs.isEmpty
-                  ? Center(
-                      child: Column(
-                        children: [
-                          const Icon(
-                            Icons.error_outline,
-                            color: Colors.white70,
-                            size: 48,
-                          ),
-                          const SizedBox(height: 16),
-                          const Text(
-                            'No clubs found',
-                            style: TextStyle(color: Colors.white),
-                          ),
-                          const SizedBox(height: 8),
-                          ElevatedButton(
-                            onPressed: () {
-                              setState(() {
-                                _isLoadingClubs = true;
-                              });
-                              _fetchClubs();
-                            },
-                            child: const Text('Try Again'),
-                          ),
-                        ],
-                      ),
-                    )
-                  : SearchSelect(
-                      title: 'Club',
-                      selectedValue: _selectedClub != null && _clubs.isNotEmpty
-                          ? _clubs
-                              .firstWhere(
-                                (club) => club.id == _selectedClub,
-                                orElse: () => _clubs.first,
-                              )
-                              .name
-                          : null,
-                      placeholder: 'Search for your club...',
-                      options: _filteredClubs.map((club) => club.name).toList(),
-                      onSearch: _filterClubs,
-                      onSelect: (clubName) {
-                        // Find the club safely
-                        if (_filteredClubs.isNotEmpty) {
-                          final selectedClub = _filteredClubs.firstWhere(
-                            (club) => club.name == clubName,
-                            orElse: () => _filteredClubs.first,
-                          );
-                          setState(() {
-                            _selectedTier = AccountTier.verifiedPlus;
-                            _selectedClub = selectedClub.id;
-                            _selectedClubRole =
-                                'President'; // Assume president for new clubs
-                            _expandedTier = AccountTier.verifiedPlus;
-                          });
-                          HapticFeedback.selectionClick();
-                        }
-                      },
-                      onClear: () {
-                        setState(() {
-                          _selectedClub = null;
-                          _selectedClubRole = null;
-                        });
-                      },
-                    ),
-
-          const SizedBox(height: 24),
-
-          // Role selection dropdown (only visible if club is selected)
-          if (_selectedClub != null && !_isLoadingClubs) ...[
-            Text(
-              'Your role',
-              style: GoogleFonts.inter(
-                color: Colors.white,
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            const SizedBox(height: 8),
-            DropdownSelect(
-              title: 'Role',
-              selectedValue: _selectedClubRole,
-              placeholder: 'Select your role',
-              options: clubRoles,
-              onSelect: (value) {
-                setState(() {
-                  _selectedClubRole = value;
-                });
-              },
-              onClear: () {
-                setState(() {
-                  _selectedClubRole = null;
-                });
               },
             ),
-          ],
-
-          // Spacer to push information container to bottom when needed
-          const Spacer(),
-
-          // Information container
-          if (_selectedClub != null && !_isLoadingClubs) ...[
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: const Color(0xFF2A2A2A),
-                borderRadius: BorderRadius.circular(12),
-                border:
-                    Border.all(color: const Color(0xFFFFD700).withOpacity(0.3)),
-              ),
-              child: Row(
-                children: [
-                  Icon(
-                    Icons.info_outline,
-                    color: const Color(0xFFFFD700).withOpacity(0.7),
-                    size: 24,
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Text(
-                      'Your Verified+ account will require approval. We\'ll send you an email with next steps.',
-                      style: GoogleFonts.inter(
-                        color: Colors.white,
-                        fontSize: 14,
-                      ),
+            FieldPage(
+              selectedMajor: _selectedMajor,
+              filteredFields: _filteredFields,
+              onMajorSelected: (major) {
+                setState(() => _selectedMajor = major);
+              },
+              progressIndicator: _buildProgressIndicator(6, 2),
+              onContinue: () {
+                if (_selectedMajor != null) {
+                  _nextPage();
+                } else {
+                  HapticUtils.errorFeedback();
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Please select your major/field'),
+                      backgroundColor: Colors.redAccent,
+                      duration: Duration(seconds: 2),
                     ),
-                  ),
-                ],
-              ),
+                  );
+                }
+              },
+            ),
+            ResidencePage(
+              selectedResidence: _selectedResidence,
+              filteredResidences: _filteredResidences,
+              onResidenceSelected: (res) {
+                setState(() => _selectedResidence = res);
+              },
+              progressIndicator: _buildProgressIndicator(6, 3),
+              onContinue: () {
+                if (_selectedResidence != null) {
+                  _nextPage();
+                } else {
+                  HapticUtils.errorFeedback();
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Please select your residence'),
+                      backgroundColor: Colors.redAccent,
+                      duration: Duration(seconds: 2),
+                    ),
+                  );
+                }
+              },
+            ),
+            InterestsPage(
+              selectedInterests: _selectedInterests,
+              interestOptions: _interestOptions,
+              onInterestToggle: _toggleInterest,
+              progressIndicator: _buildProgressIndicator(6, 4),
+              onContinue: () {
+                if (_selectedInterests.length >= _minInterests) {
+                  _nextPage();
+                } else {
+                  HapticUtils.errorFeedback();
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Please select at least $_minInterests interests'),
+                      backgroundColor: Colors.redAccent,
+                      duration: const Duration(seconds: 2),
+                    ),
+                  );
+                }
+              },
+              minInterests: _minInterests,
+              maxInterests: _maxInterests,
+            ),
+            AccountTierPage(
+              selectedTier: _selectedTier,
+              availableTiers: AccountTier.values,
+              onTierSelected: (tier) {
+                setState(() => _selectedTier = tier);
+              },
+              progressIndicator: _buildProgressIndicator(6, 5),
+              onContinue: _completeOnboarding,
             ),
           ],
-
-          const SizedBox(height: 24),
-
-          // Progress indicator above the continue button
-          _buildProgressIndicator(6, currentPage),
-          const SizedBox(height: 16),
-
-          // Continue button with loading state
-          _isCompletingOnboarding
-              ? const Center(
-                  child: CircularProgressIndicator(
-                    valueColor: AlwaysStoppedAnimation<Color>(AppColors.gold),
-                    strokeWidth: 2,
-                  ),
-                )
-              : _buildContinueButton(
-                  onPressed: (_selectedClub != null &&
-                          _selectedClubRole != null &&
-                          !_isLoadingClubs)
-                      ? _completeOnboardingAndNavigate
-                      : null,
-                ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildTextField({
-    required TextEditingController controller,
-    required String label,
-    required Function(String) onSubmitted,
-  }) {
-    return TextField(
-      controller: controller,
-      style: const TextStyle(
-        color: Colors.white,
-        fontSize: 20,
-      ),
-      decoration: InputDecoration(
-        labelText: label,
-        labelStyle: TextStyle(
-          color: Colors.white.withOpacity(0.7),
-          fontSize: 16,
-        ),
-        enabledBorder: UnderlineInputBorder(
-          borderSide: BorderSide(
-            color: Colors.white.withOpacity(0.3),
-          ),
-        ),
-        focusedBorder: const UnderlineInputBorder(
-          borderSide: BorderSide(
-            color: Colors.white,
-            width: 2,
-          ),
-        ),
-        floatingLabelStyle: const TextStyle(
-          color: Colors.white,
-          fontSize: 16,
-          fontWeight: FontWeight.w500,
-        ),
-      ),
-      onSubmitted: onSubmitted,
-      textInputAction: TextInputAction.next,
-      cursorColor: Colors.white,
-    );
-  }
-
-  Widget _buildContinueButton({required VoidCallback? onPressed}) {
-    // Ensure the button is more visible even when disabled
-    final bool isEnabled = onPressed != null;
-
-    // Use GestureDetector to improve tap detection on mobile
-    return GestureDetector(
-      onTap: isEnabled
-          ? () {
-              debugPrint('Continue button tapped manually via GestureDetector');
-              onPressed();
-                        }
-          : null,
-      child: Container(
-        width: double.infinity,
-        height: 56,
-        margin: const EdgeInsets.only(
-            bottom: 16), // Add bottom margin for better spacing on mobile
-        // Make the touch target larger for better mobile tapping
-        padding: const EdgeInsets.symmetric(vertical: 8),
-        child: Material(
-          color: Colors.transparent,
-          child: InkWell(
-            onTap: isEnabled
-                ? () {
-                    debugPrint('Continue button tapped via InkWell');
-                    onPressed();
-                                    }
-                : null,
-            borderRadius: BorderRadius.circular(30),
-            splashColor: Colors.black.withOpacity(0.3),
-            highlightColor: Colors.black.withOpacity(0.1),
-            child: Ink(
-              decoration: BoxDecoration(
-                color: isEnabled ? Colors.white : Colors.white.withOpacity(0.5),
-                borderRadius: BorderRadius.circular(30),
-              ),
-              child: const Center(
-                child: Text(
-                  'Continue',
-                  style: TextStyle(
-                    color: Colors.black,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-            ),
-          ),
         ),
       ),
     );
-  }
-
-  // Fix the _getEmojiForInterest method
-  // ignore: unused_element
-  String _getEmojiForInterest(String interestName) {
-    return '';
-  }
-
-  // Fetch clubs for Verified+ accounts with optimized space-based implementation
-  Future<void> _fetchClubs() async {
-    setState(() {
-      _isLoadingClubs = true;
-    });
-
-    try {
-      // Check if we already have clubs in the local state
-      if (_clubs.isNotEmpty) {
-        debugPrint('Using existing clubs in state, skipping Firestore query');
-        setState(() {
-          _isLoadingClubs = false;
-        });
-        return;
-      }
-
-      // Try to use ClubService first, which has caching built-in
-      await ClubService.initialize();
-      final cachedClubs = ClubService.getAllClubs();
-
-      if (cachedClubs.isNotEmpty) {
-        debugPrint('Using ${cachedClubs.length} clubs from ClubService cache');
-        setState(() {
-          _clubs = cachedClubs;
-          _filteredClubs = cachedClubs;
-          _isLoadingClubs = false;
-        });
-        return;
-      }
-
-      // If no cached clubs, query Firestore with strict limits
-      final firestore = FirebaseFirestore.instance;
-
-      debugPrint(
-          'Fetching clubs using optimized collectionGroup query with limit');
-
-      // Use a much smaller limit for onboarding - we just need a representative sample
-      // This dramatically reduces read operations
-      final snapshot = await firestore
-          .collectionGroup('spaces')
-          .orderBy('name')
-          .limit(50) // Reduced from 500 to 50
-          .get(const GetOptions(
-              source: Source.serverAndCache)); // Allow cached data
-
-      debugPrint(
-          'Found ${snapshot.docs.length} clubs in collectionGroup "spaces"');
-
-      // Process results
-      final List<Club> allClubs = [];
-      for (final doc in snapshot.docs) {
-        try {
-          final data = doc.data();
-          // Extract space type from the path for proper categorization
-          final pathParts = doc.reference.path.split('/');
-          final spaceType = pathParts.length > 2 ? pathParts[1] : 'general';
-
-          final club = Club(
-            id: doc.id,
-            name: data['name'] ?? 'Unknown Club',
-            description: data['description'] ?? '',
-            category: data['category'] ?? spaceType,
-            memberCount:
-                data['memberCount'] ?? data['metrics']?['memberCount'] ?? 0,
-            status: data['status'] ?? 'active',
-            icon: Icons.group,
-            createdAt:
-                (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
-            updatedAt:
-                (data['updatedAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
-            imageUrl: data['imageUrl'] ?? data['bannerUrl'],
-            bannerUrl: data['bannerUrl'],
-            tags: (data['tags'] as List<dynamic>?)
-                    ?.map((tag) => tag.toString())
-                    .toList() ??
-                [],
-          );
-
-          allClubs.add(club);
-        } catch (e) {
-          debugPrint('Error parsing club document ${doc.id}: $e');
-        }
-      }
-
-      // Sort clubs by name
-      allClubs.sort((a, b) => a.name.compareTo(b.name));
-
-      debugPrint('Total clubs found: ${allClubs.length}');
-
-      // If no clubs found, add demo clubs
-      if (allClubs.isEmpty) {
-        debugPrint('No clubs found, adding demo clubs');
-        allClubs.addAll(_getDemoClubs());
-      }
-
-      // Store clubs in ClubService for future use
-      for (final club in allClubs) {
-        // Use the correct method from ClubService
-        ClubService.addClubToCache(club);
-      }
-
-      if (mounted) {
-        setState(() {
-          _clubs = allClubs;
-          _filteredClubs = allClubs;
-          _isLoadingClubs = false;
-        });
-      }
-    } catch (e) {
-      debugPrint('Error fetching clubs: $e');
-
-      // Fallback to demo clubs if everything fails
-      final demoClubs = _getDemoClubs();
-
-      if (mounted) {
-        setState(() {
-          _clubs = demoClubs;
-          _filteredClubs = demoClubs;
-          _isLoadingClubs = false;
-        });
-      }
-    }
-  }
-
-  // Helper method to create demo clubs as fallback
-  List<Club> _getDemoClubs() {
-    return [
-      Club(
-        id: 'club-cs',
-        name: 'Computer Science Club',
-        description:
-            'A club for students interested in computer science and programming.',
-        category: 'Academic',
-        memberCount: 150,
-        status: 'active',
-        icon: Icons.computer,
-        createdAt: DateTime.now(),
-        updatedAt: DateTime.now(),
-      ),
-      Club(
-        id: 'club-engineering',
-        name: 'Engineering Society',
-        description: 'For all engineering students to network and collaborate.',
-        category: 'Academic',
-        memberCount: 200,
-        status: 'active',
-        icon: Icons.build,
-        createdAt: DateTime.now(),
-        updatedAt: DateTime.now(),
-      ),
-      Club(
-        id: 'club-business',
-        name: 'Business Leadership Association',
-        description:
-            'Developing future business leaders through networking and skill building.',
-        category: 'Professional',
-        memberCount: 120,
-        status: 'active',
-        icon: Icons.business,
-        createdAt: DateTime.now(),
-        updatedAt: DateTime.now(),
-      ),
-      Club(
-        id: 'club-arts',
-        name: 'Art & Design Club',
-        description:
-            'A space for creative students to share their work and collaborate.',
-        category: 'Arts',
-        memberCount: 80,
-        status: 'active',
-        icon: Icons.palette,
-        createdAt: DateTime.now(),
-        updatedAt: DateTime.now(),
-      ),
-      Club(
-        id: 'club-music',
-        name: 'Music Society',
-        description:
-            'For students passionate about music performance and appreciation.',
-        category: 'Arts',
-        memberCount: 95,
-        status: 'active',
-        icon: Icons.music_note,
-        createdAt: DateTime.now(),
-        updatedAt: DateTime.now(),
-      ),
-    ];
   }
 
   Widget _buildProgressIndicator(int totalPages, int currentPage) {
@@ -3173,14 +1441,21 @@ class _OnboardingProfilePageState extends ConsumerState<OnboardingProfilePage>
           final isCurrentPage = index == currentPage;
 
           return AnimatedContainer(
-            duration: const Duration(milliseconds: 400),
+            duration: const Duration(milliseconds: 350),
             curve: Curves.easeOutCubic,
             width: isCurrentPage ? 24 : 8,
             height: 8,
             margin: const EdgeInsets.symmetric(horizontal: 4),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(4),
-              color: isActive ? const Color(0xFFFFD700) : Colors.white24,
+              color: isActive ? Colors.white : Colors.white24,
+              boxShadow: isActive ? [
+                BoxShadow(
+                  color: Colors.white.withOpacity(0.2),
+                  blurRadius: 4,
+                  spreadRadius: 0,
+                ),
+              ] : null,
             ),
           );
         }),
@@ -4770,10 +3045,17 @@ class _OnboardingProfilePageState extends ConsumerState<OnboardingProfilePage>
     });
   }
 
-  // Helper method to check if name fields are valid
+  // Check if the name fields are valid
   bool _isNameValid() {
-    return _firstNameController.text.trim().isNotEmpty &&
-        _lastNameController.text.trim().isNotEmpty;
+    // Simple validation: Both fields need to have content
+    final firstName = _firstNameController.text.trim();
+    final lastName = _lastNameController.text.trim();
+    
+    // Debug output to help diagnose the issue
+    debugPrint('Name validation check: First name: "$firstName", Last name: "$lastName"');
+    debugPrint('Is name valid? ${firstName.isNotEmpty && lastName.isNotEmpty}');
+    
+    return firstName.isNotEmpty && lastName.isNotEmpty;
   }
 
   // Handle back button press
@@ -4925,6 +3207,57 @@ class _OnboardingProfilePageState extends ConsumerState<OnboardingProfilePage>
     
     // Continue to next page
     _nextPage();
+  }
+
+  // Add the missing _fetchClubs method
+  Future<void> _fetchClubs() async {
+    setState(() {
+      _isLoadingClubs = true;
+    });
+    try {
+      final firestore = FirebaseFirestore.instance;
+      final snapshot = await firestore
+          .collectionGroup('spaces')
+          .orderBy('name')
+          .limit(50)
+          .get(const GetOptions(source: Source.serverAndCache));
+      final List<Club> allClubs = [];
+      for (final doc in snapshot.docs) {
+        try {
+          final data = doc.data();
+          final pathParts = doc.reference.path.split('/');
+          final spaceType = pathParts.length > 2 ? pathParts[1] : 'general';
+          final club = Club(
+            id: doc.id,
+            name: data['name'] ?? 'Unknown Club',
+            description: data['description'] ?? '',
+            category: data['category'] ?? spaceType,
+            memberCount: data['memberCount'] ?? data['metrics']?['memberCount'] ?? 0,
+            status: data['status'] ?? 'active',
+            icon: Icons.group,
+            createdAt: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
+            updatedAt: (data['updatedAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
+            imageUrl: data['imageUrl'] ?? data['bannerUrl'],
+            bannerUrl: data['bannerUrl'],
+            tags: (data['tags'] as List<dynamic>?)?.map((tag) => tag.toString()).toList() ?? [],
+          );
+          allClubs.add(club);
+        } catch (e) {
+          debugPrint('Error parsing club document \\${doc.id}: \\$e');
+        }
+      }
+      allClubs.sort((a, b) => a.name.compareTo(b.name));
+      setState(() {
+        _clubs = allClubs;
+        _filteredClubs = allClubs;
+        _isLoadingClubs = false;
+      });
+    } catch (e) {
+      debugPrint('Error fetching clubs: \\$e');
+      setState(() {
+        _isLoadingClubs = false;
+      });
+    }
   }
 }
 

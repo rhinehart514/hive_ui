@@ -5,9 +5,13 @@ import 'package:hive_ui/core/navigation/routes.dart';
 import 'package:hive_ui/core/navigation/deep_link_service.dart';
 import 'package:hive_ui/core/navigation/transitions.dart';
 import 'package:hive_ui/core/navigation/not_found_screen.dart';
+import 'package:hive_ui/core/navigation/async_navigation_service.dart';
+import 'package:hive_ui/core/navigation/error_display_page.dart';
 import 'package:hive_ui/shell.dart';
 import 'package:hive_ui/models/space.dart';
 import 'package:hive_ui/features/profile/presentation/pages/verification_admin_page.dart';
+import 'package:hive_ui/features/messaging/domain/entities/message_attachment.dart';
+import 'package:hive_ui/features/examples/presentation/pages/card_lifecycle_demo_page.dart';
 
 // Page imports
 import 'package:hive_ui/pages/landing_page.dart';
@@ -49,25 +53,64 @@ import 'package:hive_ui/main.dart'; // Import main to access appInitializationPr
 import 'package:hive_ui/features/auth/providers/user_preferences_provider.dart';
 import 'package:hive_ui/features/events/presentation/pages/check_in_success_page.dart';
 import 'package:hive_ui/features/auth/presentation/pages/privacy_policy_page.dart';
+import 'package:hive_ui/features/messaging/presentation/screens/attachment_viewer_screen.dart';
+import 'package:hive_ui/features/auth/presentation/pages/splash_gate_page.dart';
+
+/// Provider for the DeepLinkService
+final deepLinkServiceProvider = Provider<DeepLinkService>((ref) {
+  return DeepLinkService(ref);
+});
+
+/// Provider for storing pending deep links
+final pendingDeepLinkProvider = StateProvider<String?>((ref) => null);
+
+/// Provider for tracking authentication state changes to check for pending deep links
+final deepLinkAuthListenerProvider = Provider<void>((ref) {
+  // Watch auth changes to trigger deep link processing
+  ref.watch(auth_features.authStateProvider);
+  
+  // Check for and process any pending deep links
+  final pendingDeepLink = ref.read(pendingDeepLinkProvider);
+  if (pendingDeepLink != null) {
+    // Get the deep link service
+    final deepLinkService = ref.read(deepLinkServiceProvider);
+    
+    // Clear the pending deep link
+    ref.read(pendingDeepLinkProvider.notifier).state = null;
+    
+    // Process the pending deep link
+    deepLinkService.handleIncomingLink(pendingDeepLink);
+  }
+});
 
 /// Provider for the app router
+@override
 final routerProvider = Provider<GoRouter>((ref) {
   // Listenable that refreshes the router when auth state changes
   final authStateListenable = GoRouterRefreshStream(
     ref.watch(auth_features.authStateProvider.stream),
   );
 
-  // Get the navigator key from our deep link service
-  final navigatorKey = ref.watch(navigatorKeyProvider);
+  // Watch auth changes to handle deep links (won't affect the result but will trigger the provider)
+  ref.watch(deepLinkAuthListenerProvider);
+
+  // Get the navigator key from our rootNavigatorKeyProvider
+  final navigatorKey = ref.watch(rootNavigatorKeyProvider);
 
   // Get the current path notifier for listening to route changes
   final currentPathNotifier = ValueNotifier<String?>(null);
+  
+  // Initialize DeepLinkService when router is created
+  final deepLinkService = ref.watch(deepLinkServiceProvider);
+  Future.microtask(() async {
+    await deepLinkService.initialize();
+  });
 
   return GoRouter(
     initialLocation: AppRoutes.landing,
     debugLogDiagnostics: true,
     refreshListenable: authStateListenable, 
-    navigatorKey: navigatorKey, // Use the navigator key from our deep link service
+    navigatorKey: navigatorKey, // Use the root navigator key
     observers: [
       // Add an observer to update the current path
       _GoRouterObserver(currentPathNotifier),
@@ -81,7 +124,15 @@ final routerProvider = Provider<GoRouter>((ref) {
       return NotFoundScreen(path: state.uri.path);
     },
     routes: [
-       // Auth routes - outside the shell
+      // Root route - splash screen
+      GoRoute(
+        path: '/',
+        pageBuilder: _buildPageTransition(
+          (context, state) => const SplashGatePage(),
+          type: TransitionType.fade,
+        ),
+      ),
+      // Landing page - separate from root
       GoRoute(
         path: AppRoutes.landing,
         pageBuilder: _buildPageTransition(
@@ -89,6 +140,7 @@ final routerProvider = Provider<GoRouter>((ref) {
           type: TransitionType.fade,
         ),
       ),
+      // Auth routes - outside the shell
       GoRoute(
         path: AppRoutes.signIn,
         pageBuilder: _buildPageTransition(
@@ -474,6 +526,14 @@ final routerProvider = Provider<GoRouter>((ref) {
         ),
       ),
       GoRoute(
+        path: CardLifecycleDemoPage.routeName,
+        name: 'card_lifecycle_demo',
+        pageBuilder: _buildPageTransition(
+          (context, state) => const CardLifecycleDemoPage(),
+          type: TransitionType.cupertinoPush,
+        ),
+      ),
+      GoRoute(
          path: AppRoutes.adminVerificationRequests,
          name: 'admin_verification_requests',
          pageBuilder: _buildPageTransition(
@@ -544,6 +604,27 @@ final routerProvider = Provider<GoRouter>((ref) {
                type: TransitionType.cupertinoModal,
              ),
            ),
+      GoRoute(
+        path: 'attachment_viewer',
+        name: 'attachment_viewer',
+        pageBuilder: _buildPageTransition(
+          (context, state) {
+            final args = state.extra as Map<String, dynamic>?;
+            if (args == null || args['attachment'] == null) {
+              return const ErrorDisplayPage(message: 'Missing attachment data');
+            }
+            
+            final attachment = args['attachment'] as MessageAttachment;
+            final allAttachments = args['allAttachments'] as List<MessageAttachment>?;
+            
+            return AttachmentViewerScreen(
+              attachment: attachment,
+              allAttachments: allAttachments,
+            );
+          },
+          type: TransitionType.cupertinoPush,
+        ),
+      ),
          ],
        ),
       GoRoute(

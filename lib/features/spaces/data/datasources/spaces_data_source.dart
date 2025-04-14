@@ -1,7 +1,10 @@
+import 'dart:io';
+
 import 'package:hive_ui/features/spaces/data/models/space_model.dart';
 import 'package:hive_ui/features/spaces/domain/entities/space_entity.dart';
 import 'package:hive_ui/features/spaces/domain/entities/space_member_entity.dart';
-import 'package:hive_ui/models/event.dart';
+import 'package:hive_ui/models/space.dart';
+import 'package:hive_ui/models/event.dart' as event_model;
 
 /// Abstract definition of a data source for spaces
 abstract class SpacesDataSource {
@@ -59,7 +62,12 @@ abstract class SpacesDataSource {
   Future<bool> isSpaceNameTaken(String name);
 
   /// Get events for a space
-  Future<List<Event>> getSpaceEvents(String spaceId);
+  /// 
+  /// [spaceId] The ID of the space
+  /// [limit] Maximum number of events to return
+  /// 
+  /// Returns a list of events for the space
+  Future<List<event_model.Event>> getSpaceEvents(String spaceId, {int limit = 10});
 
   /// Get the chat ID associated with a space
   /// Returns null if no chat exists for this space

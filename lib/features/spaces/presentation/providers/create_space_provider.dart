@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_ui/features/auth/domain/repositories/auth_repository.dart';
 import 'package:hive_ui/features/auth/presentation/providers/auth_provider.dart';
@@ -8,7 +9,10 @@ import 'package:hive_ui/features/spaces/domain/entities/space_member_entity.dart
 import 'package:hive_ui/features/spaces/domain/repositories/spaces_repository.dart';
 import 'package:hive_ui/features/spaces/domain/usecases/create_space_usecase.dart';
 import 'package:hive_ui/features/spaces/presentation/providers/spaces_repository_provider.dart';
-import 'package:hive_ui/models/event.dart';
+import 'package:hive_ui/models/event.dart' as model_event;
+import 'package:hive_ui/features/events/domain/entities/event.dart' as event_entity;
+import 'package:hive_ui/features/events/data/mappers/event_mapper.dart';
+import 'package:hive_ui/models/space.dart';
 
 /// Adapter class to bridge between SpacesRepository interfaces
 /// @deprecated Consider using SpacesRepository directly
@@ -83,8 +87,8 @@ class SpaceRepositoryAdapter implements SpacesRepository {
   }
   
   @override
-  Future<List<SpaceEntity>> getTrendingSpaces({int limit = 20}) {
-    return _spacesRepository.getTrendingSpaces(/* limit: limit */);
+  Future<List<SpaceEntity>> getTrendingSpaces() {
+    return _spacesRepository.getTrendingSpaces();
   }
   
   @override
@@ -130,13 +134,27 @@ class SpaceRepositoryAdapter implements SpacesRepository {
   }
   
   @override
-  Future<bool> isSpaceNameTaken(String name) {
-    return _spacesRepository.isSpaceNameTaken(name);
+  Future<List<event_entity.Event>> getSpaceEvents(String spaceId, {int limit = 10}) async {
+    return _spacesRepository.getSpaceEvents(spaceId, limit: limit);
+  }
+  
+  // New separate method for UI that needs model events
+  Future<List<model_event.Event>> getModelSpaceEvents(String spaceId, {int limit = 10}) async {
+    try {
+      // Fetch domain events from the repository
+      final domainEvents = await _spacesRepository.getSpaceEvents(spaceId, limit: limit);
+      
+      // Map domain events to model events
+      return domainEvents.map(EventMapper.toModel).toList();
+    } catch (e) {
+      debugPrint('Error getting space events in adapter: $e');
+      return [];
+    }
   }
   
   @override
-  Future<List<Event>> getSpaceEvents(String spaceId) {
-    return _spacesRepository.getSpaceEvents(spaceId);
+  Future<bool> isSpaceNameTaken(String name) {
+    return _spacesRepository.isSpaceNameTaken(name);
   }
   
   @override
@@ -319,6 +337,12 @@ class SpaceRepositoryAdapter implements SpacesRepository {
 final spaceRepositoryAdapterProvider = Provider<SpacesRepository>((ref) {
   final spacesRepository = ref.watch(spacesRepositoryProvider);
   return SpaceRepositoryAdapter(spacesRepository);
+});
+
+/// Provider for model events that can be used in UI components
+final spaceEventsModelProvider = FutureProvider.family<List<model_event.Event>, String>((ref, spaceId) async {
+  final adapter = ref.watch(spaceRepositoryAdapterProvider) as SpaceRepositoryAdapter;
+  return adapter.getModelSpaceEvents(spaceId);
 });
 
 /// Provider for CreateSpaceUseCase

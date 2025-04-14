@@ -62,6 +62,77 @@ class SignalRepositoryImpl implements SignalRepository {
       priority: 1,
       data: const {'statType': 'student_events'},
     ),
+    // Space Heat card
+    SignalContent(
+      id: 'space_heat_1',
+      title: 'CS Club is on fire 🔥',
+      description: '14 new members in the past hour. Activity is trending upward rapidly.',
+      type: SignalType.spaceHeat,
+      priority: 5,
+      data: const {'spaceId': 'cs_club', 'memberDelta': 14, 'timePeriod': 'hour'},
+    ),
+    // Space Heat card 2
+    SignalContent(
+      id: 'space_heat_2',
+      title: 'Design Union is heating up',
+      description: '8 new posts in the last 3 hours with high engagement.',
+      type: SignalType.spaceHeat,
+      priority: 4,
+      data: const {'spaceId': 'design_union', 'postDelta': 8, 'timePeriod': '3 hours'},
+    ),
+    // Ritual Launch card
+    SignalContent(
+      id: 'ritual_launch_1',
+      title: 'Weekly Photo Challenge',
+      description: 'Post your best campus shot. Most reactions wins a feature spot.',
+      type: SignalType.ritualLaunch,
+      priority: 5,
+      data: const {
+        'ritualId': 'photo_challenge_week_42',
+        'ritualType': 'challenge',
+        'expiresInHours': 48,
+      },
+    ),
+    // Ritual Launch card 2
+    SignalContent(
+      id: 'ritual_launch_2',
+      title: 'Campus Confession Booth',
+      description: 'Share your anonymous campus confession. Most reactions get promoted.',
+      type: SignalType.ritualLaunch,
+      priority: 4,
+      data: const {
+        'ritualId': 'confession_booth_oct',
+        'ritualType': 'anonymous',
+        'expiresInHours': 24,
+      },
+    ),
+    // Friend Motion card 
+    SignalContent(
+      id: 'friend_motion_1',
+      title: 'Your Friends Are Moving',
+      description: '5 people you know are headed to Jazz Club meetup tonight.',
+      type: SignalType.friendMotion,
+      priority: 3,
+      data: const {
+        'eventId': 'jazz_club_meetup',
+        'friendCount': 5,
+        'friendIds': ['user1', 'user2', 'user3', 'user4', 'user5'],
+      },
+    ),
+    // Friend Motion card 2
+    SignalContent(
+      id: 'friend_motion_2',
+      title: 'Friend Activity Spike',
+      description: '3 connections just joined Blockchain Society in the last day.',
+      type: SignalType.friendMotion,
+      priority: 4,
+      data: const {
+        'spaceId': 'blockchain_society',
+        'friendCount': 3,
+        'friendIds': ['user7', 'user8', 'user9'],
+        'timePeriod': 'day',
+      },
+    ),
   ];
   
   @override
@@ -104,20 +175,14 @@ class SignalRepositoryImpl implements SignalRepository {
 
   @override
   Future<bool> logSignalContentView(String contentId) async {
-    // Simulate network delay
-    await Future.delayed(const Duration(milliseconds: 200));
-    
-    // In a real implementation, this would log to analytics
+    // In a real implementation, this would log to analytics or backend
     debugPrint('Signal content viewed: $contentId');
     return true;
   }
 
   @override
   Future<bool> logSignalContentTap(String contentId) async {
-    // Simulate network delay
-    await Future.delayed(const Duration(milliseconds: 200));
-    
-    // In a real implementation, this would log to analytics
+    // In a real implementation, this would log to analytics or backend
     debugPrint('Signal content tapped: $contentId');
     return true;
   }

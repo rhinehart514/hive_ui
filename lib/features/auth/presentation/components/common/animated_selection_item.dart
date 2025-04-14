@@ -1,0 +1,169 @@
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'package:hive_ui/features/auth/presentation/utils/animation_constants.dart';
+import 'package:hive_ui/features/auth/presentation/utils/haptic_utils.dart';
+
+/// A selection item with Apple-style animations for onboarding and other selection UIs
+class AnimatedSelectionItem extends StatefulWidget {
+  /// The text to display
+  final String text;
+  
+  /// Whether this item is selected
+  final bool isSelected;
+  
+  /// Function to call when item is tapped
+  final VoidCallback onTap;
+  
+  /// Optional custom style for the item when selected
+  final TextStyle? selectedTextStyle;
+  
+  /// Optional custom style for the item when not selected
+  final TextStyle? unselectedTextStyle;
+  
+  /// Border radius - defaults to 24
+  final double borderRadius;
+  
+  /// Horizontal padding - defaults to 20
+  final double horizontalPadding;
+  
+  /// Vertical padding - defaults to 12
+  final double verticalPadding;
+  
+  /// Whether to show a subtle glow effect when selected
+  final bool enableGlow;
+
+  const AnimatedSelectionItem({
+    Key? key,
+    required this.text,
+    required this.isSelected,
+    required this.onTap,
+    this.selectedTextStyle,
+    this.unselectedTextStyle,
+    this.borderRadius = 24,
+    this.horizontalPadding = 20,
+    this.verticalPadding = 12,
+    this.enableGlow = true,
+  }) : super(key: key);
+
+  @override
+  State<AnimatedSelectionItem> createState() => _AnimatedSelectionItemState();
+}
+
+class _AnimatedSelectionItemState extends State<AnimatedSelectionItem> with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  late final Animation<double> _scaleAnimation;
+  bool _isPressed = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      duration: AnimationConstants.quickDuration,
+      vsync: this,
+    );
+    
+    _scaleAnimation = Tween<double>(
+      begin: 1.0,
+      end: 0.97,
+    ).animate(
+      CurvedAnimation(
+        parent: _controller,
+        curve: AnimationConstants.interactiveCurve,
+      ),
+    );
+  }
+  
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _handleTapDown(TapDownDetails details) {
+    if (!_isPressed) {
+      _isPressed = true;
+      _controller.forward();
+    }
+  }
+
+  void _handleTapUp(TapUpDetails details) {
+    if (_isPressed) {
+      _isPressed = false;
+      _controller.reverse();
+      HapticUtils.selectionClick();
+      widget.onTap();
+    }
+  }
+
+  void _handleTapCancel() {
+    if (_isPressed) {
+      _isPressed = false;
+      _controller.reverse();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final defaultSelectedTextStyle = GoogleFonts.inter(
+      color: Colors.black,
+      fontWeight: FontWeight.w600,
+      fontSize: 15,
+    );
+    
+    final defaultUnselectedTextStyle = GoogleFonts.inter(
+      color: Colors.white,
+      fontWeight: FontWeight.w600,
+      fontSize: 15,
+    );
+
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, child) {
+        return Transform.scale(
+          scale: _scaleAnimation.value,
+          child: child,
+        );
+      },
+      child: GestureDetector(
+        onTapDown: _handleTapDown,
+        onTapUp: _handleTapUp,
+        onTapCancel: _handleTapCancel,
+        child: AnimatedContainer(
+          duration: AnimationConstants.standardDuration,
+          curve: AnimationConstants.standardCurve,
+          padding: EdgeInsets.symmetric(
+            horizontal: widget.horizontalPadding,
+            vertical: widget.verticalPadding,
+          ),
+          decoration: BoxDecoration(
+            color: widget.isSelected 
+                ? AnimationConstants.selectedItemColor 
+                : AnimationConstants.unselectedItemColor,
+            borderRadius: BorderRadius.circular(widget.borderRadius),
+            border: Border.all(
+              color: widget.isSelected 
+                ? Colors.transparent 
+                : AnimationConstants.unselectedBorderColor,
+              width: 1,
+            ),
+            boxShadow: (widget.isSelected && widget.enableGlow) ? [
+              BoxShadow(
+                color: AnimationConstants.selectedGlowColor,
+                blurRadius: 8,
+                spreadRadius: 0,
+                offset: const Offset(0, 2),
+              ),
+            ] : null,
+          ),
+          child: Text(
+            widget.text,
+            style: widget.isSelected 
+                ? (widget.selectedTextStyle ?? defaultSelectedTextStyle)
+                : (widget.unselectedTextStyle ?? defaultUnselectedTextStyle),
+          ),
+        ),
+      ),
+    );
+  }
+} 

@@ -7,6 +7,8 @@ import 'package:hive_ui/core/cache/cache_providers.dart';
 import 'package:hive_ui/features/analytics/data/models/analytics_event_model.dart';
 import 'package:hive_ui/features/analytics/data/models/user_metrics_model.dart';
 import 'package:hive_ui/features/analytics/domain/entities/analytics_event_entity.dart';
+import 'package:hive_ui/features/analytics/domain/entities/user_insights.dart';
+import 'package:hive_ui/features/analytics/domain/failures/analytics_failures.dart';
 
 /// Repository interface for analytics operations
 abstract class AnalyticsRepository {
@@ -29,6 +31,9 @@ abstract class AnalyticsRepository {
   
   /// Export user analytics data
   Future<Map<String, dynamic>> exportUserAnalytics(String userId);
+
+  /// Get insights for a user
+  Future<UserInsights> getUserInsights(String userId);
 }
 
 /// Implementation of the analytics repository
@@ -234,6 +239,53 @@ class FirebaseAnalyticsRepository implements AnalyticsRepository {
         'error': 'Failed to export analytics',
         'timestamp': DateTime.now().toIso8601String(),
       };
+    }
+  }
+
+  @override
+  Future<UserInsights> getUserInsights(String userId) async {
+    try {
+      // Get user metrics
+      final metrics = await getUserMetrics(userId);
+      
+      // Get recent events (up to 100 for analysis)
+      final events = await getUserEvents(userId, limit: 100);
+      
+      // Calculate insights
+      final totalPosts = events.where((e) => 
+        e.eventType == AnalyticsEventType.contentCreate.value).length;
+        
+      final totalComments = events.where((e) => 
+        e.eventType == AnalyticsEventType.contentReaction.value).length;
+        
+      final totalLikes = events.where((e) => 
+        e.eventType == AnalyticsEventType.contentReaction.value && 
+        e.properties['type'] == 'like').length;
+        
+      // Calculate average engagement (likes + comments per post)
+      final averageEngagement = totalPosts > 0 
+        ? (totalLikes + totalComments) / totalPosts 
+        : 0.0;
+      
+      // Get last active time from most recent event
+      final lastActive = events.isNotEmpty 
+        ? events.first.timestamp 
+        : DateTime.now();
+      
+      return UserInsights(
+        userId: userId,
+        totalPosts: totalPosts,
+        totalComments: totalComments,
+        totalLikes: totalLikes,
+        averageEngagement: averageEngagement,
+        lastActive: lastActive,
+      );
+    } catch (e) {
+      debugPrint('⚠️ Error getting user insights: $e');
+      throw EventsLoadFailure(
+        userId: userId,
+        originalException: e,
+      );
     }
   }
 }

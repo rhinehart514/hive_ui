@@ -12,6 +12,8 @@ import '../../services/event_service.dart';
 import '../../providers/profile_provider.dart';
 import '../../providers/reposted_events_provider.dart';
 import '../../components/optimized_image.dart';
+import '../../components/card_lifecycle.dart';
+import '../../components/card_lifecycle_wrapper.dart';
 import 'repost_options_card.dart';
 import 'package:go_router/go_router.dart';
 import '../../providers/feed_provider.dart';
@@ -307,14 +309,77 @@ class _HiveEventCardState extends ConsumerState<HiveEventCard>
 
   @override
   Widget build(BuildContext context) {
-    // Log view when visible
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!_hasLoggedView) {
-        _logViewInteraction();
-        _hasLoggedView = true;
-      }
-    });
+    // Ensure view is logged only once per card instance
+    if (!_hasLoggedView) {
+      _hasLoggedView = true;
+      _logViewInteraction();
+    }
 
+    // Create the card widget with all its content
+    Widget cardContent = _buildCardContent();
+    
+    // Apply the lifecycle wrapper based on the event's creation date and state
+    // Use lastModified as a proxy for creation date if available, otherwise fall back to startDate
+    final DateTime creationTime = widget.event.lastModified ?? widget.event.startDate;
+    final bool isActive = !widget.event.isCancelled && 
+                          widget.event.currentState != EventLifecycleState.archived;
+    
+    // Use the appropriate lifecycle state based on the event's properties
+    final CardLifecycleState lifecycleState = _determineCardLifecycleState();
+
+    // Apply the lifecycle visualization directly with CardLifecycleWrapper
+    return CardLifecycleWrapper(
+      createdAt: creationTime,
+      state: lifecycleState,
+      autoAge: isActive,
+      showIndicator: false, // Don't show the indicator (we have EventLifecycleBadge)
+      child: cardContent,
+    );
+  }
+  
+  // Determine the appropriate card lifecycle state based on event properties
+  CardLifecycleState _determineCardLifecycleState() {
+    // If event is cancelled or archived, use archived state
+    if (widget.event.isCancelled || widget.event.currentState == EventLifecycleState.archived) {
+      return CardLifecycleState.archived;
+    }
+    
+    // For completed events, use old state
+    if (widget.event.currentState == EventLifecycleState.completed) {
+      return CardLifecycleState.old;
+    }
+    
+    // For draft events, use aging state (less visibility)
+    if (widget.event.currentState == EventLifecycleState.draft) {
+      return CardLifecycleState.aging;
+    }
+    
+    // For live events, use fresh state (maximum visibility)
+    if (widget.event.currentState == EventLifecycleState.live) {
+      return CardLifecycleState.fresh;
+    }
+    
+    // For published events, base it on lastModified/startDate
+    final DateTime now = DateTime.now();
+    final DateTime creationTime = widget.event.lastModified ?? widget.event.startDate;
+    final Duration age = now.difference(creationTime);
+    
+    // Fresh if less than 24 hours old
+    if (age <= const Duration(hours: 24)) {
+      return CardLifecycleState.fresh;
+    }
+    
+    // Aging if less than 3 days old
+    if (age <= const Duration(days: 3)) {
+      return CardLifecycleState.aging;
+    }
+    
+    // Otherwise, old
+    return CardLifecycleState.old;
+  }
+  
+  // Extracted method to build the card content without lifecycle wrapper
+  Widget _buildCardContent() {
     // Check if the card is reposted
     final isReposted = widget.isRepost && widget.repostedBy != null;
     final isQuote = isReposted && widget.repostType == RepostContentType.quote && widget.quoteText != null && widget.quoteText!.isNotEmpty;

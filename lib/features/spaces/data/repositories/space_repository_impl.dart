@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:developer';
 
 import 'package:hive_ui/features/spaces/data/datasources/spaces_data_source.dart';
 import 'package:hive_ui/features/spaces/domain/entities/space_entity.dart';
@@ -9,6 +10,8 @@ import 'package:hive_ui/models/event.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:hive_ui/features/spaces/data/models/space_model.dart';
+import 'package:hive_ui/features/events/domain/entities/event.dart' as entity;
+import 'package:hive_ui/features/events/data/mappers/event_mapper.dart';
 
 /// Implementation of the SpacesRepository interface that wraps legacy SpaceRepository
 /// This implementation is used to implement the new SpacesRepository interface while
@@ -282,12 +285,13 @@ class SpaceRepositoryImpl implements SpacesRepository {
   }
 
   @override
-  Future<List<Event>> getSpaceEvents(String spaceId) async {
+  Future<List<entity.Event>> getSpaceEvents(String spaceId, {int limit = 10}) async {
     try {
-      final events = await _dataSource.getSpaceEvents(spaceId);
-      return events;
-    } catch (e) {
-      debugPrint('Error getting space events: $e');
+      final events = await _dataSource.getSpaceEvents(spaceId, limit: limit);
+      // Convert to domain entities
+      return events.map(EventMapper.toEntity).toList();
+    } catch (e, s) {
+      debugPrint('Error getting events for space $spaceId: $e');
       return [];
     }
   }

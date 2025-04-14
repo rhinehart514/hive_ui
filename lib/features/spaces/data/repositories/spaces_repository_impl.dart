@@ -4,10 +4,13 @@ import 'package:hive_ui/features/spaces/data/datasources/spaces_data_source.dart
 import 'package:hive_ui/features/spaces/domain/entities/space_entity.dart';
 import 'package:hive_ui/features/spaces/domain/repositories/spaces_repository.dart';
 import 'package:flutter/foundation.dart';
-import 'package:hive_ui/models/event.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:hive_ui/features/spaces/domain/entities/space_member_entity.dart';
+import 'package:hive_ui/core/services/firebase/firebase_services.dart';
+import 'package:hive_ui/features/events/domain/entities/event.dart' as event_entity;
+import 'package:hive_ui/features/events/data/mappers/event_mapper.dart';
+import 'package:hive_ui/models/event.dart' as event_model;
 
 /// Implementation of the SpacesRepository interface
 class SpacesRepositoryImpl implements SpacesRepository {
@@ -309,11 +312,13 @@ class SpacesRepositoryImpl implements SpacesRepository {
   }
 
   @override
-  Future<List<Event>> getSpaceEvents(String spaceId) async {
+  Future<List<event_entity.Event>> getSpaceEvents(String spaceId, {int limit = 10}) async {
     try {
-      return await _dataSource.getSpaceEvents(spaceId);
+      final events = await _dataSource.getSpaceEvents(spaceId, limit: limit);
+      // Convert model events to domain entities
+      return events.map(EventMapper.toEntity).toList();
     } catch (e) {
-      debugPrint('Error getting space events: $e');
+      debugPrint('Error getting events for space $spaceId: $e');
       return [];
     }
   }

@@ -82,4 +82,22 @@ enum SignalType {
   
   /// Community update
   communityUpdate,
+  
+  /// Time marker for morning
+  timeMorning,
+  
+  /// Time marker for afternoon
+  timeAfternoon,
+  
+  /// Time marker for evening
+  timeEvening,
+  
+  /// Space with high activity (heat)
+  spaceHeat,
+  
+  /// Ritual Launch notification
+  ritualLaunch,
+  
+  /// Friend motion notification
+  friendMotion,
 } 

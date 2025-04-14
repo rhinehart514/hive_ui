@@ -14,6 +14,7 @@ import 'package:hive_ui/models/space_recommendation_simple.dart';
 import 'package:hive_ui/models/hive_lab_item_simple.dart';
 import 'package:hive_ui/models/hive_lab_item.dart' as lab_models;
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:hive_ui/features/feed/domain/failures/feed_failures.dart';
 
 /// Provider for the feed repository
 final feedRepositoryProvider = Provider<FeedRepository>((ref) {
@@ -22,9 +23,10 @@ final feedRepositoryProvider = Provider<FeedRepository>((ref) {
 
 /// Stream Provider for the live feed data
 /// Provides a stream of combined feed items (Events, Reposts, etc.)
-final feedStreamProvider = StreamProvider<List<Map<String, dynamic>>>((ref) {
+final feedStreamProvider =
+    StreamProvider.autoDispose<List<Map<String, dynamic>>>((ref) {
   final repository = ref.watch(feedRepositoryProvider);
-  return repository.getFeedStream();
+  return _buildFeedEventStream(repository, ref);
 });
 
 /// Provider for the feed use case
@@ -57,6 +59,12 @@ final upcomingEventsProvider = Provider<List<Event>>((ref) {
 /// Provider for personalized "For You" events
 final forYouEventsProvider = Provider<List<Event>>((ref) {
   return ref.watch(feedStateProvider).forYouEvents;
+});
+
+/// Recommended spaces
+final recommendedSpacesProvider =
+    FutureProvider.autoDispose<List<RecommendedSpace>>((ref) async {
+  return _fetchSpaceRecommendations(ref);
 });
 
 /// Controller for the feed state
@@ -293,7 +301,14 @@ class FeedStateNotifier extends StateNotifier<FeedState> {
   Future<List<RecommendedSpace>> _fetchSpaceRecommendations() async {
     try {
       final feedRepository = _ref.read(feedRepositoryProvider);
-      return await feedRepository.fetchSpaceRecommendations();
+      final result = await feedRepository.fetchSpaceRecommendations();
+      return result.fold(
+        (failure) {
+          debugPrint('Space recommendations fetch failure: ${failure.message}');
+          return <RecommendedSpace>[];
+        },
+        (recommendations) => recommendations,
+      );
     } catch (e) {
       debugPrint('Error fetching space recommendations: $e');
       return [];
@@ -311,4 +326,33 @@ class FeedStateNotifier extends StateNotifier<FeedState> {
     // In a real implementation, these would come from a repository
     return [];
   }
+}
+
+/// Builds a stream of feed events
+Stream<List<Map<String, dynamic>>> _buildFeedEventStream(
+    FeedRepository repository, Ref ref) async* {
+  try {
+    final stream = repository.getFeedStream();
+    
+    await for (final result in stream) {
+      yield result.fold(
+        (failure) {
+          debugPrint('Feed stream failure: ${failure.message}');
+          return <Map<String, dynamic>>[];
+        },
+        (data) => data,
+      );
+    }
+  } catch (e, stackTrace) {
+    debugPrint('Unexpected error in feed stream: $e');
+    debugPrintStack(stackTrace: stackTrace);
+    yield <Map<String, dynamic>>[];
+  }
+}
+
+/// Fetches space recommendations
+Future<List<RecommendedSpace>> _fetchSpaceRecommendations(Ref ref) async {
+  final getFeedUseCase = ref.read(getFeedUseCaseProvider);
+  final result = await getFeedUseCase.getSpaceRecommendations();
+  return result;
 }

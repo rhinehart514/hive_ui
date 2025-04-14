@@ -1,5 +1,7 @@
 # HIVE UI
 
+[![Flutter Test](https://github.com/your-username/hive_ui/actions/workflows/flutter-test.yml/badge.svg)](https://github.com/your-username/hive_ui/actions/workflows/flutter-test.yml)
+
 A beautiful, modern Flutter application for event discovery and social networking.
 
 ## Overview

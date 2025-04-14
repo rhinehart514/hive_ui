@@ -17,7 +17,7 @@ import '../../domain/providers/feed_domain_providers.dart';
 
 import '../widgets/stream_feed_list.dart';
 import '../widgets/shimmer_event_card.dart';
-import '../widgets/signal_strip.dart';
+import '../components/feed_strip.dart';
 import '../../../../models/reposted_event.dart';
 
 /// A optimized feed page that follows clean architecture principles
@@ -115,33 +115,50 @@ class _FeedPageState extends ConsumerState<FeedPage> with SingleTickerProviderSt
 
     try {
       // Call repository method directly
-      final success = await ref.read(feedRepositoryProvider).rsvpToEvent(event.id, newRsvpStatus);
-
-      if (success) {
-        // Show confirmation - stream will update the actual state
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-                newRsvpStatus
-                    ? 'You\'re going to ${event.title}!'
-                    : 'You\'ve canceled your RSVP for ${event.title}'
-              ),
-              backgroundColor: newRsvpStatus ? Colors.green : Colors.orange,
-            ),
-          );
-        }
-      } else {
-         // Handle failure - maybe revert optimistic update
-         if (mounted) {
+      final result = await ref.read(feedRepositoryProvider).rsvpToEvent(event.id, newRsvpStatus);
+      
+      // Use fold to handle the Either type
+      result.fold(
+        (failure) {
+          // Handle failure case
+          if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
-                content: Text('Failed to update RSVP for ${event.title}'),
+                content: Text('Failed to update RSVP: ${failure.message}'),
                 backgroundColor: Colors.red,
               ),
             );
           }
-      }
+        },
+        (success) {
+          // Handle success case
+          if (success) {
+            // Show confirmation - stream will update the actual state
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(
+                    newRsvpStatus
+                        ? 'You\'re going to ${event.title}!'
+                        : 'You\'ve canceled your RSVP for ${event.title}'
+                  ),
+                  backgroundColor: newRsvpStatus ? Colors.green : Colors.orange,
+                ),
+              );
+            }
+          } else {
+            // Handle operation failure
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('Failed to update RSVP for ${event.title}'),
+                  backgroundColor: Colors.red,
+                ),
+              );
+            }
+          }
+        },
+      );
     } catch (e) {
       debugPrint('Error handling RSVP via repository: $e');
       // Handle error - maybe revert optimistic update
@@ -177,31 +194,47 @@ class _FeedPageState extends ConsumerState<FeedPage> with SingleTickerProviderSt
 
     ref.read(feedRepositoryProvider).repostEvent(
       eventId: event.id,
-        comment: comment,
+      comment: comment,
       // userId is handled internally by the repository implementation now
-    ).then((repostedEvent) {
-      if (repostedEvent != null) {
-        // Success: Show confirmation
-        if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-              content: Text('Reposted \'${event.title}\''),
-              backgroundColor: AppColors.primary,
-            ),
-          );
-        }
-         // Analytics or further actions can go here
-      } else {
-        // Failure: Show error
-        if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-              content: Text('Failed to repost \'${event.title}\''),
-          backgroundColor: Colors.red,
-        ),
+    ).then((result) {
+      result.fold(
+        (failure) {
+          // Handle failure case
+          debugPrint('Repost failure: ${failure.message}');
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Failed to repost: ${failure.message}'),
+                backgroundColor: Colors.red,
+              ),
+            );
+          }
+        },
+        (repostedEvent) {
+          if (repostedEvent != null) {
+            // Success: Show confirmation
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('Reposted \'${event.title}\''),
+                  backgroundColor: AppColors.primary,
+                ),
+              );
+            }
+            // Analytics or further actions can go here
+          } else {
+            // Failure: Show error
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('Failed to repost \'${event.title}\''),
+                  backgroundColor: Colors.red,
+                ),
+              );
+            }
+          }
+        },
       );
-    }
-      }
     }).catchError((error) {
        debugPrint('Error handling repost via repository: $error');
         if (mounted) {
@@ -493,68 +526,74 @@ class _FeedPageState extends ConsumerState<FeedPage> with SingleTickerProviderSt
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: _buildAppBar(),
-      body: RefreshIndicator(
-        key: _refreshIndicatorKey,
-        onRefresh: _refreshFeed,
-        backgroundColor: AppColors.surface,
-        color: AppColors.primary,
-        child: feedStreamAsyncValue.when(
-          data: (feedItems) {
-            // Data is loaded, display the StreamFeedList
-            if (feedItems.isEmpty) {
-              // Handle empty feed state
-              return const Center(
-                child: Text(
-                  'No events or reposts found.',
-                  style: TextStyle(color: AppColors.textSecondary),
-                ),
-              );
-            }
-            return StreamFeedList(
-              feedItems: feedItems,
-              onNavigateToEventDetails: _navigateToEventDetails,
-              onRsvpToEvent: _handleRsvpClick,
-              onRepost: _handleRepost,
-            );
-          },
-          loading: () {
-            // Show shimmer loading indicators while data is loading
-            return ListView.builder(
-              itemCount: 5, // Show a few shimmer cards
-              itemBuilder: (context, index) => const ShimmerEventCard(),
-            );
-          },
-          error: (error, stackTrace) {
-            // Show error message
-            debugPrint('❌ FEED PAGE STREAM ERROR: $error\n$stackTrace');
-            return Center(
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                   mainAxisAlignment: MainAxisAlignment.center,
-                   children: [
-                     const Icon(Icons.error_outline, color: Colors.red, size: 48),
-                     const SizedBox(height: 16),
-                     Text(
-                       'Failed to load feed: $error',
-                       textAlign: TextAlign.center,
-                       style: const TextStyle(color: AppColors.textSecondary),
-                     ),
-                     const SizedBox(height: 16),
-                     ElevatedButton(
-                      onPressed: _refreshFeed,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.primary,
-                        foregroundColor: AppColors.textPrimary,
+      body: Column(
+        children: [
+          // Add the FeedStrip at the top
+          const Padding(
+            padding: EdgeInsets.only(top: 8, bottom: 8),
+            child: FeedStrip(
+              height: 125.0,
+              maxCards: 5,
+              showHeader: true,
+              useGlassEffect: true,
+            ),
+          ),
+          // Wrap the main content in an Expanded widget so it fills the remaining space
+          Expanded(
+            child: RefreshIndicator(
+              key: _refreshIndicatorKey,
+              onRefresh: _refreshFeed,
+              backgroundColor: AppColors.surface,
+              color: AppColors.primary,
+              child: feedStreamAsyncValue.when(
+                data: (feedItems) {
+                  // Data is loaded, display the StreamFeedList
+                  if (feedItems.isEmpty) {
+                    // Handle empty feed state
+                    return const Center(
+                      child: Text(
+                        'No events or reposts found.',
+                        style: TextStyle(color: AppColors.textSecondary),
                       ),
-                      child: const Text('Retry'),
-                     )
-                   ],
-                ),
+                    );
+                  }
+                  return StreamFeedList(
+                    feedItems: feedItems,
+                    onNavigateToEventDetails: _navigateToEventDetails,
+                    onRsvpToEvent: _handleRsvpClick,
+                    onRepost: _handleRepost,
+                  );
+                },
+                loading: () {
+                  // Show shimmer loading indicators while data is loading
+                  return ListView.builder(
+                    itemCount: 5, // Show a few shimmer cards
+                    itemBuilder: (context, index) => const ShimmerEventCard(),
+                  );
+                },
+                error: (error, stack) {
+                  // Handle error state
+                  return Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Text(
+                          'Error loading feed',
+                          style: TextStyle(color: AppColors.textSecondary),
+                        ),
+                        const SizedBox(height: 16),
+                        ElevatedButton(
+                          onPressed: () => _refreshFeed(),
+                          child: const Text('Try Again'),
+                        ),
+                      ],
+                    ),
+                  );
+                },
               ),
-            );
-          },
-        ),
+            ),
+          ),
+        ],
       ),
     );
   }

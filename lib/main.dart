@@ -22,6 +22,7 @@ import 'package:hive_ui/services/optimized_data_service.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:hive_ui/features/events/events_module.dart';
 import 'dart:async';
+import 'package:uni_links/uni_links.dart'; // For deep link handling
 
 // Firebase
 import 'package:firebase_core/firebase_core.dart';
@@ -40,7 +41,7 @@ import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:hive_ui/stubs/firebase_windows_stubs.dart' as stubs; // Used for error handling on Windows
 
 // Core
-import 'package:hive_ui/core/navigation/router_config.dart';
+import 'package:hive_ui/core/navigation/router_config.dart' as router;
 import 'package:hive_ui/core/navigation/routes.dart';
 import 'package:hive_ui/core/navigation/deep_link_service.dart';
 
@@ -87,6 +88,7 @@ void main() async {
   
   // Keep splash screen until initialization completes
   FlutterNativeSplash.preserve(widgetsBinding: widgetsBinding);
+  debugPrint('🚀 SPLASH: Native splash screen preserved during initialization');
   
   // Handle Windows-specific plugins
   _handleWindowsPlugins();
@@ -146,6 +148,19 @@ void main() async {
   // Initialize SharedPreferences
   final sharedPreferences = await SharedPreferences.getInstance();
   
+  // Listen for platform channel messages for deep links
+  // This ensures the platform channels are initialized early
+  try {
+    debugPrint('🔗 Setting up early platform channel listeners for deep links...');
+    // Simply calling getInitialLink() will initialize the platform channels
+    // We don't need to handle the result here as the DeepLinkService will do that
+    await getInitialLink();
+    debugPrint('✅ Platform channels initialized for deep links');
+  } catch (e) {
+    debugPrint('⚠️ Error initializing platform channels for deep links: $e');
+    // Non-critical error, continue with app startup
+  }
+  
   // Launch the app with proper riverpod provider scope
   runApp(
     ProviderScope(
@@ -157,6 +172,16 @@ void main() async {
       child: Phoenix(child: const HiveApp()),
     ),
   );
+  
+  // Make sure splash screen is always removed, even if initialization fails
+  Future.delayed(const Duration(seconds: 5), () {
+    debugPrint('🚨 SPLASH: Safety timeout reached, checking if splash screen still active');
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      // This runs after the first frame is rendered, ensuring UI is visible
+      FlutterNativeSplash.remove();
+      debugPrint('🚨 SPLASH: Forcing splash screen removal after safety timeout');
+    });
+  });
 }
 
 // Initialize Firebase and related services - optimized with parallelization
@@ -341,6 +366,34 @@ Future<void> _initializeCrashlytics(Ref ref) async {
 
 // Replace the appInitializationProvider with updated version that includes AppInitializer
 final appInitializationProvider = FutureProvider<bool>((ref) async {
+  // Create a completer to handle timeout
+  final completer = Completer<bool>();
+  
+  // Add a timeout to ensure we don't hang indefinitely
+  Timer(const Duration(seconds: 10), () {
+    if (!completer.isCompleted) {
+      debugPrint('⏱️ App initialization timed out after 10 seconds');
+      // Remove splash screen in case of timeout
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        // This runs after the first frame is rendered, ensuring UI is visible
+        FlutterNativeSplash.remove();
+        debugPrint('🚨 SPLASH: Splash screen removed after initialization timeout');
+      });
+      completer.complete(false);
+    }
+  });
+  
+  // Run the actual initialization
+  _runInitialization(ref, completer);
+  
+  // Return the future that will complete either from initialization or timeout
+  return completer.future;
+});
+
+// Separated initialization logic
+void _runInitialization(Ref ref, Completer<bool> completer) async {
+  if (completer.isCompleted) return;
+  
   try {
     debugPrint('Starting app initialization...');
 
@@ -418,19 +471,32 @@ final appInitializationProvider = FutureProvider<bool>((ref) async {
     performanceService.stopTrace('app_initialization');
     
     // Hide splash screen after initialization is complete
-    FlutterNativeSplash.remove();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      // This runs after the first frame is rendered, ensuring UI is visible
+      FlutterNativeSplash.remove();
+      debugPrint('🎉 SPLASH: Splash screen removed after successful initialization');
+    });
     
-    return true;
+    if (!completer.isCompleted) {
+      completer.complete(true);
+    }
+
   } catch (e) {
     debugPrint('Error during app initialization: $e');
     
     // Hide splash screen even if there's an error
-    FlutterNativeSplash.remove();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      // This runs after the first frame is rendered, ensuring UI is visible
+      FlutterNativeSplash.remove();
+      debugPrint('⚠️ SPLASH: Splash screen removed after initialization error');
+    });
     
     // Let the app continue with limited functionality
-    return false;
+    if (!completer.isCompleted) {
+      completer.complete(false);
+    }
   }
-});
+}
 
 // Helper to initialize profile in background
 Future<void> _initializeProfileInBackground(Ref ref, bool isOffline) async {
@@ -648,7 +714,7 @@ class _HiveAppState extends ConsumerState<HiveApp> {
     // Original implementation from HiveApp's build method
     // Watch app initialization state
     final appInitializationState = ref.watch(appInitializationProvider);
-    final routeState = ref.watch(routerProvider);
+    final routeState = ref.watch(router.routerProvider);
     
     return appInitializationState.when(
       data: (status) {
