@@ -28,7 +28,6 @@ import 'package:hive_ui/features/auth/presentation/components/onboarding/field_p
 import 'package:hive_ui/features/auth/presentation/components/onboarding/residence_page.dart';
 import 'package:hive_ui/features/auth/presentation/components/onboarding/interests_page.dart';
 import 'package:hive_ui/features/auth/presentation/components/onboarding/account_tier_page.dart';
-import 'package:hive_ui/features/auth/presentation/utils/haptic_utils.dart';
 
 class OnboardingProfilePage extends ConsumerStatefulWidget {
   final bool skipToDefaults;
@@ -1223,8 +1222,8 @@ class _OnboardingProfilePageState extends ConsumerState<OnboardingProfilePage>
   void _nextPage() {
     debugPrint('_nextPage called - navigating to next onboarding page');
 
-    // Add better haptic feedback for page transitions
-    HapticUtils.pageTransition(forward: true);
+    // Add stronger haptic feedback for better physical confirmation
+    HapticFeedback.mediumImpact();
 
     // Special case for non-degree seeking students to skip field selection
     if (_pageController.page?.round() == 1 &&
@@ -1260,9 +1259,7 @@ class _OnboardingProfilePageState extends ConsumerState<OnboardingProfilePage>
       return;
     }
 
-    // Add better haptic feedback for backward navigation
-    HapticUtils.pageTransition(forward: false);
-    
+    HapticFeedback.lightImpact();
     _pageController.previousPage(
       duration: const Duration(milliseconds: 450),
       curve: Curves.easeOutCubic, // iOS-style deceleration curve
@@ -1314,16 +1311,16 @@ class _OnboardingProfilePageState extends ConsumerState<OnboardingProfilePage>
                     if (_isNameValid()) {
                       _nextPage();
                 } else {
-                  // Provide improved error feedback
-                  HapticUtils.errorFeedback();
+                  // Provide feedback that fields need to be filled
+                  HapticFeedback.mediumImpact();
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
                       content: Text('Please enter both first and last name'),
                       backgroundColor: Colors.redAccent,
                       duration: Duration(seconds: 2),
-                    ),
-                  );
-                }
+      ),
+    );
+  }
               },
               isNameValid: _isNameValid(),
               progressIndicator: _buildProgressIndicator(6, 0),
@@ -1339,15 +1336,15 @@ class _OnboardingProfilePageState extends ConsumerState<OnboardingProfilePage>
                 if (_selectedYear != null) {
                     _nextPage();
                 } else {
-                  HapticUtils.errorFeedback();
+                  HapticFeedback.mediumImpact();
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
                       content: Text('Please select your current year'),
                       backgroundColor: Colors.redAccent,
                       duration: Duration(seconds: 2),
-                    ),
-                  );
-                }
+      ),
+    );
+  }
               },
             ),
             FieldPage(
@@ -1360,15 +1357,15 @@ class _OnboardingProfilePageState extends ConsumerState<OnboardingProfilePage>
               onContinue: () {
                 if (_selectedMajor != null) {
                   _nextPage();
-                } else {
-                  HapticUtils.errorFeedback();
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
+                            } else {
+                                HapticFeedback.mediumImpact();
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
                       content: Text('Please select your major/field'),
                       backgroundColor: Colors.redAccent,
-                      duration: Duration(seconds: 2),
-                    ),
-                  );
+                            duration: Duration(seconds: 2),
+                          ),
+                        );
                 }
               },
             ),
@@ -1382,18 +1379,18 @@ class _OnboardingProfilePageState extends ConsumerState<OnboardingProfilePage>
               onContinue: () {
                 if (_selectedResidence != null) {
                   _nextPage();
-                } else {
-                  HapticUtils.errorFeedback();
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
+                    } else {
+                  HapticFeedback.mediumImpact();
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
                       content: Text('Please select your residence'),
                       backgroundColor: Colors.redAccent,
-                      duration: Duration(seconds: 2),
-                    ),
-                  );
-                }
-              },
-            ),
+                    duration: Duration(seconds: 2),
+                  ),
+                );
+              }
+            },
+          ),
             InterestsPage(
               selectedInterests: _selectedInterests,
               interestOptions: _interestOptions,
@@ -1403,15 +1400,15 @@ class _OnboardingProfilePageState extends ConsumerState<OnboardingProfilePage>
                 if (_selectedInterests.length >= _minInterests) {
                   _nextPage();
                 } else {
-                  HapticUtils.errorFeedback();
+                  HapticFeedback.mediumImpact();
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
                       content: Text('Please select at least $_minInterests interests'),
                       backgroundColor: Colors.redAccent,
                       duration: const Duration(seconds: 2),
-                    ),
-                  );
-                }
+      ),
+    );
+  }
               },
               minInterests: _minInterests,
               maxInterests: _maxInterests,

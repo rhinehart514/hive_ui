@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:hive_ui/features/auth/presentation/utils/animation_constants.dart';
-import 'package:hive_ui/features/auth/presentation/utils/haptic_utils.dart';
 
 /// A selection item with Apple-style animations for onboarding and other selection UIs
 class AnimatedSelectionItem extends StatefulWidget {
@@ -29,9 +28,6 @@ class AnimatedSelectionItem extends StatefulWidget {
   
   /// Vertical padding - defaults to 12
   final double verticalPadding;
-  
-  /// Whether to show a subtle glow effect when selected
-  final bool enableGlow;
 
   const AnimatedSelectionItem({
     Key? key,
@@ -43,7 +39,6 @@ class AnimatedSelectionItem extends StatefulWidget {
     this.borderRadius = 24,
     this.horizontalPadding = 20,
     this.verticalPadding = 12,
-    this.enableGlow = true,
   }) : super(key: key);
 
   @override
@@ -91,7 +86,7 @@ class _AnimatedSelectionItemState extends State<AnimatedSelectionItem> with Sing
     if (_isPressed) {
       _isPressed = false;
       _controller.reverse();
-      HapticUtils.selectionClick();
+      HapticFeedback.selectionClick();
       widget.onTap();
     }
   }
@@ -137,24 +132,14 @@ class _AnimatedSelectionItemState extends State<AnimatedSelectionItem> with Sing
             vertical: widget.verticalPadding,
           ),
           decoration: BoxDecoration(
-            color: widget.isSelected 
-                ? AnimationConstants.selectedItemColor 
-                : AnimationConstants.unselectedItemColor,
+            color: widget.isSelected ? Colors.white : Colors.black,
             borderRadius: BorderRadius.circular(widget.borderRadius),
             border: Border.all(
               color: widget.isSelected 
                 ? Colors.transparent 
-                : AnimationConstants.unselectedBorderColor,
+                : Colors.white.withOpacity(0.2),
               width: 1,
             ),
-            boxShadow: (widget.isSelected && widget.enableGlow) ? [
-              BoxShadow(
-                color: AnimationConstants.selectedGlowColor,
-                blurRadius: 8,
-                spreadRadius: 0,
-                offset: const Offset(0, 2),
-              ),
-            ] : null,
           ),
           child: Text(
             widget.text,

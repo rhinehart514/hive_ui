@@ -28,42 +28,101 @@ class FieldPage extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'What\'s your major/field?',
-            style: GoogleFonts.outfit(
-              color: Colors.white,
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
+          // Title with entrance animation
+          TweenAnimationBuilder<double>(
+            tween: Tween(begin: 0.0, end: 1.0),
+            duration: AnimationConstants.standardDuration,
+            curve: AnimationConstants.entranceCurve,
+            builder: (context, value, child) {
+              return Opacity(
+                opacity: value,
+                child: Transform.translate(
+                  offset: Offset(0, 20 * (1 - value)),
+                  child: child,
+                ),
+              );
+            },
+            child: Text(
+              'What\'s your major/field?',
+              style: GoogleFonts.outfit(
+                color: Colors.white,
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+              ),
             ),
           ),
           const SizedBox(height: 8),
-          Text(
-            'Choose your primary field of study',
-            style: GoogleFonts.inter(
-              color: Colors.white70,
-              fontSize: 16,
+          TweenAnimationBuilder<double>(
+            tween: Tween(begin: 0.0, end: 1.0),
+            duration: AnimationConstants.standardDuration,
+            curve: AnimationConstants.entranceCurve,
+            builder: (context, value, child) {
+              return Opacity(
+                opacity: value,
+                child: child,
+              );
+            },
+            child: Text(
+              'Choose your primary field of study',
+              style: GoogleFonts.inter(
+                color: Colors.white70,
+                fontSize: 16,
+              ),
             ),
           ),
           const SizedBox(height: 32),
           Expanded(
-            child: ListView.builder(
-              itemCount: filteredFields.length,
-              itemBuilder: (context, index) {
-                final field = filteredFields[index];
-                final isSelected = field == selectedMajor;
-                
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 12),
-                  child: _buildFieldItem(field, isSelected),
-                );
-              },
+            child: AnimatedSwitcher(
+              duration: AnimationConstants.standardDuration,
+              switchInCurve: AnimationConstants.entranceCurve,
+              switchOutCurve: AnimationConstants.exitCurve,
+              child: ListView.builder(
+                key: ValueKey<int>(filteredFields.length),
+                itemCount: filteredFields.length,
+                itemBuilder: (context, index) {
+                  final field = filteredFields[index];
+                  final isSelected = field == selectedMajor;
+                  
+                  // Staggered entrance animation
+                  return TweenAnimationBuilder<double>(
+                    key: ValueKey<String>(field),
+                    tween: Tween(begin: 0.0, end: 1.0),
+                    duration: AnimationConstants.standardDuration,
+                    curve: AnimationConstants.entranceCurve,
+                    builder: (context, value, child) {
+                      return Opacity(
+                        opacity: value,
+                        child: Transform.translate(
+                          offset: Offset(0, 20 * (1 - value)),
+                          child: child,
+                        ),
+                      );
+                    },
+                    child: Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: _buildFieldItem(field, isSelected),
+                    ),
+                  );
+                },
+              ),
             ),
           ),
           progressIndicator,
-          const SizedBox(height: 24),
-          AnimatedContinueButton(
-            isEnabled: selectedMajor != null,
-            onPressed: onContinue,
+          const SizedBox(height: 16),
+          TweenAnimationBuilder<double>(
+            tween: Tween(begin: 0.0, end: 1.0),
+            duration: AnimationConstants.standardDuration,
+            curve: AnimationConstants.entranceCurve,
+            builder: (context, value, child) {
+              return Opacity(
+                opacity: value,
+                child: child,
+              );
+            },
+            child: AnimatedContinueButton(
+              isEnabled: selectedMajor != null,
+              onPressed: onContinue,
+            ),
           ),
           const SizedBox(height: 40),
         ],
@@ -74,20 +133,29 @@ class FieldPage extends StatelessWidget {
   Widget _buildFieldItem(String field, bool isSelected) {
     return GestureDetector(
       onTap: () => onMajorSelected(field),
-      child: Container(
+      child: AnimatedContainer(
+        duration: AnimationConstants.standardDuration,
+        curve: AnimationConstants.standardCurve,
         padding: const EdgeInsets.symmetric(
           horizontal: 20,
           vertical: 16,
         ),
         decoration: BoxDecoration(
           color: isSelected ? Colors.white : Colors.black,
-          borderRadius: BorderRadius.circular(24),
+          borderRadius: BorderRadius.circular(16),
           border: Border.all(
             color: isSelected 
               ? Colors.transparent 
               : Colors.white.withOpacity(0.2),
             width: 1,
           ),
+          boxShadow: isSelected ? [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.1),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ] : null,
         ),
         child: Row(
           children: [
@@ -102,10 +170,14 @@ class FieldPage extends StatelessWidget {
               ),
             ),
             if (isSelected)
-              const Icon(
-                Icons.check_circle_rounded,
-                color: Colors.black,
-                size: 20,
+              AnimatedOpacity(
+                duration: AnimationConstants.quickDuration,
+                opacity: isSelected ? 1.0 : 0.0,
+                child: const Icon(
+                  Icons.check_circle_rounded,
+                  color: Colors.black,
+                  size: 20,
+                ),
               ),
           ],
         ),

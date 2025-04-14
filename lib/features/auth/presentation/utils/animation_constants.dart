@@ -21,24 +21,6 @@ class AnimationConstants {
   
   /// Spring curve - for bouncy animations
   static final Curve springCurve = SpringCurve(mass: 1.0, stiffness: 100.0, damping: 15.0);
-  
-  /// Color constants for animations
-  /// Primary background for selected items (pure white for highest contrast)
-  static const Color selectedItemColor = Colors.white;
-  /// Secondary background for unselected items (pure black for highest contrast)
-  static const Color unselectedItemColor = Colors.black;
-  /// Border color for unselected items
-  static final Color unselectedBorderColor = Colors.white.withOpacity(0.2);
-  /// Glow color for selected items
-  static final Color selectedGlowColor = Colors.white.withOpacity(0.2);
-  /// Disabled item color
-  static final Color disabledColor = Colors.white.withOpacity(0.12);
-  /// Disabled text color
-  static final Color disabledTextColor = Colors.white.withOpacity(0.38);
-  /// Accent color for success states
-  static const Color successColor = Color(0xFF4CD964);
-  /// Accent color for error states
-  static const Color errorColor = Color(0xFFFF3B30);
 }
 
 /// Custom spring curve that mimics iOS spring animations
@@ -99,31 +81,6 @@ extension AnimationExtensions on Widget {
       scale: show ? end : begin,
       duration: duration,
       curve: AnimationConstants.standardCurve,
-      child: this,
-    );
-  }
-  
-  /// Adds a subtle highlight effect to items when they're active
-  Widget withHighlight({
-    required bool isActive,
-    Duration duration = const Duration(milliseconds: 350),
-    Color activeColor = Colors.white,
-    Color inactiveColor = Colors.transparent,
-    double borderRadius = 8.0,
-  }) {
-    return AnimatedContainer(
-      duration: duration,
-      curve: AnimationConstants.standardCurve,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(borderRadius),
-        boxShadow: isActive ? [
-          BoxShadow(
-            color: activeColor.withOpacity(0.15),
-            blurRadius: 16,
-            spreadRadius: 1,
-          )
-        ] : null,
-      ),
       child: this,
     );
   }

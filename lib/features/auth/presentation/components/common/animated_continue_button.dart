@@ -3,7 +3,6 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:hive_ui/theme/app_theme.dart';
 import 'package:hive_ui/features/auth/presentation/utils/animation_constants.dart';
-import 'package:hive_ui/features/auth/presentation/utils/haptic_utils.dart';
 
 /// A reusable animated continue button with Apple-style animations
 class AnimatedContinueButton extends StatefulWidget {
@@ -24,9 +23,6 @@ class AnimatedContinueButton extends StatefulWidget {
 
   /// Custom animation duration
   final Duration animationDuration;
-  
-  /// Whether this is a finish/completion button
-  final bool isFinishButton;
 
   const AnimatedContinueButton({
     Key? key,
@@ -36,7 +32,6 @@ class AnimatedContinueButton extends StatefulWidget {
     this.width = double.infinity,
     this.height,
     this.animationDuration = const Duration(milliseconds: 250),
-    this.isFinishButton = false,
   }) : super(key: key);
 
   @override
@@ -87,11 +82,7 @@ class _AnimatedContinueButtonState extends State<AnimatedContinueButton>
       _controller.reverse();
       
       // Provide haptic feedback
-      if (widget.isFinishButton) {
-        HapticUtils.successFeedback();
-      } else {
-        HapticUtils.mediumImpact();
-      }
+      HapticFeedback.mediumImpact();
       
       // Call onPressed handler
       if (widget.onPressed != null) {
@@ -129,9 +120,7 @@ class _AnimatedContinueButtonState extends State<AnimatedContinueButton>
           width: widget.width,
           height: buttonHeight,
           decoration: BoxDecoration(
-            color: widget.isEnabled 
-                ? AnimationConstants.selectedItemColor 
-                : AnimationConstants.disabledColor,
+            color: widget.isEnabled ? Colors.white : Colors.white12,
             borderRadius: BorderRadius.circular(buttonHeight / 2),
             boxShadow: widget.isEnabled ? [
               BoxShadow(
@@ -146,7 +135,7 @@ class _AnimatedContinueButtonState extends State<AnimatedContinueButton>
               duration: AnimationConstants.standardDuration,
               curve: AnimationConstants.standardCurve,
               style: GoogleFonts.inter(
-                color: widget.isEnabled ? Colors.black : AnimationConstants.disabledTextColor,
+                color: widget.isEnabled ? Colors.black : Colors.white38,
                 fontWeight: FontWeight.w600,
                 fontSize: 16,
                 letterSpacing: 0.2,
