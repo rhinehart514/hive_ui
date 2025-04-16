@@ -335,6 +335,14 @@ class SpacesController extends StateNotifier<AsyncValue<List<SpaceEntity>>> {
         return 'Fraternity & Sorority';
       case SpaceType.hiveExclusive:
         return 'HIVE Exclusive';
+      case SpaceType.organization:
+        return 'Organization';
+      case SpaceType.project:
+        return 'Project';
+      case SpaceType.event:
+        return 'Event';
+      case SpaceType.community:
+        return 'Community';
       case SpaceType.other:
         // Try to determine from tags
         if (space.tags.any((tag) => tag.toLowerCase().contains('academic'))) {

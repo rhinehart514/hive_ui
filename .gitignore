@@ -44,5 +44,8 @@ app.*.map.json
 /android/app/profile
 /android/app/release
 
-# Firebase service account key
+# Firebase credentials should never be committed
 firebase/serviceAccountKey.json
+
+# Node modules
+node_modules/
