@@ -19,6 +19,7 @@ import '../widgets/stream_feed_list.dart';
 import '../widgets/shimmer_event_card.dart';
 import '../components/feed_strip.dart';
 import '../../../../models/reposted_event.dart';
+import '../controllers/feed_tab_controller.dart';
 
 /// A optimized feed page that follows clean architecture principles
 /// Handles efficient Firebase communication and state management via Streams
@@ -61,12 +62,12 @@ class _FeedPageState extends ConsumerState<FeedPage> with SingleTickerProviderSt
   // Updated refresh function to use the new StreamProvider
   Future<void> _refreshFeed() async {
     if (!_mounted) return;
-    debugPrint('🔄 FEED PAGE: Refreshing feed via StreamProvider...');
+    debugPrint('🔄 FEED PAGE: Refreshing feed via controller...');
     try {
-      // Refresh the stream provider
-      await ref.refresh(feedStreamProvider.future);
+      // Use the controller to refresh
+      await ref.read(feedTabControllerProvider).refreshFeed();
       
-      // Show success message - guard with mounted check
+      // Show success message
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -78,7 +79,6 @@ class _FeedPageState extends ConsumerState<FeedPage> with SingleTickerProviderSt
       }
     } catch (e) {
       debugPrint('❌ FEED PAGE: Refresh error: $e');
-      // Show error message - guard with mounted check
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -105,63 +105,39 @@ class _FeedPageState extends ConsumerState<FeedPage> with SingleTickerProviderSt
       return;
     }
 
-    // Optimistically determine the new status
-    // Assuming Event model now correctly holds attendee list
-    final isCurrentlyRsvpd = event.attendees.contains(currentUser.uid);
-    final newRsvpStatus = !isCurrentlyRsvpd;
-
-    // TODO: Optimistic UI update can be added here if needed
-    // e.g., update a local state variable for the specific event card
-
     try {
-      // Call repository method directly
-      final result = await ref.read(feedRepositoryProvider).rsvpToEvent(event.id, newRsvpStatus);
+      // Use the feed tab controller instead of directly calling the repository
+      final controller = ref.read(feedTabControllerProvider);
+      final success = await controller.handleRsvp(event);
       
-      // Use fold to handle the Either type
-      result.fold(
-        (failure) {
-          // Handle failure case
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('Failed to update RSVP: ${failure.message}'),
-                backgroundColor: Colors.red,
+      if (success) {
+        // Show confirmation
+        if (mounted) {
+          final isRsvped = controller.isRsvpedToEvent(event.id);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                isRsvped
+                    ? 'You\'re going to ${event.title}!'
+                    : 'You\'ve canceled your RSVP for ${event.title}'
               ),
-            );
-          }
-        },
-        (success) {
-          // Handle success case
-          if (success) {
-            // Show confirmation - stream will update the actual state
-            if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(
-                    newRsvpStatus
-                        ? 'You\'re going to ${event.title}!'
-                        : 'You\'ve canceled your RSVP for ${event.title}'
-                  ),
-                  backgroundColor: newRsvpStatus ? Colors.green : Colors.orange,
-                ),
-              );
-            }
-          } else {
-            // Handle operation failure
-            if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('Failed to update RSVP for ${event.title}'),
-                  backgroundColor: Colors.red,
-                ),
-              );
-            }
-          }
-        },
-      );
+              backgroundColor: isRsvped ? Colors.green : Colors.orange,
+            ),
+          );
+        }
+      } else {
+        // Handle operation failure
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Failed to update RSVP for ${event.title}'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
     } catch (e) {
-      debugPrint('Error handling RSVP via repository: $e');
-      // Handle error - maybe revert optimistic update
+      debugPrint('Error handling RSVP: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -180,71 +156,45 @@ class _FeedPageState extends ConsumerState<FeedPage> with SingleTickerProviderSt
   
   // Handle repost of events - Updated to use repository
   void _handleRepost(Event event, String? comment, RepostContentType type) {
-      if (!AuthUtils.requireProfile(context, ref)) {
+    if (!AuthUtils.requireProfile(context, ref)) {
       return; // Exit if profile check fails
     }
     
-    final currentUser = FirebaseAuth.instance.currentUser;
-    if (currentUser == null) {
-      // Should not happen due to requireProfile, but double-check
-        return;
-      }
-      
-    // TODO: Optimistic UI update for repost can be added here
-
-    ref.read(feedRepositoryProvider).repostEvent(
-      eventId: event.id,
-      comment: comment,
-      // userId is handled internally by the repository implementation now
-    ).then((result) {
-      result.fold(
-        (failure) {
-          // Handle failure case
-          debugPrint('Repost failure: ${failure.message}');
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('Failed to repost: ${failure.message}'),
-                backgroundColor: Colors.red,
-              ),
-            );
-          }
-        },
-        (repostedEvent) {
-          if (repostedEvent != null) {
-            // Success: Show confirmation
-            if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('Reposted \'${event.title}\''),
-                  backgroundColor: AppColors.primary,
-                ),
-              );
-            }
-            // Analytics or further actions can go here
-          } else {
-            // Failure: Show error
-            if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('Failed to repost \'${event.title}\''),
-                  backgroundColor: Colors.red,
-                ),
-              );
-            }
-          }
-        },
-      );
-    }).catchError((error) {
-       debugPrint('Error handling repost via repository: $error');
+    // Use the feed tab controller
+    final controller = ref.read(feedTabControllerProvider);
+    
+    controller.handleRepost(event, comment, type).then((success) {
+      if (success) {
+        // Success: Show confirmation
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Error reposting: ${error.toString()}'),
+              content: Text('Reposted \'${event.title}\''),
+              backgroundColor: AppColors.primary,
+            ),
+          );
+        }
+      } else {
+        // Failure: Show error
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Failed to repost \'${event.title}\''),
               backgroundColor: Colors.red,
             ),
           );
         }
+      }
+    }).catchError((error) {
+      debugPrint('Error handling repost: $error');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error reposting: ${error.toString()}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     });
   }
   
@@ -524,13 +474,13 @@ class _FeedPageState extends ConsumerState<FeedPage> with SingleTickerProviderSt
     final feedStreamAsyncValue = ref.watch(feedStreamProvider);
 
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: AppColors.dark, // Primary surface color #121212 per brand aesthetic
       appBar: _buildAppBar(),
       body: Column(
         children: [
           // Add the FeedStrip at the top
           const Padding(
-            padding: EdgeInsets.only(top: 8, bottom: 8),
+            padding: EdgeInsets.only(top: 12, bottom: 16), // Updated spacing
             child: FeedStrip(
               height: 125.0,
               maxCards: 5,
@@ -601,22 +551,23 @@ class _FeedPageState extends ConsumerState<FeedPage> with SingleTickerProviderSt
   // AppBar remains mostly the same, just removed TabBar for now
   AppBar _buildAppBar() {
     return AppBar(
-      backgroundColor: Colors.black,
-                elevation: 0,
+      // Using the AppBarTheme from ThemeData instead of manually setting
+      // backgroundColor: AppColors.dark, -- Now provided by theme
+      // elevation: 0, -- Now provided by theme
       centerTitle: true,
       title: Text(
         'HIVE', // Or use an Image/SvgPicture for the logo
         style: GoogleFonts.orbitron(
           fontWeight: FontWeight.bold,
           fontSize: 24,
-          color: AppColors.primary, // Gold color
+          color: AppColors.gold, // Use consistent gold accent
           letterSpacing: 1.5,
         ),
       ),
       actions: [
         // Add Filter button back if needed, but point to the updated/removed method
               IconButton(
-          icon: const Icon(Icons.tune_rounded, color: AppColors.primary),
+          icon: const Icon(Icons.tune_rounded, color: AppColors.white),
                 onPressed: () {
                   HapticFeedback.selectionClick();
             _showFilterBottomSheet(context); // This will now show the TODO message
@@ -626,7 +577,7 @@ class _FeedPageState extends ConsumerState<FeedPage> with SingleTickerProviderSt
               IconButton(
           icon: Icon(
             _hasUnreadNotifications ? Icons.notifications_active : Icons.notifications_none,
-            color: AppColors.primary, // Gold color
+            color: AppColors.white, // White for standard icons
           ),
           onPressed: () {
             // TODO: Navigate to notifications screen
@@ -635,7 +586,7 @@ class _FeedPageState extends ConsumerState<FeedPage> with SingleTickerProviderSt
         ),
         // Example action: Search icon
         IconButton(
-          icon: const Icon(Icons.search, color: AppColors.primary), // Gold color
+          icon: const Icon(Icons.search, color: AppColors.white), // White for standard icons
           onPressed: () {
             // TODO: Navigate to search screen or show search bar
             debugPrint('Search icon pressed');
@@ -643,16 +594,6 @@ class _FeedPageState extends ConsumerState<FeedPage> with SingleTickerProviderSt
         ),
       ],
       // Removed bottom TabBar for simplification in this step
-      // bottom: TabBar(
-      //   controller: _tabController,
-      //   indicatorColor: AppColors.primary,
-      //   labelColor: AppColors.primary,
-      //   unselectedLabelColor: Colors.grey.shade600,
-      //   tabs: const [
-      //     Tab(text: 'For You'),
-      //     Tab(text: 'Following'),
-      //   ],
-      // ),
     );
   }
 } 

@@ -40,6 +40,10 @@ class _CreateSpacePageState extends ConsumerState<CreateSpacePage> {
     SpaceType.campusLiving: Icons.home.codePoint,
     SpaceType.fraternityAndSorority: Icons.diversity_3.codePoint,
     SpaceType.hiveExclusive: Icons.verified.codePoint,
+    SpaceType.organization: Icons.business.codePoint,
+    SpaceType.project: Icons.assignment.codePoint,
+    SpaceType.event: Icons.event.codePoint,
+    SpaceType.community: Icons.forum.codePoint,
     SpaceType.other: Icons.category.codePoint,
   };
   
@@ -56,6 +60,14 @@ class _CreateSpacePageState extends ConsumerState<CreateSpacePage> {
         return Icons.diversity_3;
       case SpaceType.hiveExclusive:
         return Icons.verified;
+      case SpaceType.organization:
+        return Icons.business;
+      case SpaceType.project:
+        return Icons.assignment;
+      case SpaceType.event:
+        return Icons.event;
+      case SpaceType.community:
+        return Icons.forum;
       case SpaceType.other:
         return Icons.category;
     }

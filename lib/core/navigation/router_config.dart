@@ -12,6 +12,7 @@ import 'package:hive_ui/models/space.dart';
 import 'package:hive_ui/features/profile/presentation/pages/verification_admin_page.dart';
 import 'package:hive_ui/features/messaging/domain/entities/message_attachment.dart';
 import 'package:hive_ui/features/examples/presentation/pages/card_lifecycle_demo_page.dart';
+import 'package:hive_ui/features/events/presentation/routing/event_routes.dart';
 
 // Page imports
 import 'package:hive_ui/pages/landing_page.dart';
@@ -207,6 +208,9 @@ final routerProvider = Provider<GoRouter>((ref) {
           type: TransitionType.fade,
         ),
       ),
+
+      // Event routes
+      ...EventRoutes.getRoutes(),
 
       // Shell route for bottom navigation
       StatefulShellRoute.indexedStack(

@@ -1,805 +1,358 @@
-# HIVE Brand Aesthetic Guide
-
-## Core Principles
-
-HIVE's aesthetic serves its behavioral-first approach to campus life. The interface is designed not just to be visually appealing, but to facilitate specific behavioral patterns and user journeys through the five system layers.
-
-### Behavioral-First Design
-
-All visual elements support HIVE's core behavioral patterns:
-- **Discover**: Visual cues that encourage exploration and discovery
-- **Affiliate**: Clear visual language for joining and identifying with Spaces
-- **Participate**: Lightweight interaction points with immediate visual feedback
-- **Create**: Intuitive creation flows with minimal friction
-- **Profile**: Personal identity markers that evolve with engagement
-
-### Dynamic & Responsive
-
-The interface responds to user behavior, adapting based on:
-- User's role (Seeker, Reactor, Joiner, Builder, etc.)
-- Affiliation tier with Spaces (Observer, Member, Active, etc.)
-- Time-sensitive content states (Cold, Warming, Hot/Pulse, Cooling)
-- Trail data and interaction history
-
-## Core Color Palette
-
-```dart
-// Primary colors
-static const Color black = Color(0xFF0A0A0A); // Primary background (deep, near-black)
-static const Color white = Color(0xFFFFFFFF); // Primary text & bright accents
-static const Color secondaryText = Color(0xFFBFBFBF); // Secondary text (80% white on black)
-static const Color tertiaryText = Color(0xFF808080); // Tertiary text (50% white on black, for metadata)
-static const Color yellow = Color(0xFFFFD700); // Interactive accent color, signals intent
-static const Color gold = Color(0xFFFFD700); // Alias for yellow
-
-// System Colors (Used for specific behavioral patterns)
-static const Color pulseHot = Color(0xFFE53935); // Trending content indicator
-static const Color activeState = Color(0xFF0ECB81); // Active/live state indicator
-static const Color attentionState = Color(0xFFFFB74D); // Needs attention indicator
-```
-
-## Design Principles
-
-### 1. Behavioral Signal Clarity
-
-All interface elements support the behavioral system architecture:
-
-- **Signal Types**: Visual distinction between Signal types (affiliation, expression, alignment)
-- **State Indicators**: Clear visual markers for content states (cold, warming, pulse)
-- **Role Visualization**: Subtle visual cues based on user role (Builder badge, etc.)
-- **Motion Sensitivity**: Interface elements respond to the emergent motion of Spaces and content
-
-Implementation guidelines:
-- Use consistent visual language for each Signal type across the system
-- Animation and interaction design reflects the energy state of content
-- Time-sensitive visual cues degrade naturally as states change
-- Color accents and highlights map to behavioral significance
-
-### 2. Yellow as a Cognitive Signal
-
-Yellow (#FFD700) serves as an intention-focused interactive signal:
-
-- **Never Decorative**: Yellow is reserved for interactive elements requiring attention
-- **Decision Points**: Used exclusively for elements requiring student decisions
-- **Specific Applications**:
-  - RSVP buttons and confirmations
-  - "Hot" Pulse state indicators
-  - Repost tags and indicators
-  - Achievement badges
-  - Interactive call-to-action elements
-- **Never Backgrounds**: Yellow should never be used as a background color
-- **Icon Restriction**: Never used for purely decorative icons
-
-Think of yellow as the "tap here, this matters" visual language.
-
-- **Premium Feel**: Use yellow sparingly like a highlight, not broadly. Its impact comes from restraint.
-- **State Indication**: Can be used subtly for active states (e.g., selected tab indicator, "liked" icon fill) but avoid large color fills.
-
-### 3. True System Layers (Spatial, Not Flat)
-
-The interface uses spatial layering to create depth and hierarchy:
-
-- **Background Layer** (#0A0A0A): Base application canvas
-- **Content Layer**: Where primary content lives (cards, lists)
-- **Interactive Layer**: Controls and interactive elements
-- **Modal Layer**: Overlays, dialogs, and contextual interfaces
-
-Implementation guidelines:
-- Use defined elevation levels and shadows (see Depth & Elevation System).
-- Apply refined glassmorphism for overlays (see Glassmorphism & Surface Design).
-- Maintain consistent z-index patterns.
-- Animate transitions between layers with refined timing and curves (see Motion & Interaction).
-- **Progressive Disclosure**: Design layers to reveal information contextually upon interaction, reducing initial visual load.
-
-## Typography System
-
-```dart
-// Base Font: Inter (Ensure imported via google_fonts or locally)
-
-// Primary font styles
-static TextStyle get displayLarge => GoogleFonts.inter( // Screen Titles
-  color: AppColors.white,
-  fontSize: 32,
-  fontWeight: FontWeight.w700, // Bold
-  letterSpacing: -0.5, // Slightly tighter tracking
-);
-
-static TextStyle get titleLarge => GoogleFonts.inter( // Card Titles, Section Headers
-  color: AppColors.white,
-  fontSize: 20,
-  fontWeight: FontWeight.w600, // Semibold
-  letterSpacing: -0.25,
-);
-
-static TextStyle get bodyLarge => GoogleFonts.inter( // Primary Body Text
-  color: AppColors.white,
-  fontSize: 16,
-  fontWeight: FontWeight.w400, // Regular
-  letterSpacing: 0,
-);
-
-static TextStyle get bodyMedium => GoogleFonts.inter( // Secondary Body Text
-  color: AppColors.secondaryText, // Lighter gray
-  fontSize: 14,
-  fontWeight: FontWeight.w400, // Regular
-  letterSpacing: 0.1, // Slightly looser for readability
-);
-
-static TextStyle get caption => GoogleFonts.inter( // Timestamps, Metadata
-  color: AppColors.tertiaryText, // Lowest contrast gray
-  fontSize: 12,
-  fontWeight: FontWeight.w400, // Regular
-  letterSpacing: 0.2, // Looser for small sizes
-);
-
-// Interactive text (buttons, links) - Prefer Yellow Accent
-static TextStyle get labelLarge => GoogleFonts.inter( // Key action text
-  color: AppColors.yellow,
-  fontSize: 16,
-  fontWeight: FontWeight.w600, // Semibold
-  letterSpacing: 0.1,
-);
-
-static TextStyle get labelMedium => GoogleFonts.inter( // Smaller interactive text/icons
-  color: AppColors.yellow,
-  fontSize: 14,
-  fontWeight: FontWeight.w500, // Medium
-  letterSpacing: 0.1,
-);
-```
-**Guidance**: Maintain strict adherence to these styles. Avoid one-off font sizes or weights. Use `letterSpacing` subtly for refinement.
-
-## Component Guidelines
-
-### Button System (By Behavioral Intent)
-
-Buttons are styled based on their behavioral role in the system:
-
-```dart
-// Signal Button (Primary action that creates a Signal in the system)
-ElevatedButton(
-  onPressed: () {
-    HapticFeedback.mediumImpact();
-    // Action that generates a Signal (e.g., RSVP, Join, Repost)
-  },
-  style: ElevatedButton.styleFrom(
-    backgroundColor: AppColors.white, // White button
-    foregroundColor: AppColors.black, // Black text
-    shape: RoundedRectangleBorder(
-      borderRadius: BorderRadius.circular(12), // Softer radius
-    ),
-    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14), // Adjusted padding
-    minimumSize: const Size(0, 48), // Ensure min height
-    elevation: 0, // Remove default elevation, control via custom shadow/state
-  ).copyWith(
-     // Add subtle press state if needed, e.g., slightly darker background
-  ),
-  child: Text('RSVP', style: GoogleFonts.inter(fontWeight: FontWeight.w600)),
-)
-
-// Affiliation Button (Space joining, group actions)
-OutlinedButton(
-  onPressed: () {
-    HapticFeedback.lightImpact(); // Lighter haptic
-    // Action related to affiliation with a Space
-  },
-  style: OutlinedButton.styleFrom(
-    foregroundColor: AppColors.white, // White text
-    side: BorderSide(color: Colors.white.withOpacity(0.3), width: 1.0), // Defined border
-    shape: RoundedRectangleBorder(
-      borderRadius: BorderRadius.circular(12), // Softer radius
-    ),
-    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14), // Adjusted padding
-    minimumSize: const Size(0, 48), // Ensure min height
-  ).copyWith(
-    // Overlay color for press state (e.g., subtle white overlay)
-    overlayColor: MaterialStateProperty.resolveWith<Color?>(
-      (Set<MaterialState> states) {
-        if (states.contains(MaterialState.pressed)) {
-          return Colors.white.withOpacity(0.1); // Subtle press
-        }
-        return null; // Defer to the default
-      },
-    ),
-  ),
-  child: Text('Join Space', style: GoogleFonts.inter(fontWeight: FontWeight.w500)),
-)
-
-// Interactive accent button (Yellow, for key actions like RSVP)
-TextButton(
-  onPressed: () {
-    HapticFeedback.mediumImpact(); // Clear feedback for important action
-    // Action
-  },
-  style: TextButton.styleFrom(
-    foregroundColor: AppColors.yellow, // Yellow text
-    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12), // Generous padding
-    minimumSize: const Size(0, 48), // Ensure touch target
-    shape: RoundedRectangleBorder(
-      borderRadius: BorderRadius.circular(12),
-    ),
-  ).copyWith(
-    // Yellow overlay for press state
-    overlayColor: MaterialStateProperty.resolveWith<Color?>(
-      (Set<MaterialState> states) {
-        if (states.contains(MaterialState.pressed)) {
-          return AppColors.yellow.withOpacity(0.15);
-        }
-        return null;
-      },
-    ),
-  ),
-  child: Text('RSVP Now', style: labelMedium), // Use defined text style
-)
-```
-**Guidance**: Ensure all interactive elements have clear press states (visual + haptic) and meet the minimum 48dp touch target size, crucial for mobile usability. Use `MaterialStateProperty` for stateful styling.
-
-### Card System (By Content Type)
-
-HIVE uses specialized cards for different content types, each supporting specific behavioral patterns:
-
-#### Event Cards
-
-```dart
-// Standard Event Card
-Container(
-  padding: const EdgeInsets.all(16), // Consistent internal padding
-  decoration: BoxDecoration(
-    color: const Color(0xFF1C1C1E), // Slightly lighter than pure black
-    borderRadius: BorderRadius.circular(16), // More rounded corners
-    border: Border.all(
-      color: Colors.white.withOpacity(0.1), // Fainter border
-      width: 0.5,
-    ),
-  ),
-  child: Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      // Title Section
-      Text('Event Title', style: AppTextStyles.titleLarge),
-      const SizedBox(height: 4),
-      
-      // Metadata Row (Time, Location)
-      Row(
-        children: [
-          Icon(Icons.access_time, size: 12, color: AppColors.tertiaryText),
-          const SizedBox(width: 4),
-          Text('8:00 PM', style: AppTextStyles.caption),
-          const SizedBox(width: 16),
-          Icon(Icons.location_on, size: 12, color: AppColors.tertiaryText),
-          const SizedBox(width: 4),
-          Text('Student Center', style: AppTextStyles.caption),
-        ],
-      ),
-      const SizedBox(height: 8),
-      
-      // Host Information (Optional)
-      Text('Hosted by Computer Science Club', style: AppTextStyles.bodyMedium),
-      const SizedBox(height: 12),
-      
-      // Description (Optional, can be expandable)
-      Text('Event description text goes here...', style: AppTextStyles.bodyLarge),
-      const SizedBox(height: 16),
-      
-      // Action Row (RSVP, Share, etc)
-      Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          ElevatedButton(
-            onPressed: () {
-              HapticFeedback.mediumImpact();
-              // RSVP action
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.yellow,
-              foregroundColor: AppColors.black,
-              // Button styling...
-            ),
-            child: Text('RSVP', style: GoogleFonts.inter(fontWeight: FontWeight.w600)),
-          ),
-          IconButton(
-            icon: Icon(Icons.share, color: AppColors.secondaryText),
-            onPressed: () {
-              // Share action
-     HapticFeedback.lightImpact();
-            },
-          ),
-        ],
-      ),
-      
-      // Social Proof (Optional, based on behavioral data)
-      if (showSocialProof) Text('3 friends are going', style: AppTextStyles.caption),
-    ],
-  ),
-)
-```
-
-#### Space Cards
-
-```dart
-// Space Card (For horizontal carousel)
-Container(
-  width: MediaQuery.of(context).size.width * 0.75, // 75% of screen width
-  margin: const EdgeInsets.only(right: 12), // Margin for carousel spacing
-    padding: const EdgeInsets.all(16),
-    decoration: BoxDecoration(
-      color: const Color(0xFF1C1C1E),
-      borderRadius: BorderRadius.circular(16),
-      border: Border.all(
-        color: Colors.white.withOpacity(0.1),
-        width: 0.5,
-      ),
-    ),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-      // Space Header with Avatar + Name
-        Row(
-          children: [
-          // Space Avatar or Icon
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: AppColors.tertiaryText,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Center(
-              child: Text('CS', style: AppTextStyles.titleLarge),
-            ),
-          ),
-          const SizedBox(width: 12),
-          // Space Name + Member Count
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('CS Club', style: AppTextStyles.titleLarge),
-                Text('124 members', style: AppTextStyles.caption),
-              ],
-            ),
-          ),
-        ],
-      ),
-      const SizedBox(height: 12),
-      
-      // Tags Row
-      Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(4),
-            ),
-            child: Text('tech', style: AppTextStyles.caption),
-          ),
-          const SizedBox(width: 8),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(4),
-            ),
-            child: Text('coding', style: AppTextStyles.caption),
-          ),
-        ],
-      ),
-      const SizedBox(height: 16),
-      
-      // Join Button or Member Status
-      OutlinedButton(
-        onPressed: () {
-          HapticFeedback.lightImpact();
-          // Join Space action
-        },
-        style: OutlinedButton.styleFrom(
-          foregroundColor: AppColors.white,
-          // Button styling...
-        ),
-        child: Text('Join Space', style: GoogleFonts.inter(fontWeight: FontWeight.w500)),
-      ),
-    ],
-  ),
-)
-```
-
-#### Drop Cards (1-line posts)
-
-```dart
-// Drop Card (1-line post inside a Space)
-Container(
-  padding: const EdgeInsets.all(16),
-  decoration: BoxDecoration(
-    color: const Color(0xFF1C1C1E),
-    borderRadius: BorderRadius.circular(16),
-           border: Border.all(
-      color: Colors.white.withOpacity(0.1),
-             width: 0.5,
-           ),
-  ),
-  child: Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      // Author Row
-      Row(
-        children: [
-          // Author Avatar
-          CircleAvatar(radius: 16),
-          const SizedBox(width: 8),
-          // Author Name + Timestamp
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('Jane Doe', style: AppTextStyles.bodyMedium),
-              Text('10m ago', style: AppTextStyles.caption),
-            ],
-          ),
-        ],
-      ),
-      const SizedBox(height: 12),
-      
-      // Drop Content (1-line post)
-      Text('Movie night at the dorm tonight. Who\'s coming?', style: AppTextStyles.bodyLarge),
-      const SizedBox(height: 12),
-      
-      // Action Row
-      Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          // "Going?" action for event promotion
-          TextButton.icon(
-            icon: Icon(Icons.event, size: 16, color: AppColors.yellow),
-            label: Text('Going?', style: AppTextStyles.labelMedium),
-            onPressed: () {
-              HapticFeedback.lightImpact();
-              // Convert to event action
-            },
-          ),
-          
-          // Repost action
-          IconButton(
-            icon: Icon(Icons.repeat, color: AppColors.secondaryText),
-            onPressed: () {
-              HapticFeedback.lightImpact();
-              // Repost action
-            },
-          ),
-        ],
-      ),
-    ],
-  ),
-)
-```
-
-## Feed Strip System
-
-The Feed Strip is a key UI component supporting the Discovery layer:
-
-```dart
-// Feed Strip Container
-Container(
-  height: 125.0,
-  child: ListView(
-    scrollDirection: Axis.horizontal,
-    physics: BouncingScrollPhysics(),
-    padding: const EdgeInsets.symmetric(horizontal: 16.0),
-    children: [
-      // Space Heat Strip Card
-      _buildStripCard(
-        title: 'CS Club is on fire 🔥',
-        subtitle: '14 new members in the past hour',
-        color: AppColors.pulseHot.withOpacity(0.2),
-        icon: Icons.whatshot,
-        iconColor: AppColors.pulseHot,
-      ),
-      
-      // Ritual Launch Strip Card
-      _buildStripCard(
-        title: 'Weekly Photo Challenge',
-        subtitle: 'Post your best campus shot',
-        color: Colors.purple.withOpacity(0.2),
-        icon: Icons.camera_alt,
-        iconColor: Colors.purple,
-      ),
-      
-      // Time Marker Strip Card
-      _buildStripCard(
-        title: 'Last Night on Campus',
-        subtitle: '3 events you might have missed',
-        color: Colors.blue.withOpacity(0.2),
-        icon: Icons.nightlife,
-        iconColor: Colors.blue,
-      ),
-      
-      // Motion Recap Strip Card
-      _buildStripCard(
-        title: 'Your Friends Are Moving',
-        subtitle: 'See what 5 friends are up to',
-        color: Colors.green.withOpacity(0.2),
-        icon: Icons.people,
-        iconColor: Colors.green,
-      ),
-    ],
-  ),
-)
-
-// Strip Card Builder
-Widget _buildStripCard({
-  required String title,
-  required String subtitle,
-  required Color color,
-  required IconData icon,
-  required Color iconColor,
-}) {
-  return Container(
-    width: 280,
-    margin: const EdgeInsets.only(right: 12),
-    padding: const EdgeInsets.all(16),
-    decoration: BoxDecoration(
-      color: color,
-      borderRadius: BorderRadius.circular(16),
-      border: Border.all(
-        color: Colors.white.withOpacity(0.1),
-        width: 0.5,
-      ),
-    ),
-    child: Row(
-      children: [
-        // Icon Container
-        Container(
-          width: 48,
-          height: 48,
-          decoration: BoxDecoration(
-            color: iconColor.withOpacity(0.1),
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Icon(icon, color: iconColor),
-        ),
-        const SizedBox(width: 16),
-        // Content
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(title, style: AppTextStyles.titleLarge),
-              const SizedBox(height: 4),
-              Text(subtitle, style: AppTextStyles.bodyMedium),
-            ],
-          ),
-        ),
-      ],
-    ),
-  );
-}
-```
-
-## State Visualization
-
-### Pulse States
-
-```dart
-// Visual indicators for different Pulse states
-Widget getPulseIndicator(PulseState state) {
-  switch (state) {
-    case PulseState.cold:
-      return Container(); // No visual indicator for cold state
-      
-    case PulseState.warming:
-      return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-        decoration: BoxDecoration(
-          color: Colors.orange.withOpacity(0.2),
-          borderRadius: BorderRadius.circular(4),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.trending_up, color: Colors.orange, size: 12),
-            const SizedBox(width: 4),
-            Text('Trending', style: AppTextStyles.caption.copyWith(color: Colors.orange)),
-          ],
-        ),
-      );
-      
-    case PulseState.hot:
-      return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-        decoration: BoxDecoration(
-          color: AppColors.pulseHot.withOpacity(0.2),
-          borderRadius: BorderRadius.circular(4),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.local_fire_department, color: AppColors.pulseHot, size: 12),
-            const SizedBox(width: 4),
-            Text('Hot', style: AppTextStyles.caption.copyWith(color: AppColors.pulseHot)),
-          ],
-        ),
-      );
-      
-    case PulseState.cooling:
-      return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-        decoration: BoxDecoration(
-          color: Colors.blue.withOpacity(0.2),
-          borderRadius: BorderRadius.circular(4),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.whatshot, color: Colors.blue, size: 12),
-            const SizedBox(width: 4),
-            Text('Popular', style: AppTextStyles.caption.copyWith(color: Colors.blue)),
-          ],
-        ),
-      );
-      
-    default:
-      return Container();
-  }
-}
-```
-
-### Space States
-
-```dart
-// Visual indicators for different Space states
-Widget getSpaceStateIndicator(SpaceState state) {
-  switch (state) {
-    case SpaceState.seeded:
-      return Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.grass, color: Colors.green, size: 12),
-          const SizedBox(width: 4),
-          Text('New', style: AppTextStyles.caption.copyWith(color: Colors.green)),
-        ],
-      );
-      
-    case SpaceState.forming:
-      return Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.group_add, color: Colors.blue, size: 12),
-          const SizedBox(width: 4),
-          Text('Growing', style: AppTextStyles.caption.copyWith(color: Colors.blue)),
-        ],
-      );
-      
-    case SpaceState.live:
-      return Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.bolt, color: AppColors.yellow, size: 12),
-          const SizedBox(width: 4),
-          Text('Active', style: AppTextStyles.caption.copyWith(color: AppColors.yellow)),
-        ],
-      );
-      
-    case SpaceState.dormant:
-      return Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.nights_stay, color: AppColors.tertiaryText, size: 12),
-          const SizedBox(width: 4),
-          Text('Quiet', style: AppTextStyles.caption),
-        ],
-      );
-      
-    default:
-      return Container();
-  }
-}
-```
-
-## Motion & Interaction Design
-
-HIVE uses animation to communicate the behavioral nature of content:
-
-### Motion Patterns by Behavior
-
-| Behavior | Animation Pattern | Purpose |
-|----------|-------------------|---------|
-| Signal Creation | Quick pulse + confirmation | Shows the user their micro-signal is registered |
-| Space Joining | Soft slide + scale | Reflects the lightweight nature of affiliation |
-| Pulse Detection | Growing pulse waves | Visualizes how content is gathering energy |
-| Content Decay | Subtle fade + desaturation | Shows natural lifecycle of content |
-| Trail Recording | Micro-animations after actions | Indicates the system is building memory |
-
-```dart
-// RSVP Signal Animation Example
-void _animateRsvpSignal() {
-  _animationController = AnimationController(
-    duration: Duration(milliseconds: 300),
-    vsync: this,
-  );
-  
-  _scaleAnimation = Tween<double>(begin: 1.0, end: 1.2).animate(
-    CurvedAnimation(
-      parent: _animationController,
-      curve: Curves.easeOut,
-    ),
-  );
-  
-  _colorAnimation = ColorTween(
-    begin: AppColors.black,
-    end: AppColors.yellow,
-  ).animate(
-    CurvedAnimation(
-      parent: _animationController,
-      curve: Curves.easeOut,
-    ),
-  );
-  
-  _animationController.forward().then((_) {
-    _animationController.reverse();
-  });
-}
-```
-
-### Interaction Timing Guide
-
-| System Layer | Action | Timing | Curve | Haptic |
-|--------------|--------|--------|-------|--------|
-| Discovery | Feed scroll | 300ms deceleration | `Curves.easeOutQuint` | None |
-| Discovery | Card expand | 250ms | `Curves.easeOutCubic` | Light |
-| Affiliation | Join Space | 350ms | `Curves.elasticOut` (subtle) | Medium |
-| Participation | RSVP | 300ms | `Curves.easeOutCubic` | Medium |
-| Participation | Drop post | 400ms | `Curves.easeOutQuint` | Medium |
-| Creation | Sheet open | 350ms | `Curves.easeOutQuint` | Light |
-| Profile | Tab switch | 250ms | `Curves.easeInOut` | Selection |
-
-## Accessibility Guidelines
-
-### Color Contrast
-
-- Minimum 4.5:1 contrast ratio for text over backgrounds
-- All interactive elements have clear visual indicators beyond color
-- Primary actions maintain 3:1 contrast minimum
-
-### Interactive Element Considerations
-
-- 48dp minimum touch target size for all interactive elements
-- Clear press states (visual + haptic) for all controls
-- Avoid touch-and-hold actions for primary functions
-- Label all interactive elements with accessibility hints
-
-### Text Scaling
-
-- All text scales appropriately with system font size settings
-- Interface layout accommodates larger text without breaking
-- Minimum body text size of 14dp regardless of content density needs
-
-## Implementation Checklist
-
-When developing features according to HIVE's behavioral design approach:
-
-1. **Identify the Behavioral Pattern**
-   - Which system layer does this feature belong to?
-   - What behavioral signals does it enable users to create?
-   - How does it reflect or display user signals?
-
-2. **Select Appropriate Visual Components**
-   - Use consistent card styles based on content type
-   - Apply state visualizations based on system states
-   - Maintain 8dp grid spacing system
-
-3. **Implement Interaction Feedback**
-   - Add appropriate animations based on the behavior
-   - Include haptic feedback for key interactions
-   - Ensure visual states reflect system states
-
-4. **Test Accessibility & Performance**
-   - Verify all text meets contrast guidelines
-   - Ensure all touch targets meet size requirements
-   - Optimize animations for 60fps performance on target devices
-
-5. **Validate Behavioral Alignment**
-   - Does the UI clearly communicate the user's current state?
-   - Are behavioral signals clearly differentiated?
-   - Does the interface adapt based on user role and behavior?
-
-Consistent application of these guidelines ensures HIVE's interface isn't just visually appealing, but actually reinforces the behavioral patterns at the core of the platform.
+# HIVE Brand Aesthetic & UI/UX Architecture Guide (Version 1.2)
+
+## 1. Executive Summary
+
+HIVE's brand aesthetic is defined as **Sophisticated Dark Infrastructure**. This guide translates that vision into actionable, testable rules for the platform's presentation layer. It defines core principles, design tokens, layout structures, component styling, motion rules, and accessibility standards. Our design language embodies clarity, calmness, and power — supporting both the everyday browser and the power user while creating a premium, Apple-inspired user experience for students.
+
+---
+
+## 2. Core Principles
+
+### 2.1 Sophisticated Dark Infrastructure
+- **Sophistication**: Clean lines, pixel-perfect execution, minimalism, and strict adherence to spacing and typographic rules. Design serves content, not vice versa.
+- **Dark Theme**: Default dark UI (#121212), with strict rules for #000000 (see Color section). Prioritize legibility, depth, and reduced eye strain.
+- **Infrastructure**: Defined by functional clarity, reliability, robust information architecture, predictable navigation, and seamless performance. *Visually, infrastructure is not heavy or brutalist, but organized, clear, and dependable.*
+- **Purposeful Motion**: Motion is used deliberately to provide feedback, guide transitions, and enhance usability. Avoid gratuitous or distracting animation. All motion must respect user accessibility settings (prefers-reduced-motion).
+- **Authenticity Focused**: No public vanity metrics (likes, follower counts). Feedback and engagement mechanisms must be authentic, meaningful, and non-comparative.
+- **Ambient/Calm**: Minimize unnecessary interruptions. Use subtle cues and calm technology principles.
+- **Constraint Adherence**: All design and development must strictly follow these rules and tokens.
+
+### 2.2 Focus & Cognitive Load
+- **One primary action per screen**
+- **Use progressive disclosure** to hide secondary actions
+- **Avoid alert fatigue**; use unobtrusive banners, not popups
+- **Focus on clarity**, not cleverness
+- **Reduce choices per screen** for better decision-making
+
+---
+
+## 3. Color & Contrast
+
+### 3.1 Palette
+- **Primary Surface**: #121212 (Dark Grey) — default background for all main surfaces.
+- **Secondary Surface**: #1E1E1E — for cards, secondary surfaces, and subtle differentiation.
+- **Optional Deep Layer**: #000000 (Pure Black) — *only* for persistent navigation sidebars or overlays, never for main content backgrounds.
+- **Text Primary**: #FFFFFF (White) — for primary text content.
+- **Text Secondary**: #B0B0B0 — for secondary text content.
+- **Text Tertiary**: #757575 — for tertiary information and hints.
+- **Text Disabled**: #757575 — for disabled interface elements.
+- **Text Link**: #80B9F3 — for link elements.
+- **Accent**: #EEB700 (Hive Yellow) — for key interactive elements (CTAs, focus, highlights). Never for body text or backgrounds. Use sparingly for maximum impact.
+- **Interactive Primary Background**: #3A6BFF — alternative button background color.
+- **Interactive Primary Text**: #FFFFFF — text on primary interactive elements.
+- **Borders/Dividers**: #E0E0E0 at 10-20% opacity *only if purely decorative*. If used for essential structure, must meet 3:1 non-text contrast.
+
+### 3.2 Status Colors
+- **Success**: #4CAF50
+- **Warning**: #FFC107
+- **Error**: #FF5252
+- **Info**: #2196F3
+
+### 3.3 Contrast Requirements
+- **Text**: 4.5:1 minimum contrast ratio against backgrounds
+- **UI Elements**: 3:1 minimum contrast ratio for borders, indicators, and interactive elements
+- **Decorative elements**: No minimum contrast if purely decorative
+
+---
+
+## 4. Typography
+
+### 4.1 Font Family
+- **Primary**: Inter (variable font)
+- **Fallback**: System sans-serif stack (e.g., -apple-system, BlinkMacSystemFont)
+- **OpenType Features**: Enable calt, liga, tnum
+  - tnum: tabular numbers for UI alignment
+  - liga, calt: ligatures and contextual alternates
+
+### 4.2 Type Scale
+- **H1**: 36px, Weight: 600, Line height: 1.3
+- **H2**: 28px, Weight: 600, Line height: 1.4
+- **H3**: 20px, Weight: 600, Line height: 1.5
+- **Body**: 14px, Weight: 400, Line height: 1.6
+- **Small/Labels**: 12px, Weight: 500, Line height: 1.5
+
+### 4.3 Typography Rules
+- **Use rem units** for all font sizes to ensure scalability
+- **Establish clear visual hierarchy** at a glance
+- **Use no more than 3 font weights** per screen
+- **Optimal reading width**: 45-75 characters
+- **Spacing between text blocks**: 2x line height
+- **Line Height**: Body text 1.5–1.6x font size
+
+---
+
+## 5. Spacing, Grid, and Corner Radius
+
+### 5.1 Spacing Tokens (pt)
+- **spacing-xxs**: 4
+- **spacing-xs**: 8
+- **spacing-sm**: 12
+- **spacing-md**: 16
+- **spacing-lg**: 24
+- **spacing-xl**: 32
+
+### 5.2 Grid System
+- **Base Unit**: 8px (use multiples for all spacing, padding, margins)
+- **Grid**: 12-column, with specified gutter widths and max container widths per breakpoint (see Design System for details)
+
+### 5.3 Corner Radius
+- **Corner Radius**: 4px or 8px, applied consistently. No arbitrary rounding.
+
+### 5.4 Elevation & Layering
+- **z-index-base**: 0
+- **z-index-surface**: 10
+- **z-index-modal**: 100
+- **z-index-tooltip**: 300
+
+### 5.5 Surface Logic
+- Use background shifts or 3:1 border contrast to separate layers
+- Prefer minimal, diffused drop shadows for elevation. Shadows should use generous blur radii and low opacity for a soft lift; avoid sharp, dark edges.
+- Optionally, apply a very subtle, low-contrast inner shadow (inset) for pressed/active states of interactive elements (e.g., chips, buttons) to create a gentle 'pushed in' effect, ensuring contrast is maintained.
+- For large secondary surfaces (#1E1E1E), an extremely subtle dark-grey-to-darker-grey gradient may be used to reduce flatness and suggest curvature, provided contrast is preserved.
+- A low-opacity (2-5%), fine-grain noise texture may be consistently applied over base or secondary surfaces to add subtle materiality, as long as legibility and performance are not impacted.
+
+---
+
+## 6. Layout & Information Architecture
+
+### 6.1 Layout Structure
+- **Desktop**: Three-column (Left Nav #000000, Center Content #121212, Right Contextual #121212)
+- **Mobile**: Single-column, bottom tab bar for 3–5 primary destinations (preferred over hamburger menu for discoverability)
+
+### 6.2 Navigation
+- **Active state** must use #EEB700 accent or distinct background
+- **Secondary navigation** (tabs) uses accent for active underline/background
+- **Breadcrumbs**: Required for deep hierarchies
+- **Focus**: Keyboard navigation always shows #EEB700 outline
+
+### 6.3 IA Principles
+- Structure based on user research (card sorting, usability testing)
+- Clear navigation paths
+- Progressive disclosure for complex workflows
+- Consistent placement of recurring elements
+
+---
+
+## 7. Motion & Interaction
+
+### 7.1 Duration
+- **instant**: 0ms
+- **short**: 150-250ms (micro-interactions)
+- **standard**: 300-400ms (UI transitions)
+- **long**: 500ms (modals or overlays)
+
+### 7.2 Easing Curves
+- **standard**: cubic-bezier(0.4, 0, 0.2, 1)
+- **exit**: cubic-bezier(0.4, 0, 1, 1)
+- **entry**: cubic-bezier(0.0, 0, 0.2, 1)
+- **linear**: linear
+
+### 7.3 Motion Guidelines
+- **Animate opacity and transform** only for performance
+- **Never animate more than 2 elements** at once
+- **No looping/decorative animations**
+- **Respect prefers-reduced-motion**
+- **All motion must be purposeful**, not decorative
+
+### 7.4 Examples
+- **Modal open**: standard + entry
+- **Button press**: short + standard
+- **List loading**: standard + staggered fade/slide
+
+---
+
+## 8. Haptic & Audio Feedback
+
+### 8.1 Haptic Feedback
+- **Tap**: light impact
+- **Toggle/Picker**: light tick
+- **Long Press**: medium impact
+- **Success**: notificationSuccess pattern
+- **Error**: notificationError pattern
+
+### 8.2 Platform APIs
+- **iOS**: UIFeedbackGenerator, UINotificationFeedbackGenerator
+- **Android**: Vibrator, HapticFeedbackConstants
+
+### 8.3 Audio Feedback (Optional)
+- **Tap**: light click
+- **Send/Receive**: soft whoosh
+- **Alert/Error**: chime
+
+### 8.4 Rules
+- Haptics always support or confirm user action
+- No vibration on every touch — be intentional
+- Never rely on sound alone
+- Respect system mute and preferences
+
+---
+
+## 9. Core Components
+
+### 9.1 Buttons
+- **Primary**: Solid white background, black text, chip-sized.
+- **Secondary**: Off-white outline and text, chip-sized.
+- **Tertiary**: Off-white text only.
+- **Min touch area**: 44x44pt
+- **Focus State**: #EEB700 outline/ring, >=2px, high visibility on all backgrounds.
+- **Text must contrast 4.5:1** with background
+- **All states** must be specified (:hover, :active, :focus, :disabled)
+- **Size and Shape**: Chip-sized with horizontal padding that adapts to content, 36px height, 24px border radius.
+- **Buttons are chips**: All buttons use the chip style (36px height, 24px radius), with clear state changes for hover, active, and focus. For a soft UI feel, active states may combine a subtle scale down (to 98%) with a low-contrast inset shadow and smooth standard-easing animation (150ms).
+
+### 9.2 Input Fields
+- **Default**: Subtle background, low-opacity white border, text color.
+- **Focus**: #EEB700 border/outline.
+- **Error**: Distinct color with icon and text.
+- **Use labels**, never placeholders as primary identifier
+- **Background must contrast 3:1** from parent
+- **All states must be specified.**
+
+### 9.3 Cards
+- **Padding**: 16px internal, consistent spacing between elements.
+- **Background**: #1E1E1E or slightly lighter than the base #121212.
+- **Borders**: Only if decorative, or must meet 3:1 contrast.
+- **Elevation**: Subtle, no heavy shadows.
+- **Edge-to-edge** when media focused
+- **Interactive cards** have hover/focus/active states
+- **Cards are clean**: Cards use #1E1E1E, 16px padding, and subtle, diffused elevation. Consider using radius-md (8px) or radius-lg (16px) for a softer appearance. Content within rounded cards should be clipped to the card's shape.
+
+### 9.4 Icons
+- **Default**: #FFFFFF or #E0E0E0, 1.5–2px stroke.
+- **Active/Highlight**: #EEB700, used sparingly.
+- **Must be universally recognizable**
+
+### 9.5 Interactive Feedback
+- **Active States**: All tap targets respond visually (opacity, scale, color)
+  - Active: scale down to 97%, darken by 5%
+- **Focus**: Keyboard navigation always shows #EEB700 outline
+- **Load & Progress**:
+  - Streaming data preferred (e.g., typewriter effect)
+  - Use skeleton loaders or immediate visual feedback
+
+### 9.6 Affordance & Discoverability
+- **Tappable elements** styled distinctively (color, icon, underline)
+- **Custom gestures** must be introduced gently (onboarding, hints)
+
+---
+
+## 10. Engagement & Feedback (No Vanity Metrics)
+- **No public likes, follower counts, or similar metrics.**
+- **Alternative feedback mechanisms**:
+  - Nuanced reaction systems (beyond simple likes)
+  - Private analytics dashboards for creators
+  - Qualitative feedback prompts
+  - Community-based curation signals (e.g., discussion depth, saves)
+- **User test all alternatives with target audience.**
+
+---
+
+## 11. Accessibility (WCAG AA Mandate)
+- **Contrast**: All text and essential UI elements must meet WCAG AA (4.5:1 for text, 3:1 for UI elements).
+- **Focus Indicators**: #EEB700 outline/ring, >=2px, offset and style specified in Design System. Must be highly visible on all backgrounds.
+- **Keyboard Navigation**: All interactive elements must be fully keyboard accessible. Test all user flows.
+- **Semantic HTML/ARIA**: All custom components must use correct roles/attributes.
+- **Alt Text**: All non-decorative images must have meaningful alt text.
+- **Forms**: All inputs must have programmatically associated labels and accessible error validation.
+- **Motion**: Must implement prefers-reduced-motion and test.
+- **Testing**: Automated and manual accessibility testing is required for all releases. Include keyboard-only and screen reader testing.
+
+---
+
+## 12. Behavioral Aesthetic Mapping
+
+| Pillar | Implementation Examples |
+|--------|--------------------------|
+| Sophistication | Inter font, strict spacing, minimalist elevation |
+| Dark Theme | #121212 base, #FFFFFF text, white chip buttons, #EEB700 focus indicator |
+| Infrastructure | Grid-based layout, tnum font feature, predictable component logic |
+| Purposeful Motion | Standard transitions, reduced-motion fallback, 1–2 concurrent animations |
+| Authenticity | No vanity metrics, precise feedback, clear data sources |
+| Calm | Minimal distractions, modal flow, subtle status cues |
+| Accessibility | WCAG AA compliance, keyboard navigation, screen reader tested |
+
+---
+
+## 13. Implementation Checklist
+1. **Clarify Aesthetic**: Review all work for alignment with core pillars.
+2. **Apply Tokens**: Use only defined color, typography, spacing, and radius tokens.
+3. **Component States**: Implement all interactive states for every component.
+4. **Accessibility**: Test all flows for WCAG AA compliance, including focus, keyboard, and screen reader.
+5. **Engagement**: Use only approved feedback mechanisms. No public vanity metrics.
+6. **Visual Examples**: Reference canonical examples for all implementations.
+7. **Iterate**: Gather feedback, test, and refine continuously.
+
+---
+
+## 14. Final UX Principles
+
+- Everything should feel intentional
+- Never animate without meaning
+- Color only used to guide or support behavior
+- The fewer choices per screen, the better
+- Feedback must be fast, gentle, and reliable
+- HIVE must always feel premium, personal, and precise
+
+---
+
+## 15. Premium Clarity Principles for Designers
+
+To achieve HIVE's vision of a premium, cool, and crystal-clear user experience, all designers must adhere to the following actionable principles:
+
+### 1. Visual Hierarchy & Simplicity
+- **One clear focal point per screen**: Every layout must have a single, unmistakable visual anchor.
+- **Limit simultaneous emphasis**: Never use more than one accent color or bold element in a single visual group.
+- **Whitespace is luxury**: Use generous spacing to separate content and avoid crowding. If in doubt, add more space.
+- **Consistent alignment**: All elements must snap to the 8px grid. No arbitrary offsets.
+
+### 2. Color & Contrast
+- **Accent with intent**: Use #EEB700 only for the most important interactive elements. Never for decoration or backgrounds.
+- **Dark is not black**: Use #121212 for main backgrounds, #1E1E1E for surfaces, and #000000 only for persistent nav. Never mix these arbitrarily.
+- **Text must always pass contrast**: If a text color fails 4.5:1 contrast, it must not be used.
+
+### 3. Typography
+- **Hierarchy at a glance**: H1, H2, and body text must be visually distinct. Never use more than three font sizes per screen.
+- **No clever fonts**: Only use Inter (or system sans) at specified weights and sizes. No italics, no script, no display fonts.
+- **Labels above, not inside**: Form field labels must always be outside the input, never as placeholders.
+
+### 4. Motion & Feedback
+- **Motion is meaning**: Every animation must clarify state or spatial relationship. If it doesn't, remove it.
+- **Duration discipline**: Microinteractions (tap, hover) max 200ms. Transitions (modal, page) max 400ms. Never animate more than two elements at once.
+- **No bounce, no wobble**: Use only smooth, cubic-bezier curves. Avoid playful or springy effects.
+- **Immediate feedback**: All tap/click actions must provide visual and (if possible) haptic feedback within 50ms.
+
+### 5. Iconography & Imagery
+- **Universal icons**: Use only icons that are instantly recognizable. No metaphors that require explanation.
+- **Consistent stroke**: All icons must use 1.5–2px stroke, no filled or mixed styles.
+- **Imagery must serve clarity**: Only use images that add information or context. No decorative stock photos.
+
+### 6. Component Consistency
+- **Buttons are chips**: All buttons use the chip style (36px height, 24px radius), with clear state changes for hover, active, and focus.
+- **Cards are clean**: Cards use #1E1E1E, 16px padding, and subtle, diffused elevation. Consider using radius-md (8px) or radius-lg (16px) for a softer appearance. Content within rounded cards should be clipped to the card's shape.
+- **Inputs are obvious**: Inputs must always have a visible border and clear focus state (#EEB700 outline).
+
+### 7. Clarity in Interaction
+- **One primary action per screen**: Never present more than one main CTA at a time.
+- **Progressive disclosure**: Hide advanced or secondary actions until needed.
+- **No popups for alerts**: Use banners or inline messages to avoid disrupting flow.
+
+### 8. Premium Touches
+- **Glassmorphism for overlays**: Use subtle blur and translucency for modals and sheets, never for main content.
+- **Subtle gold accent**: Use #EEB700 for focus rings, active states, and key highlights—never as a fill or background.
+- **Minimalist elevation**: Use shadow only to indicate layering, not for decoration.
+
+### 9. Review & Test
+- **Design peer review**: All screens/components must be reviewed by another designer for clarity and premium feel before handoff.
+- **Test on dark and light backgrounds**: Ensure clarity and contrast in all supported modes.
+- **User test for instant comprehension**: If users hesitate or are confused, simplify further.
+
+### 10. Softness through refinement
+- **Softness through refinement**: Achieve a soft UI feel by prioritizing diffused shadows, subtle gradients, generous corner radii, and optional surface noise. All softness must maintain strict contrast and clarity standards.
+
+---
+
+*These principles are non-negotiable. Every HIVE designer is responsible for upholding them in every deliverable. Premium clarity is not a style—it's a standard.*
+
+---
+
+*For all detailed component specs, refer to the HIVE Design System documentation. This guide is the architectural blueprint; the Design System is the implementation law.*

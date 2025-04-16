@@ -21,7 +21,7 @@ class SpaceNavigator {
     // Set the space type in the provider before navigation
     _ref.read(spaceTypeProvider(spaceId).notifier).state = spaceType;
     
-    // Navigate to the space
+    // Navigate to the space using the correct URL structure
     context.push(
       '/spaces/$spaceType/spaces/$spaceId',
       extra: space != null ? {'space': space} : null,

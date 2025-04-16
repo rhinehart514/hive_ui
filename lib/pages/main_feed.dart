@@ -5,9 +5,11 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'dart:io' show Platform;
+import 'dart:ui';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/rendering.dart';
 
 import '../models/event.dart';
 import '../models/feed_state.dart';
@@ -20,6 +22,8 @@ import '../providers/feed_provider.dart';
 import '../providers/profile_provider.dart';
 import '../providers/reposted_events_provider.dart';
 import '../widgets/feed_list_wrapper.dart';
+import '../features/feed/presentation/components/premium_top_bar.dart';
+import '../features/feed/presentation/components/signal_strip.dart';
 
 /// A simplified feed page that guarantees content will be displayed
 /// Optimized for mobile devices
@@ -93,6 +97,15 @@ class _MainFeedState extends ConsumerState<MainFeed> {
   @override
   void initState() {
     super.initState();
+    
+    // Configure system UI overlay style for better integration with the app design
+    SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
+      statusBarColor: Colors.transparent,
+      statusBarIconBrightness: Brightness.light,
+      systemNavigationBarColor: Colors.black,
+      systemNavigationBarDividerColor: Colors.transparent,
+      systemNavigationBarIconBrightness: Brightness.light,
+    ));
     
     _scrollController = ScrollController();
     _refreshIndicatorKey = GlobalKey<RefreshIndicatorState>();
@@ -350,9 +363,42 @@ class _MainFeedState extends ConsumerState<MainFeed> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: const HiveAppBar(
-        title: 'Feed',
-        showBackButton: false,
+      backgroundColor: Colors.black,
+      appBar: PremiumTopBar(
+        useLogo: true,
+        centerTitle: true,
+        actions: [
+          // Filter button
+          IconButton(
+            icon: const Icon(Icons.tune_rounded, color: AppColors.gold),
+            onPressed: () {
+              HapticFeedback.selectionClick();
+              // TODO: Implement filter functionality
+              debugPrint('Filter icon pressed');
+            },
+          ),
+          // Notifications icon
+          IconButton(
+            icon: const Icon(
+              Icons.notifications_none,
+              color: AppColors.gold,
+            ),
+            onPressed: () {
+              HapticFeedback.selectionClick();
+              // TODO: Navigate to notifications screen
+              debugPrint('Notifications icon pressed');
+            },
+          ),
+          // Search icon
+          IconButton(
+            icon: const Icon(Icons.search, color: AppColors.gold),
+            onPressed: () {
+              HapticFeedback.selectionClick();
+              // TODO: Navigate to search screen or show search bar
+              debugPrint('Search icon pressed');
+            },
+          ),
+        ],
       ),
       body: RefreshIndicator(
         key: _refreshIndicatorKey,
@@ -377,15 +423,17 @@ class _MainFeedState extends ConsumerState<MainFeed> {
     // Watch the feed state
     final feedState = ref.watch(feedStateProvider);
     
+    // Create the main content widget
+    Widget mainContent;
+    
     // Show skeleton UI while loading initial data
     if ((feedState.status == LoadingStatus.initial || 
         feedState.status == LoadingStatus.loading) && _isLoading) {
-      return _buildSkeletonFeed();
+      mainContent = _buildSkeletonFeed();
     }
-    
     // Handle error state
-    if (feedState.status == LoadingStatus.error) {
-      return Center(
+    else if (feedState.status == LoadingStatus.error) {
+      mainContent = Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
@@ -410,77 +458,100 @@ class _MainFeedState extends ConsumerState<MainFeed> {
         ),
       );
     }
-    
     // Handle empty feed
-    if (feedState.feedItems.isEmpty) {
-      return const Center(
+    else if (feedState.feedItems.isEmpty) {
+      mainContent = const Center(
         child: Text('No events found', 
           style: TextStyle(color: AppColors.textPrimary)),
       );
     }
-    
-    // Create combined feed with events, spaces and hive lab items
-    final combinedFeed = <Map<String, dynamic>>[];
-    
-    // Add all feed items to our combined feed
-    combinedFeed.addAll(feedState.feedItems);
-    
-    // Insert a space recommendation every 5 items
-    if (_spaceRecommendations.isNotEmpty) {
-      int spaceCounter = 0;
-      int originalLength = combinedFeed.length;
+    else {
+      // Create combined feed with events, spaces and hive lab items
+      final combinedFeed = <Map<String, dynamic>>[];
       
-      for (int i = 4; i < originalLength; i += 5) {
-        if (spaceCounter >= _spaceRecommendations.length) {
-          spaceCounter = 0; // Start over if we run out of spaces
-        }
+      // Add all feed items to our combined feed
+      combinedFeed.addAll(feedState.feedItems);
+      
+      // Insert a space recommendation every 5 items
+      if (_spaceRecommendations.isNotEmpty) {
+        int spaceCounter = 0;
+        int originalLength = combinedFeed.length;
         
-        // Calculate insert position accounting for previous inserts
-        int insertPos = i + (i ~/ 5);
-        if (insertPos < combinedFeed.length) {
-          combinedFeed.insert(insertPos, {
-            'type': 'space_recommendation',
-            'data': _spaceRecommendations[spaceCounter],
-          });
-          spaceCounter++;
+        for (int i = 4; i < originalLength; i += 5) {
+          if (spaceCounter >= _spaceRecommendations.length) {
+            spaceCounter = 0; // Start over if we run out of spaces
+          }
+          
+          // Calculate insert position accounting for previous inserts
+          int insertPos = i + (i ~/ 5);
+          if (insertPos < combinedFeed.length) {
+            combinedFeed.insert(insertPos, {
+              'type': 'space_recommendation',
+              'data': _spaceRecommendations[spaceCounter],
+            });
+            spaceCounter++;
+          }
         }
       }
-    }
-    
-    // Insert a hive lab item every 8 items
-    if (_hiveLabItems.isNotEmpty) {
-      int labCounter = 0;
-      int originalLength = combinedFeed.length;
       
-      for (int i = 7; i < originalLength; i += 8) {
-        if (labCounter >= _hiveLabItems.length) {
-          labCounter = 0; // Start over if we run out of lab items
-        }
+      // Insert a hive lab item every 8 items
+      if (_hiveLabItems.isNotEmpty) {
+        int labCounter = 0;
+        int originalLength = combinedFeed.length;
         
-        // Calculate insert position accounting for previous inserts
-        // This accounts for both space recommendations and previous lab items
-        int insertPos = i + (i ~/ 5) + (i ~/ 8);
-        if (insertPos < combinedFeed.length) {
-          combinedFeed.insert(insertPos, {
-            'type': 'hive_lab',
-            'data': _hiveLabItems[labCounter],
-          });
-          labCounter++;
+        for (int i = 7; i < originalLength; i += 8) {
+          if (labCounter >= _hiveLabItems.length) {
+            labCounter = 0; // Start over if we run out of lab items
+          }
+          
+          // Calculate insert position accounting for previous inserts
+          // This accounts for both space recommendations and previous lab items
+          int insertPos = i + (i ~/ 5) + (i ~/ 8);
+          if (insertPos < combinedFeed.length) {
+            combinedFeed.insert(insertPos, {
+              'type': 'hive_lab',
+              'data': _hiveLabItems[labCounter],
+            });
+            labCounter++;
+          }
         }
       }
+      
+      // Use our new FeedListWrapper to fix ParentDataWidget issues
+      mainContent = FeedListWrapper(
+        feedItems: combinedFeed,
+        isLoadingMore: feedState.isLoadingMore,
+        hasMoreEvents: feedState.hasMoreEvents,
+        scrollController: _scrollController,
+        onLoadMore: _loadMoreData,
+        onNavigateToEventDetails: _navigateToEventDetails,
+        onRsvpToEvent: _handleRsvpToEvent,
+        onRepost: _handleRepost,
+      );
     }
     
-    // Use our new FeedListWrapper to fix ParentDataWidget issues
-    return FeedListWrapper(
-      feedItems: combinedFeed,
-      isLoadingMore: feedState.isLoadingMore,
-      hasMoreEvents: feedState.hasMoreEvents,
-      scrollController: _scrollController,
-      onLoadMore: _loadMoreData,
-      onNavigateToEventDetails: _navigateToEventDetails,
-      onRsvpToEvent: _handleRsvpToEvent,
-      onRepost: _handleRepost,
+    // Return a column with the signal strip at the top and the main content below
+    return Column(
+      children: [
+        // Add the Signal Strip at the top
+        if (_shouldShowSignalStrip())
+          const Padding(
+            padding: EdgeInsets.only(top: 4, bottom: 8),
+            child: SignalStrip(
+              height: 125.0,
+              showHeader: true,
+            ),
+          ),
+        // Wrap the main content in an Expanded widget so it fills the remaining space
+        Expanded(child: mainContent),
+      ],
     );
+  }
+  
+  // Check if we should show the signal strip
+  bool _shouldShowSignalStrip() {
+    // TODO: Add logic to determine if signal strip should be shown
+    return true; // Show by default for now
   }
   
   // Build skeleton UI while loading

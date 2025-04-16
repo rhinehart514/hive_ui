@@ -88,15 +88,27 @@ extension HiveComponentStyleExtension on HiveComponentStyle {
     }
   }
 
-  /// Get the appropriate color alpha for gold accent based on the style
+  /// Get the appropriate color alpha for white accent based on the style
+  double getAccentOpacity() {
+    switch (this) {
+      case HiveComponentStyle.standard:
+        return 0.3; // Subtle white for standard
+      case HiveComponentStyle.important:
+        return 0.4; // More visible for important
+      case HiveComponentStyle.special:
+        return 0.5; // Most visible for special
+    }
+  }
+
+  /// Get the appropriate opacity for gold accent based on component style
   double getGoldAccentOpacity() {
     switch (this) {
       case HiveComponentStyle.standard:
-        return 0.2; // Very subtle gold for standard
+        return 0.65; // Subtle gold for standard components
       case HiveComponentStyle.important:
-        return 0.3; // More visible for important
+        return 0.75; // More visible gold for important components
       case HiveComponentStyle.special:
-        return 0.4; // Most visible for special
+        return 0.85; // Most visible gold for special components
     }
   }
 
@@ -124,9 +136,9 @@ extension HiveComponentStyleExtension on HiveComponentStyle {
     }
   }
 
-  /// Should add gold accent based on style
-  bool shouldAddGoldAccent() {
-    // Only special elements get gold by default
+  /// Should add white accent based on style
+  bool shouldAddWhiteAccent() {
+    // Only special elements get white accent by default
     return this == HiveComponentStyle.special;
   }
 }
@@ -275,19 +287,19 @@ extension GlassmorphismExtension on Widget {
     double? borderRadius,
     double? blur,
     double? opacity,
-    bool addGoldAccent = false,
+    bool addWhiteAccent = false,
   }) {
     // Use style-specific values or provided overrides
     final double actualBorderRadius = borderRadius ?? style.getBorderRadius();
     final double actualBlur = blur ?? style.getBlurValue();
     final double actualOpacity = opacity ?? style.getOpacityValue();
-    final bool shouldAddGold = addGoldAccent || style.shouldAddGoldAccent();
+    final bool shouldAddWhite = addWhiteAccent || style.shouldAddWhiteAccent();
 
     // Create a glassmorphic container with the appropriate styling
     return Container(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(actualBorderRadius),
-        boxShadow: shouldAddGold ? GlassmorphismGuide.goldAccentShadows : null,
+        boxShadow: shouldAddWhite ? GlassmorphismGuide.whiteAccentShadows : null,
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(actualBorderRadius),
@@ -298,8 +310,8 @@ extension GlassmorphismExtension on Widget {
               color: Colors.white.withOpacity(actualOpacity),
               borderRadius: BorderRadius.circular(actualBorderRadius),
               border: Border.all(
-                color: shouldAddGold
-                    ? AppColors.gold.withOpacity(style.getGoldAccentOpacity())
+                color: shouldAddWhite
+                    ? AppColors.white.withOpacity(style.getAccentOpacity())
                     : Colors.white.withOpacity(0.1),
                 width: style.getBorderWidth(),
               ),

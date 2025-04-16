@@ -20,6 +20,7 @@ import '../../providers/feed_provider.dart';
 import '../../services/feed/feed_analytics.dart';
 import '../../components/moderation/report_button.dart';
 import '../../features/moderation/domain/entities/content_report_entity.dart';
+import '../../features/events/presentation/routing/event_routes.dart';
 
 /// A premium event card component that follows HIVE's brand aesthetic:
 /// - Black/white core with layered visual depth
@@ -535,12 +536,12 @@ class _HiveEventCardState extends ConsumerState<HiveEventCard>
                 curve: Curves.easeOut,
                 child: GestureDetector(
                   onTap: () {
-                    // Navigate to event details using the correct nested path
+                    // Navigate to event details using the correct path
                     if (context.mounted) {
-                      context.push('/home/event/${widget.event.id}', extra: {
-                        'event': widget.event,
-                        'heroTag': 'event-card-${widget.event.id}',
-                      });
+                      context.push(
+                        EventRoutes.getRealtimeEventDetailPath(widget.event.id, heroTag: 'event-card-${widget.event.id}'),
+                        extra: widget.event,
+                      );
                     }
                   },
                   onTapDown: (_) => setState(() => _isPressed = true),

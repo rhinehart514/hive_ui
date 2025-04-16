@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:hive_ui/features/feed/domain/entities/signal_content.dart';
 import 'package:hive_ui/features/feed/presentation/providers/signal_provider.dart';
+import 'package:hive_ui/features/feed/presentation/widgets/feed_friend_motion_card.dart';
 import 'package:hive_ui/theme/app_colors.dart';
 import 'package:hive_ui/main.dart' show firebaseVerificationProvider;
 
@@ -231,6 +232,11 @@ class _SignalStripState extends ConsumerState<SignalStrip>
     // Determine the icon based on the content type
     final icon = _getIconForType(content.type);
     
+    // Special handling for friend motion cards
+    if (content.type == SignalType.friendMotion) {
+      return _buildFriendMotionCard(content);
+    }
+    
     return GestureDetector(
       onTap: () => _handleCardTap(content),
       child: Container(
@@ -249,14 +255,14 @@ class _SignalStripState extends ConsumerState<SignalStrip>
     IconData icon,
   ) {
     return ClipRRect(
-      borderRadius: BorderRadius.circular(16),
+      borderRadius: BorderRadius.circular(8),
       child: BackdropFilter(
         filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
         child: Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: Colors.black.withOpacity(widget.glassOpacity),
-            borderRadius: BorderRadius.circular(16),
+            color: AppColors.dark2.withOpacity(widget.glassOpacity),
+            borderRadius: BorderRadius.circular(8),
             border: Border.all(
               color: Colors.white.withOpacity(0.15),
               width: 0.5,
@@ -275,9 +281,9 @@ class _SignalStripState extends ConsumerState<SignalStrip>
   ) {
     return Card(
       elevation: 0,
-      color: const Color(0xFF1C1C1E),
+      color: AppColors.dark2,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(8),
         side: BorderSide(
           color: Colors.white.withOpacity(0.1),
           width: 0.5,
@@ -629,6 +635,17 @@ class _SignalStripState extends ConsumerState<SignalStrip>
             ),
           ],
         ),
+      ),
+    );
+  }
+  
+  /// Build a specialized Friend Motion card
+  Widget _buildFriendMotionCard(SignalContent content) {
+    return Padding(
+      padding: const EdgeInsets.only(right: 12),
+      child: FeedFriendMotionCard(
+        signalContent: content,
+        onTap: () => _handleCardTap(content),
       ),
     );
   }

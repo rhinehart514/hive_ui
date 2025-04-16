@@ -317,6 +317,14 @@ class SpaceModel {
         return 'fraternityAndSorority';
       case SpaceType.hiveExclusive:
         return 'hiveExclusive';
+      case SpaceType.organization:
+        return 'organization';
+      case SpaceType.project:
+        return 'project';
+      case SpaceType.event:
+        return 'event';
+      case SpaceType.community:
+        return 'community';
       case SpaceType.other:
         return 'other';
     }

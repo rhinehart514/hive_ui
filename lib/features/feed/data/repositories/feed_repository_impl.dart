@@ -713,24 +713,33 @@ class FeedRepositoryImpl implements FeedRepository {
       // Stream 1: Upcoming Events
       final eventsStream = _firestore
           .collection('events')
-          .where('endDate', isGreaterThan: firestoreNow)
-          .orderBy('endDate')
-          .limit(50)
+          // REMOVED: .where('endDate', isGreaterThan: firestoreNow) // Cannot compare String with Timestamp server-side
+          .orderBy('endDate') // Still ordering by string, might not be perfect chronologically
+          .limit(50) // Fetching first 50 ordered by string
           .snapshots()
           .map((snapshot) {
             // Process the snapshot into a list of Event objects
-            debugPrint('🔄 FEED STREAM: Received ${snapshot.docs.length} event snapshots.');
+            debugPrint('🔄 FEED STREAM: Received ${snapshot.docs.length} event snapshots for client-side filtering.');
+            final now = DateTime.now(); // Get current time for client-side comparison
             final events = snapshot.docs.map((doc) {
               try {
                 final data = _processTimestamps(doc.data());
                 data['id'] = doc.id;
-                return Event.fromJson(data);
+                // Assuming Event.fromJson correctly parses the endDate string to DateTime
+                return Event.fromJson(data); 
               } catch (e) {
                 debugPrint('❌ FEED STREAM: Error parsing event ${doc.id}: $e');
                 return null;
               }
-            }).whereType<Event>().toList();
-            events.sort((a, b) => a.startDate.compareTo(b.startDate));
+            }).whereType<Event>()
+              // ADDED: Client-side filtering after parsing
+              .where((event) => event.endDate.isAfter(now)) 
+              .toList();
+            
+            // Optionally sort again by actual DateTime if needed, as string sort wasn't chronological
+            events.sort((a, b) => a.startDate.compareTo(b.startDate)); 
+            
+            debugPrint('✅ FEED STREAM: Found ${events.length} future events after client-side filtering.');
             return events;
           }).handleError((error) {
             debugPrint('❌ FEED STREAM: Error in eventsStream: $error');

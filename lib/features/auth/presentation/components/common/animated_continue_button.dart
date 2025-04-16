@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:hive_ui/theme/app_colors.dart';
 import 'package:hive_ui/theme/app_theme.dart';
 import 'package:hive_ui/features/auth/presentation/utils/animation_constants.dart';
 
-/// A reusable animated continue button with Apple-style animations
+/// A reusable animated continue button with HIVE brand aesthetics
 class AnimatedContinueButton extends StatefulWidget {
   /// The button text
   final String text;
@@ -24,6 +25,9 @@ class AnimatedContinueButton extends StatefulWidget {
   /// Custom animation duration
   final Duration animationDuration;
 
+  /// Whether this button is a primary action
+  final bool isPrimary;
+
   const AnimatedContinueButton({
     Key? key,
     this.text = 'Continue',
@@ -32,6 +36,7 @@ class AnimatedContinueButton extends StatefulWidget {
     this.width = double.infinity,
     this.height,
     this.animationDuration = const Duration(milliseconds: 250),
+    this.isPrimary = true,
   }) : super(key: key);
 
   @override
@@ -81,7 +86,7 @@ class _AnimatedContinueButtonState extends State<AnimatedContinueButton>
       _isPressed = false;
       _controller.reverse();
       
-      // Provide haptic feedback
+      // Provide haptic feedback following HIVE's "Purposeful Motion" principle
       HapticFeedback.mediumImpact();
       
       // Call onPressed handler
@@ -102,6 +107,12 @@ class _AnimatedContinueButtonState extends State<AnimatedContinueButton>
   Widget build(BuildContext context) {
     final buttonHeight = widget.height ?? AppTheme.spacing56;
     
+    // Define colors based on HIVE brand guidelines
+    final Color activeBackgroundColor = widget.isPrimary ? AppColors.gold : Colors.transparent;
+    final Color inactiveBackgroundColor = Colors.white12;
+    final Color activeTextColor = widget.isPrimary ? Colors.black : AppColors.white;
+    final Color inactiveTextColor = Colors.white38;
+    
     return AnimatedBuilder(
       animation: _controller,
       builder: (context, child) {
@@ -120,11 +131,14 @@ class _AnimatedContinueButtonState extends State<AnimatedContinueButton>
           width: widget.width,
           height: buttonHeight,
           decoration: BoxDecoration(
-            color: widget.isEnabled ? Colors.white : Colors.white12,
-            borderRadius: BorderRadius.circular(buttonHeight / 2),
-            boxShadow: widget.isEnabled ? [
+            color: widget.isEnabled ? activeBackgroundColor : inactiveBackgroundColor,
+            borderRadius: BorderRadius.circular(30),
+            border: !widget.isPrimary && widget.isEnabled 
+                ? Border.all(color: AppColors.white.withOpacity(0.2), width: 1) 
+                : null,
+            boxShadow: widget.isEnabled && widget.isPrimary ? [
               BoxShadow(
-                color: Colors.black.withOpacity(0.1),
+                color: AppColors.gold.withOpacity(0.2),
                 blurRadius: 8,
                 offset: const Offset(0, 4),
               ),
@@ -135,7 +149,7 @@ class _AnimatedContinueButtonState extends State<AnimatedContinueButton>
               duration: AnimationConstants.standardDuration,
               curve: AnimationConstants.standardCurve,
               style: GoogleFonts.inter(
-                color: widget.isEnabled ? Colors.black : Colors.white38,
+                color: widget.isEnabled ? activeTextColor : inactiveTextColor,
                 fontWeight: FontWeight.w600,
                 fontSize: 16,
                 letterSpacing: 0.2,

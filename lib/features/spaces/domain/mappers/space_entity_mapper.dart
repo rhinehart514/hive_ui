@@ -241,6 +241,14 @@ class SpaceEntityMapper {
         return 'Fraternity & Sorority';
       case SpaceType.hiveExclusive:
         return 'HIVE Exclusive';
+      case SpaceType.organization:
+        return 'Organization';
+      case SpaceType.project:
+        return 'Project';
+      case SpaceType.event:
+        return 'Event';
+      case SpaceType.community:
+        return 'Community';
       case SpaceType.other:
         return 'Other';
     }
@@ -259,6 +267,14 @@ class SpaceEntityMapper {
         return Icons.people;
       case SpaceType.hiveExclusive:
         return Icons.verified;
+      case SpaceType.organization:
+        return Icons.business;
+      case SpaceType.project:
+        return Icons.assignment;
+      case SpaceType.event:
+        return Icons.event;
+      case SpaceType.community:
+        return Icons.forum;
       case SpaceType.other:
         return Icons.group;
     }
@@ -326,6 +342,11 @@ class SpaceEntityMapper {
         return model_types.SpaceType.fraternityAndSorority;
       case SpaceType.hiveExclusive:
         return model_types.SpaceType.hiveExclusive;
+      case SpaceType.organization:
+      case SpaceType.project:
+      case SpaceType.event:
+      case SpaceType.community:
+        return model_types.SpaceType.other;
       case SpaceType.other:
         return model_types.SpaceType.other;
     }

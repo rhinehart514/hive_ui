@@ -1,12 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:hive_ui/theme/app_colors.dart';
-import 'package:hive_ui/theme/app_theme.dart';
-import 'package:hive_ui/features/auth/presentation/components/common/animated_selection_item.dart';
-import 'package:hive_ui/features/auth/presentation/components/common/animated_continue_button.dart';
-import 'package:hive_ui/features/auth/presentation/utils/animation_constants.dart';
+import 'package:hive_ui/features/auth/presentation/components/onboarding/layout_constants.dart';
 
-class YearPage extends StatelessWidget {
+class YearPage extends StatefulWidget {
   final String? selectedYear;
   final List<String> years;
   final ValueChanged<String> onYearSelected;
@@ -14,118 +12,214 @@ class YearPage extends StatelessWidget {
   final VoidCallback? onContinue;
 
   const YearPage({
-    Key? key,
+    super.key,
     required this.selectedYear,
     required this.years,
     required this.onYearSelected,
     required this.progressIndicator,
     this.onContinue,
-  }) : super(key: key);
+  });
+  
+  @override
+  State<YearPage> createState() => _YearPageState();
+}
+
+class _YearPageState extends State<YearPage> with SingleTickerProviderStateMixin {
+  late AnimationController _animationController;
+  late Animation<double> _fadeInAnimation;
+  late Animation<Offset> _slideAnimation;
+  
+  @override
+  void initState() {
+    super.initState();
+    
+    // Setup animations
+    _animationController = AnimationController(
+      duration: OnboardingLayout.standardDuration,
+      vsync: this,
+    );
+    
+    _fadeInAnimation = Tween<double>(
+      begin: 0.0,
+      end: 1.0,
+    ).animate(
+      CurvedAnimation(
+        parent: _animationController,
+        curve: OnboardingLayout.entryCurve,
+      ),
+    );
+    
+    _slideAnimation = Tween<Offset>(
+      begin: const Offset(0, 0.1),
+      end: Offset.zero,
+    ).animate(
+      CurvedAnimation(
+        parent: _animationController,
+        curve: OnboardingLayout.entryCurve,
+      ),
+    );
+    
+    // Start animation
+    _animationController.forward();
+  }
+  
+  @override
+  void dispose() {
+    _animationController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 32, 24, 24),
+      padding: OnboardingLayout.screenPadding,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Title with slight entrance animation
-          TweenAnimationBuilder<double>(
-            tween: Tween(begin: 0.0, end: 1.0),
-            duration: AnimationConstants.standardDuration,
-            curve: AnimationConstants.entranceCurve,
-            builder: (context, value, child) {
-              return Opacity(
-                opacity: value,
-                child: Transform.translate(
-                  offset: Offset(0, 20 * (1 - value)),
-                  child: child,
-                ),
-              );
-            },
-            child: Text(
-              'What year are you?',
-              style: GoogleFonts.outfit(
-                color: Colors.white,
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
+          FadeTransition(
+            opacity: _fadeInAnimation,
+            child: SlideTransition(
+              position: _slideAnimation,
+              child: Text(
+                'What year are you?',
+                style: OnboardingLayout.titleStyle,
               ),
             ),
           ),
-          const SizedBox(height: 8),
-          TweenAnimationBuilder<double>(
-            tween: Tween(begin: 0.0, end: 1.0),
-            duration: AnimationConstants.standardDuration,
-            curve: AnimationConstants.entranceCurve,
-            builder: (context, value, child) {
-              return Opacity(
-                opacity: value,
-                child: child,
-              );
-            },
-            child: Text(
-              'Select your current year',
-              style: GoogleFonts.inter(
-                color: Colors.white70,
-                fontSize: 16,
+          SizedBox(height: OnboardingLayout.spacingXS),
+          FadeTransition(
+            opacity: _fadeInAnimation,
+            child: SlideTransition(
+              position: _slideAnimation,
+              child: Text(
+                'Select your current year',
+                style: OnboardingLayout.subtitleStyle,
               ),
             ),
           ),
-          const SizedBox(height: 32),
-          // Staggered entrance of year options
-          Wrap(
-            spacing: 12,
-            runSpacing: 12,
-            children: List.generate(
-              years.length,
-              (index) {
-                final year = years[index];
-                final isSelected = year == selectedYear;
-                
-                // Stagger the animations
-                return TweenAnimationBuilder<double>(
-                  tween: Tween(begin: 0.0, end: 1.0),
-                  duration: AnimationConstants.standardDuration,
-                  curve: AnimationConstants.entranceCurve,
-                  // Add a delay based on index for staggered effect
-                  builder: (context, value, child) {
-                    return Opacity(
-                      opacity: value,
-                      child: Transform.translate(
-                        offset: Offset(0, 30 * (1 - value)),
-                        child: child,
-                      ),
-                    );
-                  },
-                  child: AnimatedSelectionItem(
-                    text: year,
-                    isSelected: isSelected,
-                    onTap: () => onYearSelected(year),
-                  ),
-                );
-              },
+          SizedBox(height: OnboardingLayout.spacingXL),
+          FadeTransition(
+            opacity: _fadeInAnimation,
+            child: AnimatedWrap(
+              items: widget.years,
+              selectedItem: widget.selectedYear,
+              onItemSelected: widget.onYearSelected,
             ),
           ),
           const Expanded(child: SizedBox()),
-          progressIndicator,
-          const SizedBox(height: 24),
-          TweenAnimationBuilder<double>(
-            tween: Tween(begin: 0.0, end: 1.0),
-            duration: AnimationConstants.standardDuration,
-            curve: AnimationConstants.entranceCurve,
-            builder: (context, value, child) {
-              return Opacity(
-                opacity: value,
-                child: child,
-              );
-            },
-            child: AnimatedContinueButton(
-              isEnabled: selectedYear != null,
-              onPressed: onContinue,
+          widget.progressIndicator,
+          SizedBox(height: OnboardingLayout.spacingMD),
+          FadeTransition(
+            opacity: _fadeInAnimation,
+            child: SizedBox(
+              width: double.infinity,
+              height: OnboardingLayout.buttonHeight,
+              child: ElevatedButton(
+                onPressed: widget.selectedYear != null ? widget.onContinue : null,
+                style: OnboardingLayout.primaryButtonStyle(isEnabled: widget.selectedYear != null),
+                child: Text(
+                  'Continue',
+                  style: OnboardingLayout.buttonTextStyle,
+                ),
+              ),
             ),
           ),
-          const SizedBox(height: 40),
+          SizedBox(height: OnboardingLayout.spacingXL),
         ],
+      ),
+    );
+  }
+}
+
+/// A wrap layout with staggered animation for its items
+class AnimatedWrap extends StatelessWidget {
+  final List<String> items;
+  final String? selectedItem;
+  final ValueChanged<String> onItemSelected;
+  
+  const AnimatedWrap({
+    super.key,
+    required this.items,
+    required this.selectedItem,
+    required this.onItemSelected,
+  });
+  
+  @override
+  Widget build(BuildContext context) {
+    return Wrap(
+      spacing: OnboardingLayout.spacingSM,
+      runSpacing: OnboardingLayout.spacingSM,
+      children: List.generate(items.length, (index) {
+        final item = items[index];
+        final isSelected = item == selectedItem;
+        
+        // Staggered delay based on index
+        final delay = Duration(milliseconds: 50 * index);
+        
+        return TweenAnimationBuilder<double>(
+          tween: Tween(begin: 0.0, end: 1.0),
+          duration: OnboardingLayout.standardDuration,
+          curve: OnboardingLayout.entryCurve,
+          builder: (context, value, child) {
+            return Opacity(
+              opacity: value,
+              child: Transform.translate(
+                offset: Offset(0, 20 * (1 - value)),
+                child: child,
+              ),
+            );
+          },
+          child: _YearOption(
+            text: item,
+            isSelected: isSelected,
+            onTap: () => onItemSelected(item),
+          ),
+        );
+      }),
+    );
+  }
+}
+
+/// A selectable year option with consistent styling
+class _YearOption extends StatelessWidget {
+  final String text;
+  final bool isSelected;
+  final VoidCallback onTap;
+
+  const _YearOption({
+    required this.text,
+    required this.isSelected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () {
+          HapticFeedback.selectionClick();
+          onTap();
+        },
+        borderRadius: BorderRadius.circular(OnboardingLayout.itemRadius),
+        splashColor: OnboardingLayout.activeIndicator.withOpacity(0.1),
+        highlightColor: OnboardingLayout.activeIndicator.withOpacity(0.05),
+        child: AnimatedContainer(
+          duration: OnboardingLayout.standardDuration,
+          curve: OnboardingLayout.standardCurve,
+          padding: OnboardingLayout.itemPadding,
+          decoration: isSelected 
+            ? OnboardingLayout.selectedItemDecoration
+            : OnboardingLayout.unselectedItemDecoration,
+          child: Text(
+            text,
+            style: GoogleFonts.inter(
+              color: isSelected ? Colors.black : OnboardingLayout.textPrimary,
+              fontWeight: FontWeight.w600,
+              fontSize: 15,
+            ),
+          ),
+        ),
       ),
     );
   }

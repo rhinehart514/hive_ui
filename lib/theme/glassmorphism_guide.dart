@@ -88,6 +88,21 @@ class GlassmorphismGuide {
           offset: const Offset(0, 3), // Smaller offset
         ),
       ];
+      
+  // White accent shadows for updated design language
+  static List<BoxShadow> get whiteAccentShadows => [
+        BoxShadow(
+          color: Colors.white.withOpacity(0.06), // White as a whisper
+          blurRadius: 8,
+          spreadRadius: -2,
+        ),
+        BoxShadow(
+          color: Colors.black.withOpacity(0.3), // More subtle shadow
+          blurRadius: 6,
+          spreadRadius: 0,
+          offset: const Offset(0, 3), // Smaller offset
+        ),
+      ];
 
   // Helper method to create a GlassmorphicContainer
   static Widget createContainer({

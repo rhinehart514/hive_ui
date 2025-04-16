@@ -34,7 +34,6 @@ import 'package:hive_ui/core/navigation/navigation_service.dart';
 import 'package:hive_ui/features/profile/presentation/providers/profile_providers.dart';
 import 'package:hive_ui/features/spaces/presentation/widgets/discover_spaces_content.dart';
 import 'package:hive_ui/features/spaces/presentation/widgets/my_spaces_content.dart';
-import 'package:hive_ui/features/spaces/presentation/widgets/requests_content.dart';
 import 'package:hive_ui/features/spaces/domain/entities/space_entity.dart';
 
 // Extension to convert SpaceEntity to Space
@@ -275,7 +274,6 @@ class _SpacesPageState extends ConsumerState<SpacesPage> with SingleTickerProvid
                       tabs: const [
                         Tab(text: 'Explore'),
                         Tab(text: 'My Spaces'),
-                        Tab(text: 'Requests'),
                       ],
                     ),
                   ),
@@ -315,7 +313,7 @@ class _SpacesPageState extends ConsumerState<SpacesPage> with SingleTickerProvid
     
     // Set up tab controller
     _tabController = TabController(
-      length: 3,
+      length: 2,
       vsync: this,
     );
     
@@ -745,10 +743,8 @@ class _SpacesPageState extends ConsumerState<SpacesPage> with SingleTickerProvid
     
     if (_tabController?.index == 0) {
       return const MySpacesContent();
-    } else if (_tabController?.index == 1) {
-      return const DiscoverSpacesContent();
     } else {
-      return const RequestsContent();
+      return const DiscoverSpacesContent();
     }
   }
   
@@ -3412,7 +3408,6 @@ class _SpacesPageState extends ConsumerState<SpacesPage> with SingleTickerProvid
       tabs: const [
         Tab(text: 'My Spaces'),
         Tab(text: 'Discover'),
-        Tab(text: 'Requests'),
       ],
     );
   }

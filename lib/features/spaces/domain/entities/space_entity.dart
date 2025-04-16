@@ -8,7 +8,11 @@ enum SpaceType {
   campusLiving,
   fraternityAndSorority,
   hiveExclusive,
-  other
+  other,
+  organization,
+  project,
+  event,
+  community
 }
 
 /// Represents the lifecycle state of a space

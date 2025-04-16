@@ -37,22 +37,19 @@ class _FeedHeaderState extends ConsumerState<FeedHeader>
     super.initState();
     _animationController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 1500),
+      duration: const Duration(milliseconds: 3000),
     );
 
     _logoToTextAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(
         parent: _animationController,
-        curve: const Interval(0.3, 0.7, curve: Curves.easeInOut),
+        // Use a more tech-styled curve
+        curve: const Interval(0.0, 0.7, curve: Curves.easeInOutCubic),
       ),
     );
 
-    // Start animation after a short delay
-    Future.delayed(const Duration(milliseconds: 800), () {
-      if (mounted) {
-        _animationController.forward();
-      }
-    });
+    // Start animation immediately and set it to repeat
+    _animationController.repeat(reverse: true);
   }
 
   @override
@@ -92,27 +89,26 @@ class _FeedHeaderState extends ConsumerState<FeedHeader>
                   AnimatedBuilder(
                     animation: _logoToTextAnimation,
                     builder: (context, child) {
-                      // Crop logo from left to right as text appears
-                      final logoWidth =
-                          logoSize * (1.0 - _logoToTextAnimation.value);
-
                       return Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          // Logo
-                          if (logoWidth > 0)
-                            ClipRect(
-                              child: SizedBox(
-                                height: logoSize,
-                                width: logoWidth,
-                                child: Image.asset(
-                                  'assets/images/hivelogo.png',
-                                  fit: BoxFit.contain,
-                                ),
+                          // Logo with fading effect
+                          Opacity(
+                            opacity: 1.0 - _logoToTextAnimation.value,
+                            child: SizedBox(
+                              height: logoSize,
+                              width: logoSize,
+                              child: Image.asset(
+                                'assets/images/hivelogo.png',
+                                fit: BoxFit.contain,
                               ),
                             ),
+                          ),
+                          
+                          // Small spacing
+                          SizedBox(width: 4 * _logoToTextAnimation.value),
 
-                          // Text
+                          // Text with fading effect
                           Opacity(
                             opacity: _logoToTextAnimation.value * textOpacity,
                             child: Text(

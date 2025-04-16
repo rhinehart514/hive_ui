@@ -206,9 +206,10 @@ class AppTheme {
           disabledBackgroundColor: AppColors.buttonDisabled,
           shape: RoundedRectangleBorder(
             borderRadius:
-                BorderRadius.circular(radiusLg), // More refined radius
+                BorderRadius.circular(24.0), // Changed to 24px for pill/chip shape
           ),
-          minimumSize: const Size(double.infinity, spacing56),
+          minimumSize: const Size(0, 36), // Changed from double.infinity to 0 for variable width, height from 56 to 36
+          padding: const EdgeInsets.symmetric(horizontal: spacing16, vertical: spacing8), // Adjusted padding for chip-like appearance
           elevation: 0, // No shadow elevation
           textStyle: GoogleFonts.inter(
             fontSize: 16,
@@ -220,11 +221,12 @@ class AppTheme {
         style: OutlinedButton.styleFrom(
           foregroundColor: AppColors.textPrimary,
           side: const BorderSide(
-              color: AppColors.inputBorder, width: 0.5), // Thinner border
+              color: AppColors.inputBorder, width: 0.5),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(radiusLg),
+            borderRadius: BorderRadius.circular(24.0), // Changed to 24px for pill/chip shape
           ),
-          minimumSize: const Size(double.infinity, spacing56),
+          minimumSize: const Size(0, 36), // Changed from double.infinity to 0 for variable width, height from 56 to 36
+          padding: const EdgeInsets.symmetric(horizontal: spacing16, vertical: spacing8), // Adjusted padding for chip-like appearance
           textStyle: GoogleFonts.inter(
             fontSize: 16,
             fontWeight: FontWeight.w500,
@@ -235,8 +237,10 @@ class AppTheme {
         style: TextButton.styleFrom(
           foregroundColor: AppColors.white,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(radiusLg),
+            borderRadius: BorderRadius.circular(24.0), // Changed to 24px for pill/chip shape
           ),
+          padding: const EdgeInsets.symmetric(horizontal: spacing16, vertical: spacing8), // Adjusted padding for chip-like appearance
+          minimumSize: const Size(0, 36), // Changed from non-specific size to variable width with 36px height
           textStyle: GoogleFonts.inter(
             fontSize: 14,
             fontWeight: FontWeight.w500,
@@ -289,7 +293,7 @@ class AppTheme {
       ),
       // App bar - pure black with no elevation
       appBarTheme: AppBarTheme(
-        backgroundColor: AppColors.black,
+        backgroundColor: AppColors.dark,
         elevation: 0,
         titleTextStyle: titleMedium,
         iconTheme: const IconThemeData(color: AppColors.white),

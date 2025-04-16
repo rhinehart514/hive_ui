@@ -75,14 +75,6 @@ abstract class SpacesRepository {
   /// Returns true if successful, false otherwise.
   Future<bool> leaveSpace(String spaceId, {String? userId});
 
-  /// Check if a user has joined a space
-  /// 
-  /// [spaceId] The ID of the space to check
-  /// [userId] Optional user ID to check. If not provided, uses the current user.
-  /// 
-  /// Returns true if the user has joined the space, false otherwise.
-  Future<bool> hasJoinedSpace(String spaceId, {String? userId});
-
   /// Get spaces with upcoming events
   Future<List<SpaceEntity>> getSpacesWithUpcomingEvents();
 
@@ -249,120 +241,65 @@ abstract class SpacesRepository {
   /// Returns true if successful, false otherwise.
   Future<bool> removeInvites(String spaceId, List<String> userIds);
 
-  /// Updates the last activity timestamp for a space.
-  /// Should be called when significant actions occur (e.g., event created, post made).
-  /// 
-  /// [spaceId] The ID of the space to update.
-  /// 
-  /// Returns true if successful, false otherwise.
+  /// Update space activity
   Future<bool> updateSpaceActivity(String spaceId);
 
-  /// Request to join a private space.
-  /// 
-  /// [spaceId] The ID of the private space.
-  /// [userId] The ID of the user requesting to join.
-  /// 
-  /// Throws exception if space is not private or user already requested/is member.
-  Future<void> requestToJoinSpace(String spaceId, String userId);
+  /// Get membership status for a user
+  Future<bool> hasJoinedSpace(String spaceId, {String? userId});
 
-  /// Get pending join requests for a private space (for Admins/Creators).
-  /// 
-  /// [spaceId] The ID of the space.
-  /// 
-  /// Returns a list of user IDs with pending requests.
-  Future<List<String>> getJoinRequests(String spaceId);
+  /// Check if user is admin of a space
+  Future<bool> isSpaceAdmin(String spaceId, String userId);
 
-  /// Approve a join request for a private space (by Admins/Creators).
-  /// 
-  /// [spaceId] The ID of the space.
-  /// [userIdToApprove] The ID of the user whose request is being approved.
-  /// 
-  /// Returns true if successful, false otherwise.
-  Future<bool> approveJoinRequest(String spaceId, String userIdToApprove);
+  /// Get claim status for a space
+  Future<SpaceClaimStatus> getClaimStatus(String spaceId);
 
-  /// Deny a join request for a private space (by Admins/Creators).
-  /// 
-  /// [spaceId] The ID of the space.
-  /// [userIdToDeny] The ID of the user whose request is being denied.
-  /// 
-  /// Returns true if successful, false otherwise.
-  Future<bool> denyJoinRequest(String spaceId, String userIdToDeny);
+  /// Claim leadership of a space
+  Future<bool> claimLeadership(String spaceId, String userId, {String? verificationInfo});
 
-  /// Initiate the process to archive a space (by Admins/Creators).
-  /// Checks if the space is Hive Exclusive.
-  /// 
-  /// [spaceId] The ID of the space.
-  /// [initiatorId] The ID of the admin/creator initiating the archive.
-  /// 
-  /// Throws Exception if space is not Hive Exclusive or already archived/voting.
-  /// Returns true if successful, false otherwise.
-  Future<bool> initiateSpaceArchive(String spaceId, String initiatorId);
-
-  /// Cast a vote to archive or reject archiving a space (by Admins/Creators).
-  /// Checks if majority approval is reached and finalizes if so.
-  /// 
-  /// [spaceId] The ID of the space.
-  /// [voterId] The ID of the admin/creator voting.
-  /// [approve] True to approve archiving, false to reject.
-  /// 
-  /// Returns the current archive state ('voting', 'archived', 'rejected', 'none').
-  /// Throws Exception if voting is not active or voter is not admin/creator.
-  Future<String> voteForSpaceArchive(String spaceId, String voterId, bool approve);
-
-  /// Get the current archive status and votes for a space.
-  /// 
-  /// [spaceId] The ID of the space.
-  /// 
-  /// Returns a map containing status (e.g., 'voting') and votes ({voterId: bool}).
-  Future<Map<String, dynamic>> getSpaceArchiveStatus(String spaceId);
-
-  /// Get spaces marked as featured.
-  /// Sorted potentially by lastActivityAt or name.
-  Future<List<SpaceEntity>> getFeaturedSpaces({int limit = 20});
-
-  /// Get newest spaces sorted by creation date.
-  Future<List<SpaceEntity>> getNewestSpaces({int limit = 20});
-
-  /// Get simple engagement metrics for space
-  /// 
-  /// [spaceId] The ID of the space to get metrics for
-  Future<SpaceMetrics> getSpaceMetrics(String spaceId);
-
-  /// Update space verification status
-  /// Only system admins can verify spaces
-  /// 
-  /// [spaceId] The ID of the space to update
-  /// [isVerified] Whether the space is verified
-  /// 
-  /// Returns true if successful, false otherwise.
-  Future<bool> updateSpaceVerification(String spaceId, bool isVerified);
-
-  /// Creates a chat for a space's message board
+  /// Update space visibility
+  Future<bool> updateVisibility(String spaceId, bool isPrivate);
+  
+  /// Create a space chat for the given space
   /// 
   /// [spaceId] The ID of the space
-  /// [spaceName] The name of the space
-  /// [imageUrl] Optional image URL for the chat
+  /// [creatorId] The ID of the user creating the chat
+  /// [imageUrl] Optional image URL
   /// 
-  /// Returns the chat ID if successful
+  /// Returns the ID of the created chat or null if creation fails
   Future<String?> createSpaceChat(String spaceId, String spaceName, {String? imageUrl});
   
-  /// Gets the chat ID for a space's message board
+  /// Get the chat ID for a space
   /// 
   /// [spaceId] The ID of the space
   /// 
-  /// Returns the chat ID if it exists, null otherwise
+  /// Returns the chat ID or null if not found
   Future<String?> getSpaceChatId(String spaceId);
-
+  
+  /// Get metrics for a space
+  /// 
+  /// [spaceId] The ID of the space
+  /// 
+  /// Returns the space metrics
+  Future<SpaceMetrics> getSpaceMetrics(String spaceId);
+  
+  /// Update space verification status
+  /// 
+  /// [spaceId] The ID of the space
+  /// [isVerified] Whether the space is verified
+  /// 
+  /// Returns true if successful, false otherwise
+  Future<bool> updateSpaceVerification(String spaceId, bool isVerified);
+  
   /// Submit a leadership claim for a space
   /// 
-  /// [spaceId] The ID of the space to claim leadership for
+  /// [spaceId] The ID of the space
   /// [userId] The ID of the user claiming leadership
-  /// [userName] The display name of the user
+  /// [userName] The name of the user
   /// [email] The email of the user
-  /// [reason] The reason for claiming leadership
-  /// [credentials] The credentials of the user (role, position, etc.)
+  /// [reason] The reason for the claim
+  /// [credentials] The credentials of the user
   /// 
-  /// Returns true if the claim was submitted successfully, false otherwise.
+  /// Returns true if successful, false otherwise
   Future<bool> submitLeadershipClaim({
     required String spaceId,
     required String userId,
@@ -371,19 +308,84 @@ abstract class SpacesRepository {
     required String reason,
     required String credentials,
   });
-
+  
   /// Update a space member's role
   /// 
   /// [spaceId] The ID of the space
-  /// [userId] The ID of the user to update
-  /// [role] The new role to assign to the user
+  /// [userId] The ID of the user
+  /// [role] The new role
   /// 
   /// Returns true if successful, false otherwise
-  Future<bool> updateSpaceMemberRole(
-    String spaceId,
-    String userId,
-    String role,
-  );
+  Future<bool> updateSpaceMemberRole(String spaceId, String userId, String role);
+  
+  /// Request to join a space
+  /// 
+  /// [spaceId] The ID of the space
+  /// [userId] The ID of the user
+  /// 
+  /// Throws an exception if request fails
+  Future<void> requestToJoinSpace(String spaceId, String userId);
+  
+  /// Get join requests for a space
+  /// 
+  /// [spaceId] The ID of the space
+  /// 
+  /// Returns a list of user IDs
+  Future<List<String>> getJoinRequests(String spaceId);
+  
+  /// Approve a join request
+  /// 
+  /// [spaceId] The ID of the space
+  /// [requestId] The ID of the request
+  /// 
+  /// Returns true if successful, false otherwise
+  Future<bool> approveJoinRequest(String spaceId, String userId);
+  
+  /// Deny a join request
+  /// 
+  /// [spaceId] The ID of the space
+  /// [requestId] The ID of the request
+  /// 
+  /// Returns true if successful, false otherwise
+  Future<bool> denyJoinRequest(String spaceId, String userId);
+  
+  /// Initiate archive process for a space
+  /// 
+  /// [spaceId] The ID of the space
+  /// [initiatorId] The ID of the user initiating the archive
+  /// 
+  /// Returns true if successful, false otherwise
+  Future<bool> initiateSpaceArchive(String spaceId, String initiatorId);
+  
+  /// Vote on archive process for a space
+  /// 
+  /// [spaceId] The ID of the space
+  /// [userId] The ID of the user voting
+  /// [approve] Whether to approve or reject the archive
+  /// 
+  /// Returns true if successful, false otherwise
+  Future<bool> voteOnSpaceArchive(String spaceId, String userId, bool approve);
+  
+  /// Get archive status for a space
+  /// 
+  /// [spaceId] The ID of the space
+  /// 
+  /// Returns the archive status
+  Future<Map<String, dynamic>> getSpaceArchiveStatus(String spaceId);
+  
+  /// Get featured spaces
+  /// 
+  /// [limit] Maximum number of spaces to return
+  /// 
+  /// Returns a list of featured spaces
+  Future<List<SpaceEntity>> getFeaturedSpaces({int limit = 20});
+  
+  /// Get newest spaces
+  /// 
+  /// [limit] Maximum number of spaces to return
+  /// 
+  /// Returns a list of newest spaces
+  Future<List<SpaceEntity>> getNewestSpaces({int limit = 20});
 }
 
 /// Simple metrics for a space

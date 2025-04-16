@@ -678,6 +678,14 @@ class SpacesDataSourceImpl implements SpacesDataSource {
         return 'spaces/greek_life/spaces';
       case SpaceType.hiveExclusive:
         return 'spaces/hive_exclusive/spaces';
+      case SpaceType.organization:
+        return 'spaces/organizations/spaces';
+      case SpaceType.project:
+        return 'spaces/projects/spaces';
+      case SpaceType.event:
+        return 'spaces/events/spaces';
+      case SpaceType.community:
+        return 'spaces/communities/spaces';
       case SpaceType.other:
         return 'spaces/other/spaces';
     }

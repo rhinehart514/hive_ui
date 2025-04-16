@@ -34,6 +34,12 @@ import 'package:hive_ui/services/profile_sharing_service.dart';
 // Theme and Styling
 import 'package:hive_ui/theme/huge_icons.dart';
 
+// Add this import to fix the ProfileTrailTab reference
+import 'package:hive_ui/features/profile/presentation/widgets/trail_visualization.dart';
+
+// Add this import to fix the ActivityFeedTab reference
+import 'package:hive_ui/widgets/profile/activity_feed.dart';
+
 /// Provider to track whether the profile page is viewing the current user or another user
 final isCurrentUserProfileProvider = StateProvider<bool>((ref) => true);
 
@@ -73,10 +79,10 @@ class _ProfilePageState extends ConsumerState<ProfilePage>
               _scrollController.offset <= (240 - kToolbarHeight);
         });
       });
-    _tabController = TabController(length: 4, vsync: this);
+    _tabController = TabController(length: 5, vsync: this);
 
-    // Set initial tab index to 2 (Friends) for debugging the friends tab
-    _tabController.index = 2;
+    // Set initial tab index to 0 (Trail) to showcase the new feature
+    _tabController.index = 0;
     
     // Schedule profile sync after showing the page
     // We do this after a short delay to avoid UI jank
@@ -272,119 +278,89 @@ class _ProfilePageState extends ConsumerState<ProfilePage>
   }
 
   Widget _buildProfileView(UserProfile profile, AsyncValue<bool> adminStatus) {
-    final isCurrentUser = widget.userId == null;
-
-    // Using media query to adapt to different screen sizes
-    final screenSize = MediaQuery.of(context).size;
-    final isSmallScreen = screenSize.width < 600;
-    final statusBarHeight = MediaQuery.of(context).padding.top;
-
-    // Tab view content with optimized accessibility
-    final tabViews = [
-      ActivityFeedTab(
-        profile: profile,
-        userId: widget.userId,
-      ),
-      content.ProfileTabContent(
-        tabType: content.ProfileTabType.spaces,
-        profile: profile,
-        isCurrentUser: isCurrentUser,
-        onActionPressed: () {
-          // Navigate to spaces discovery
-          HapticFeedback.mediumImpact();
-          _navigateToSpaces(context);
-        },
-      ),
-      content.ProfileTabContent(
-        tabType: content.ProfileTabType.events,
-        profile: profile,
-        isCurrentUser: isCurrentUser,
-        onActionPressed: () {
-          // Navigate to events discovery
-          HapticFeedback.mediumImpact();
-        },
-      ),
-      content.ProfileTabContent(
-        tabType: content.ProfileTabType.friends,
-        profile: profile,
-        isCurrentUser: isCurrentUser,
-        onActionPressed: () {
-          // Navigate to friends discovery
-          HapticFeedback.mediumImpact();
-        },
-      ),
-    ];
-
-    // Use the accessible tab view from our helper
-    final accessibleTabBarView = ProfileAccessibilityHelper.createAccessibleTabView(
-      tabController: _tabController,
-      children: tabViews,
-      tabLabels: ['Activity', 'Spaces', 'Events', 'Friends'],
-    );
-
-    return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: const SystemUiOverlayStyle(
-        statusBarColor: Colors.transparent,
-        statusBarIconBrightness: Brightness.light,
-        systemNavigationBarColor: Colors.black,
-        systemNavigationBarIconBrightness: Brightness.light,
-      ),
-      child: Semantics(
-        container: true,
-        explicitChildNodes: true,
-        child: NestedScrollView(
-          headerSliverBuilder: (context, innerBoxIsScrolled) {
-            // Build the profile header
-            return <Widget>[
-              SliverToBoxAdapter(
-                child: ProfileHeader(
-                  profile: profile,
-                  isCurrentUser: isCurrentUser,
-                  onImageFromCamera: (imagePath) {
-                    // Update profile image
-                    ref.read(profileMediaProvider.notifier)
-                        .updateProfileImageFromCamera();
-                  },
-                  onImageFromGallery: (imagePath) {
-                    // Update profile image
-                    ref.read(profileMediaProvider.notifier)
-                        .updateProfileImageFromGallery();
-                  },
-                  onImageRemoved: () {
-                    // Remove profile image
-                    ref.read(profileMediaProvider.notifier)
-                        .removeProfileImage();
-                  },
-                  onImageTap: () {
-                    if (profile.profileImageUrl?.isNotEmpty == true) {
-                      showProfileImageViewer(context, profile.profileImageUrl!);
-                    }
-                  },
-                  onVerifiedPlusTap: isCurrentUser
-                      ? () => showVerifiedPlusDialog(context, ref, profile)
-                      : null,
-                  onEditProfile: _handleEditProfile,
-                  onRequestFriend: _handleRequestFriend,
-                  onMessage: _handleMessage,
-                  onShareProfile: _handleShareProfile,
-                  onAddTagsTapped: () => _showTagsDialog(context),
-                  firstName: profile.firstName,
-                  lastName: profile.lastName,
-                ),
+    return Scaffold(
+      backgroundColor: Colors.transparent,
+      body: NestedScrollView(
+        controller: _scrollController,
+        headerSliverBuilder: (context, innerBoxIsScrolled) {
+          return [
+            SliverToBoxAdapter(
+              child: ProfileHeader(
+                profile: profile,
+                isCurrentUser: widget.userId == null,
+                onImageFromCamera: (imagePath) {
+                  // Update profile image
+                  ref.read(profileMediaProvider.notifier)
+                      .updateProfileImageFromCamera();
+                },
+                onImageFromGallery: (imagePath) {
+                  // Update profile image
+                  ref.read(profileMediaProvider.notifier)
+                      .updateProfileImageFromGallery();
+                },
+                onImageRemoved: () {
+                  // Remove profile image
+                  ref.read(profileMediaProvider.notifier)
+                      .removeProfileImage();
+                },
+                onImageTap: () {
+                  if (profile.profileImageUrl?.isNotEmpty == true) {
+                    showProfileImageViewer(context, profile.profileImageUrl!);
+                  }
+                },
+                onVerifiedPlusTap: widget.userId == null
+                    ? () => showVerifiedPlusDialog(context, ref, profile)
+                    : null,
+                onEditProfile: _handleEditProfile,
+                onRequestFriend: _handleRequestFriend,
+                onMessage: _handleMessage,
+                onShareProfile: _handleShareProfile,
+                onAddTagsTapped: () => _showTagsDialog(context),
+                firstName: profile.firstName,
+                lastName: profile.lastName,
               ),
-              // Use the ProfileTabBarDelegate for a sticky tab bar
-              SliverPersistentHeader(
-                delegate: ProfileTabBarDelegate(
-                  tabController: _tabController,
-                  isSmallScreen: isSmallScreen,
-                  profile: profile,
-                ),
-                pinned: true, // Keep the tabs visible when scrolling
+            ),
+            SliverPersistentHeader(
+              delegate: ProfileTabBarDelegate(
+                tabController: _tabController,
+                isSmallScreen: MediaQuery.of(context).size.width < 360,
+                profile: profile,
               ),
-            ];
-          },
-          // Use the optimized and accessible TabBarView
-          body: accessibleTabBarView,
+              pinned: true,
+              floating: false,
+            ),
+          ];
+        },
+        body: TabBarView(
+          controller: _tabController,
+          children: [
+            // Trail Tab (new)
+            TrailVisualization(
+              userId: widget.userId,
+              showHeader: false,
+            ),
+            
+            // Existing tabs
+            ActivityFeedTab(
+              profile: profile,
+              userId: widget.userId,
+            ),
+            content.ProfileTabContent(
+              tabType: content.ProfileTabType.spaces,
+              profile: profile,
+              isCurrentUser: widget.userId == null,
+            ),
+            content.ProfileTabContent(
+              tabType: content.ProfileTabType.events,
+              profile: profile,
+              isCurrentUser: widget.userId == null,
+            ),
+            content.ProfileTabContent(
+              tabType: content.ProfileTabType.friends,
+              profile: profile,
+              isCurrentUser: widget.userId == null,
+            ),
+          ],
         ),
       ),
     );

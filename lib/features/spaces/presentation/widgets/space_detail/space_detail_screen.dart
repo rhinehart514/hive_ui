@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_ui/theme/app_colors.dart';
 import 'package:hive_ui/models/club.dart';
 import 'package:hive_ui/models/space.dart';
+import 'package:hive_ui/models/space_metrics.dart';
 import 'package:hive_ui/features/events/domain/entities/event.dart' as entity;
 import 'package:hive_ui/features/events/data/mappers/event_mapper.dart';
 import 'package:hive_ui/features/spaces/domain/entities/space_entity.dart';
@@ -17,6 +18,8 @@ import 'package:hive_ui/features/spaces/presentation/widgets/space_detail/space_
 import 'package:hive_ui/features/spaces/presentation/widgets/space_detail/space_events_tab.dart';
 import 'package:hive_ui/features/spaces/presentation/widgets/space_members_tab.dart';
 import 'package:hive_ui/features/spaces/presentation/widgets/space_message_board.dart';
+import 'package:hive_ui/features/spaces/presentation/widgets/space_content_modules.dart';
+import 'package:hive_ui/features/spaces/presentation/widgets/space_builder_tools.dart';
 import 'package:hive_ui/shared/widgets/error_view.dart';
 import 'package:hive_ui/features/auth/providers/auth_providers.dart';
 import 'package:hive_ui/features/profile/presentation/screens/profile_page.dart';
@@ -25,6 +28,7 @@ import 'package:go_router/go_router.dart';
 import 'package:hive_ui/features/moderation/domain/entities/content_report_entity.dart';
 import 'package:hive_ui/components/moderation/report_dialog.dart';
 import 'package:hive_ui/models/event.dart' as model_event;
+import 'package:hive_ui/features/spaces/presentation/widgets/space_join_visualization.dart';
 
 /// A screen to display details of a space or club
 class SpaceDetailScreen extends ConsumerStatefulWidget {
@@ -405,6 +409,31 @@ class _SpaceDetailScreenState extends ConsumerState<SpaceDetailScreen>
                 ),
               ),
               
+              // Display join visualization card if not joined
+              if (!_isFollowing)
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
+                    child: SpaceJoinVisualization(
+                      space: Space(
+                        id: space.id,
+                        name: space.name,
+                        description: space.description,
+                        imageUrl: space.imageUrl,
+                        bannerUrl: space.bannerUrl,
+                        isJoined: _isFollowing,
+                        isPrivate: space.isPrivate,
+                        icon: Icons.group, // Default icon
+                        metrics: SpaceMetrics.empty(),
+                        createdAt: space.createdAt,
+                        updatedAt: space.updatedAt,
+                      ),
+                      isExpanded: true,
+                      onClose: () {}, // No close action needed in this context
+                    ),
+                  ),
+                ),
+              
               // Tab bar with optimized sizing for mobile
               SliverPersistentHeader(
                 delegate: _SliverAppBarDelegate(
@@ -455,26 +484,52 @@ class _SpaceDetailScreenState extends ConsumerState<SpaceDetailScreen>
             // Use ClampingScrollPhysics for better performance on TabBarView
             physics: const ClampingScrollPhysics(),
             children: [
-              // About tab
-              SpaceAboutTab(
-                description: space.description,
-                aboutItems: const [], // Empty list for now
-                onEditDescription: _isSpaceManager ? () {
-                  // Show edit description dialog
-                  showDialog(
-                    context: context,
-                    builder: (context) => AlertDialog(
-                      title: const Text('Edit Description'),
-                      content: const Text('Edit description functionality'),
-                      actions: [
-                        TextButton(
-                          onPressed: () => Navigator.pop(context),
-                          child: const Text('Close'),
-                        ),
-                      ],
+              // About tab - Enhanced with Space Content Modules
+              SingleChildScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Description section
+                    SpaceAboutTab(
+                      description: space.description,
+                      aboutItems: const [], // Empty list for now
+                      onEditDescription: _isSpaceManager ? () {
+                        // Show edit description dialog
+                        showDialog(
+                          context: context,
+                          builder: (context) => AlertDialog(
+                            title: const Text('Edit Description'),
+                            content: const Text('Edit description functionality'),
+                            actions: [
+                              TextButton(
+                                onPressed: () => Navigator.pop(context),
+                                child: const Text('Close'),
+                              ),
+                            ],
+                          ),
+                        );
+                      } : null,
                     ),
-                  );
-                } : null,
+                    
+                    // Builder tools for space managers
+                    if (_isSpaceManager)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 16.0),
+                        child: SpaceBuilderTools(space: space),
+                      ),
+                    
+                    // Content modules
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                      child: SpaceContentModules(
+                        space: space,
+                        isManager: _isSpaceManager,
+                        isJoined: _isFollowing,
+                      ),
+                    ),
+                  ],
+                ),
               ),
               
               // Events tab
@@ -496,13 +551,11 @@ class _SpaceDetailScreenState extends ConsumerState<SpaceDetailScreen>
                   return SpaceEventsTab(
                     events: modelEvents,
                     onEventTap: (event) {
-                      // Navigate to event details
                       _navigateToEventDetails(event);
                     },
                     isManager: _isSpaceManager,
                     onCreateEvent: _isSpaceManager ? () {
-                      // Show create event dialog
-                      debugPrint('Create event for space: ${space.id}');
+                      _navigateToCreateEvent();
                     } : null,
                   );
                 },
@@ -527,24 +580,48 @@ class _SpaceDetailScreenState extends ConsumerState<SpaceDetailScreen>
         ),
       ),
       // Add floating action button for message board
-      floatingActionButton: space.hasMessageBoard ? FloatingActionButton(
-        onPressed: () {
-          // Switch to the Discussions tab
-          _tabController.animateTo(3); // Index of Discussions tab
-          
-          // Add haptic feedback for better UX
-          HapticFeedback.mediumImpact();
-        },
-        backgroundColor: AppColors.gold,
-        tooltip: 'Space Discussions',
-        child: const Icon(
-          Icons.chat_bubble_outline,
-          color: Colors.black,
-        ),
-      ) : null,
+      floatingActionButton: _buildFloatingActionButton(space),
       // Position the FAB in the bottom right, but slightly raised to avoid nav bar
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
     );
+  }
+  
+  // Extract FAB logic to a separate method for better readability
+  Widget? _buildFloatingActionButton(SpaceEntity space) {
+    // Show different FABs based on the active tab
+    switch (_tabController.index) {
+      case 0: // About tab - no FAB
+        return null;
+      case 1: // Events tab - Create Event FAB for managers
+        return _isSpaceManager ? FloatingActionButton(
+          onPressed: () {
+            _navigateToCreateEvent();
+            HapticFeedback.mediumImpact();
+          },
+          backgroundColor: AppColors.gold,
+          tooltip: 'Create Event',
+          child: const Icon(
+            Icons.add,
+            color: Colors.black,
+          ),
+        ) : null;
+      case 3: // Discussions tab - Message FAB
+        return space.hasMessageBoard ? FloatingActionButton(
+          onPressed: () {
+            // Add/focus on message input field
+            // This logic depends on the implementation of SpaceMessageBoard
+            HapticFeedback.mediumImpact();
+          },
+          backgroundColor: AppColors.gold,
+          tooltip: 'New Message',
+          child: const Icon(
+            Icons.chat_bubble_outline,
+            color: Colors.black,
+          ),
+        ) : null;
+      default:
+        return null;
+    }
   }
   
   // Show edit description dialog

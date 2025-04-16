@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -7,6 +8,7 @@ import 'package:hive_ui/theme/app_colors.dart';
 import 'package:hive_ui/theme/huge_icons.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:hive_ui/core/widgets/offline_status_overlay.dart';
+import 'package:hive_ui/core/events/app_event_bus.dart';
 
 /// Provider to control the visibility of the navigation bar
 final navigationBarVisibilityProvider = StateProvider<bool>((ref) => true);
@@ -134,17 +136,71 @@ class _ShellState extends State<Shell> {
   // Store a reference to the ProviderContainer
   late ProviderContainer _container;
   
+  // Store subscriptions for cleanup
+  StreamSubscription? _eventSubscription;
+  
   @override
   void initState() {
     super.initState();
     // Create a standalone container to manage providers
     _container = ProviderContainer();
+    
+    // Listen to app events
+    _setupEventListeners();
+  }
+  
+  void _setupEventListeners() {
+    // Subscribe to relevant app events
+    _eventSubscription = appEventBus.stream.listen(_handleAppEvent);
+  }
+  
+  void _handleAppEvent(AppEvent event) {
+    // Handle event based on type
+    switch (event.type) {
+      case AppEventType.spaceJoined:
+      case AppEventType.spaceLeft:
+        // Refresh spaces data if user is on spaces tab
+        if (widget.navigationShell.currentIndex == 1) { // Spaces tab index
+          _container.read(appEventBusProvider).fireRefreshSpaces(source: 'shell_response');
+        }
+        break;
+        
+      case AppEventType.eventRsvp:
+        // Refresh feed data if user is on feed tab
+        if (widget.navigationShell.currentIndex == 0) { // Feed tab index
+          _container.read(appEventBusProvider).fireRefreshFeed(source: 'shell_response');
+        }
+        break;
+        
+      case AppEventType.trailUpdated:
+        // Refresh profile if user is on profile tab
+        if (widget.navigationShell.currentIndex == 2) { // Profile tab index
+          _container.read(appEventBusProvider).fireRefreshProfile(source: 'shell_response');
+        }
+        break;
+        
+      case AppEventType.tabNavigation:
+        // Handle tab navigation from other sources
+        final tabIndex = event.data?['tabIndex'] as int?;
+        if (tabIndex != null && tabIndex != widget.navigationShell.currentIndex) {
+          widget.navigationShell.goBranch(tabIndex);
+        }
+        break;
+        
+      default:
+        // Ignore other event types
+        break;
+    }
   }
   
   @override
   void dispose() {
     // Dispose of the container when the widget is disposed
     _container.dispose();
+    
+    // Cancel event subscriptions
+    _eventSubscription?.cancel();
+    
     super.dispose();
   }
 
@@ -158,6 +214,9 @@ class _ShellState extends State<Shell> {
     setState(() {
       _previousIndex = widget.navigationShell.currentIndex;
     });
+
+    // Fire tab navigation event
+    appEventBus.fireTabNavigation(index, source: 'shell_navigation');
 
     // Navigate to the branch
     widget.navigationShell.goBranch(

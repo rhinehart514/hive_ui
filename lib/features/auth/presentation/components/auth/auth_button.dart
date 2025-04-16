@@ -7,10 +7,10 @@ enum AuthButtonVariant {
   /// Filled button with white background and black text
   primary,
 
-  /// Outlined button with gold border
+  /// Outlined button with white border
   secondary,
 
-  /// Text-only button with gold text
+  /// Text-only button with white text
   text,
 
   /// Social media button with icon
@@ -66,7 +66,7 @@ class AuthButton extends StatelessWidget {
       case AuthButtonVariant.primary:
         return SizedBox(
           width: double.infinity,
-          height: 56,
+          height: 36, // Chip-sized height
           child: ElevatedButton(
             onPressed: isLoading ? null : handlePress,
             style: ElevatedButton.styleFrom(
@@ -74,14 +74,15 @@ class AuthButton extends StatelessWidget {
               foregroundColor: Colors.black,
               disabledBackgroundColor: Colors.white38,
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(28),
+                borderRadius: BorderRadius.circular(24), // Using pill shape radius
               ),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8), // Chip-sized padding
               elevation: 0,
             ),
             child: isLoading
                 ? const SizedBox(
-                    height: 24,
-                    width: 24,
+                    height: 20, // Reduced for smaller button
+                    width: 20, // Reduced for smaller button
                     child: CircularProgressIndicator(
                       strokeWidth: 2,
                       valueColor: AlwaysStoppedAnimation<Color>(Colors.black),
@@ -100,23 +101,24 @@ class AuthButton extends StatelessWidget {
       case AuthButtonVariant.secondary:
         return SizedBox(
           width: double.infinity,
-          height: 56,
+          height: 36, // Chip-sized height
           child: OutlinedButton(
             onPressed: isLoading ? null : handlePress,
             style: OutlinedButton.styleFrom(
-              foregroundColor: AppColors.gold,
-              side: const BorderSide(color: AppColors.gold),
+              foregroundColor: Colors.white, // Changed from gold to white
+              side: BorderSide(color: Colors.white.withOpacity(0.3)), // Changed from gold to white with opacity
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(28),
+                borderRadius: BorderRadius.circular(24), // Using pill shape radius
               ),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8), // Chip-sized padding
             ),
             child: isLoading
-                ? const SizedBox(
-                    height: 24,
-                    width: 24,
+                ? SizedBox(
+                    height: 20, // Reduced for smaller button
+                    width: 20, // Reduced for smaller button
                     child: CircularProgressIndicator(
                       strokeWidth: 2,
-                      valueColor: AlwaysStoppedAnimation<Color>(AppColors.gold),
+                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white), // Changed from gold to white
                     ),
                   )
                 : Text(
@@ -124,7 +126,7 @@ class AuthButton extends StatelessWidget {
                     style: const TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w600,
-                      color: AppColors.gold,
+                      color: Colors.white, // Changed from gold to white
                     ),
                   ),
           ),
@@ -134,16 +136,16 @@ class AuthButton extends StatelessWidget {
         return TextButton(
           onPressed: isLoading ? null : handlePress,
           style: TextButton.styleFrom(
-            foregroundColor: AppColors.gold,
+            foregroundColor: Colors.white, // Changed from gold to white
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           ),
           child: isLoading
-              ? const SizedBox(
+              ? SizedBox(
                   height: 16,
                   width: 16,
                   child: CircularProgressIndicator(
                     strokeWidth: 2,
-                    valueColor: AlwaysStoppedAnimation<Color>(AppColors.gold),
+                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white), // Changed from gold to white
                   ),
                 )
               : Text(
@@ -151,7 +153,7 @@ class AuthButton extends StatelessWidget {
                   style: const TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w500,
-                    color: AppColors.gold,
+                    color: Colors.white, // Changed from gold to white
                   ),
                 ),
         );
@@ -159,20 +161,21 @@ class AuthButton extends StatelessWidget {
       case AuthButtonVariant.social:
         return SizedBox(
           width: double.infinity,
-          height: 56,
+          height: 36, // Chip-sized height
           child: OutlinedButton.icon(
             onPressed: isLoading ? null : handlePress,
             style: OutlinedButton.styleFrom(
               foregroundColor: Colors.white,
               side: const BorderSide(color: Colors.white24),
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(28),
+                borderRadius: BorderRadius.circular(24), // Using pill shape radius
               ),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8), // Chip-sized padding
             ),
             icon: isLoading
                 ? const SizedBox(
-                    height: 24,
-                    width: 24,
+                    height: 20, // Reduced for smaller button
+                    width: 20, // Reduced for smaller button
                     child: CircularProgressIndicator(
                       strokeWidth: 2,
                       valueColor: AlwaysStoppedAnimation<Color>(Colors.white),

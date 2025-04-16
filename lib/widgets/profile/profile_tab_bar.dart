@@ -6,6 +6,7 @@ import 'package:hive_ui/models/user_profile.dart';
 
 /// Type of profile tab
 enum ProfileTabType {
+  trail,
   activity,
   spaces,
   events,
@@ -63,6 +64,7 @@ class ProfileTabBar extends StatelessWidget {
     final eventsCount = profile?.eventCount ?? 0;
     final friendsCount = profile?.friendCount ?? 0;
     final activityCount = profile?.activityCount ?? 0;
+    final trailCount = activityCount; // Use activity count for now
 
     return Material(
       color: AppColors.cardBackground,
@@ -104,6 +106,7 @@ class ProfileTabBar extends StatelessWidget {
             fontSize: isSmallScreen ? 13 : 14,
           ),
           tabs: [
+            _buildTabWithCount('Trail', trailCount, ProfileTabType.trail),
             _buildTabWithCount('Activity', activityCount, ProfileTabType.activity),
             _buildTabWithCount('Spaces', spacesCount, ProfileTabType.spaces),
             _buildTabWithCount('Events', eventsCount, ProfileTabType.events),
@@ -135,6 +138,9 @@ class ProfileTabBar extends StatelessWidget {
     // Create semantic label for accessibility
     final String semanticLabel;
     switch (type) {
+      case ProfileTabType.trail:
+        semanticLabel = 'Trail tab, $count activities';
+        break;
       case ProfileTabType.activity:
         semanticLabel = 'Activity tab, $count activities';
         break;

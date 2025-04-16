@@ -483,24 +483,25 @@ class SpacesRepositoryImpl implements SpacesRepository {
     DateTime? lastActivityAt,
   }) async {
     try {
-      // Get the space
-      final space = await getSpaceById(spaceId);
-      if (space == null) {
-        return false;
+      final batch = FirebaseFirestore.instance.batch();
+      final spaceRef = _firestore.collection('spaces').doc(spaceId);
+      
+      final updates = <String, dynamic>{
+        'lifecycleState': lifecycleState.name,
+      };
+      
+      if (lastActivityAt != null) {
+        updates['lastActivityAt'] = lastActivityAt;
       }
       
-      // Update the space
-      final updatedSpace = space.copyWith(
-        lifecycleState: lifecycleState,
-        lastActivityAt: lastActivityAt ?? DateTime.now(),
-      );
+      batch.update(spaceRef, updates);
       
-      // Save the updated space
-      await updateSpace(updatedSpace);
+      await batch.commit();
       
+      debugPrint('Successfully updated lifecycle state for space $spaceId to ${lifecycleState.name}');
       return true;
     } catch (e) {
-      debugPrint('Error updating lifecycle state: $e');
+      debugPrint('Error updating lifecycle state for space $spaceId: $e');
       return false;
     }
   }
@@ -559,9 +560,16 @@ class SpacesRepositoryImpl implements SpacesRepository {
   @override
   Future<String?> getSpaceChatId(String spaceId) async {
     try {
-      return await _dataSource.getSpaceChatId(spaceId);
+      final spaceDoc = await _firestore.collection('spaces').doc(spaceId).get();
+      final data = spaceDoc.data();
+      
+      if (data != null && data.containsKey('chatId')) {
+        return data['chatId'] as String?;
+      }
+      
+      return null;
     } catch (e) {
-      debugPrint('Error getting space chat ID: $e');
+      debugPrint('Error getting chat ID for space $spaceId: $e');
       return null;
     }
   }
@@ -634,33 +642,38 @@ class SpacesRepositoryImpl implements SpacesRepository {
   @override
   Future<SpaceMetrics> getSpaceMetrics(String spaceId) async {
     try {
-      // Try to get metrics from the space document
-      final space = await getSpaceById(spaceId);
-      if (space == null) {
-        return const SpaceMetrics(
-          memberCount: 0,
-          eventCount: 0,
-          activeMembers: 0,
-        );
-      }
-      
       // Get member count
-      final members = await getSpaceMembers(spaceId);
+      final membersQuery = await _firestore
+          .collection('spaces')
+          .doc(spaceId)
+          .collection('members')
+          .get();
+      final memberCount = membersQuery.docs.length;
       
-      // Get events count
-      final events = await getSpaceEvents(spaceId);
+      // Get event count
+      final eventsQuery = await FirebaseFirestore.instance
+          .collection('events')
+          .where('spaceId', isEqualTo: spaceId)
+          .get();
+      final eventCount = eventsQuery.docs.length;
       
-      // For active members, we'll just use a percentage of total members for now
-      // In a real implementation, this would be based on recent activity
-      final activeMembers = (members.length * 0.7).round();
+      // Get active members (those who were active in the last 7 days)
+      final sevenDaysAgo = DateTime.now().subtract(const Duration(days: 7));
+      final activeMembers = membersQuery.docs
+          .where((doc) {
+            final data = doc.data();
+            final lastActive = data['lastActive'] as Timestamp?;
+            return lastActive != null && lastActive.toDate().isAfter(sevenDaysAgo);
+          })
+          .length;
       
       return SpaceMetrics(
-        memberCount: members.length,
-        eventCount: events.length,
+        memberCount: memberCount,
+        eventCount: eventCount,
         activeMembers: activeMembers,
       );
     } catch (e) {
-      debugPrint('Error getting space metrics: $e');
+      debugPrint('Error getting metrics for space $spaceId: $e');
       return const SpaceMetrics(
         memberCount: 0,
         eventCount: 0,
@@ -672,25 +685,11 @@ class SpacesRepositoryImpl implements SpacesRepository {
   @override
   Future<bool> updateSpaceVerification(String spaceId, bool isVerified) async {
     try {
-      // Get the space
-      final space = await getSpaceById(spaceId);
-      if (space == null) {
-        return false;
-      }
-      
-      // Update the space in Firestore
-      final collectionPath = _getSpaceCollectionPath(space.spaceType);
-      final docRef = _firestore.collection(collectionPath).doc(space.id);
-      
-      // Update the verification status
-      await docRef.update({
-        'isVerified': isVerified,
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
-      
+      await _firestore.collection('spaces').doc(spaceId).update({'isVerified': isVerified});
+      debugPrint('Updated verification status for space $spaceId to $isVerified');
       return true;
     } catch (e) {
-      debugPrint('Error updating space verification: $e');
+      debugPrint('Error updating verification status for space $spaceId: $e');
       return false;
     }
   }
@@ -708,6 +707,14 @@ class SpacesRepositoryImpl implements SpacesRepository {
         return 'spaces/greek_life/spaces';
       case SpaceType.hiveExclusive:
         return 'spaces/hive_exclusive/spaces';
+      case SpaceType.organization:
+        return 'spaces/organizations/spaces';
+      case SpaceType.project:
+        return 'spaces/projects/spaces';
+      case SpaceType.event:
+        return 'spaces/events/spaces';
+      case SpaceType.community:
+        return 'spaces/communities/spaces';
       case SpaceType.other:
         return 'spaces/other/spaces';
     }
@@ -1061,6 +1068,8 @@ class SpacesRepositoryImpl implements SpacesRepository {
       final querySnapshot = await _firestore
           .collection('spaces')
           .where('isFeatured', isEqualTo: true)
+          .where('lifecycleState', isEqualTo: SpaceLifecycleState.active.name)
+          .orderBy('lastActivityAt', descending: true)
           .limit(limit)
           .get();
       
@@ -1085,6 +1094,7 @@ class SpacesRepositoryImpl implements SpacesRepository {
     try {
       final querySnapshot = await _firestore
           .collection('spaces')
+          .where('lifecycleState', isEqualTo: SpaceLifecycleState.active.name)
           .orderBy('createdAt', descending: true)
           .limit(limit)
           .get();
@@ -1196,6 +1206,129 @@ class SpacesRepositoryImpl implements SpacesRepository {
     } catch (e) {
       debugPrint('Error getting space members with details: $e');
       return [];
+    }
+  }
+
+  @override
+  Future<bool> isSpaceAdmin(String spaceId, String userId) async {
+    try {
+      final space = await getSpaceById(spaceId);
+      if (space == null) {
+        return false;
+      }
+      
+      return space.admins.contains(userId);
+    } catch (e) {
+      debugPrint('Error checking if user is space admin: $e');
+      return false;
+    }
+  }
+
+  @override
+  Future<SpaceClaimStatus> getClaimStatus(String spaceId) async {
+    try {
+      final space = await getSpaceById(spaceId);
+      if (space == null) {
+        return SpaceClaimStatus.unclaimed;
+      }
+      
+      return space.claimStatus;
+    } catch (e) {
+      debugPrint('Error getting claim status: $e');
+      return SpaceClaimStatus.unclaimed;
+    }
+  }
+
+  @override
+  Future<bool> claimLeadership(String spaceId, String userId, {String? verificationInfo}) async {
+    try {
+      // Update user's role to leader in the space
+      await _firestore
+          .collection('spaces')
+          .doc(spaceId)
+          .collection('members')
+          .doc(userId)
+          .update({'role': 'leader'});
+      
+      // Update space with leadership info
+      final updates = <String, dynamic>{
+        'leaderId': userId,
+        'claimStatus': SpaceClaimStatus.claimed.name,
+      };
+      
+      if (verificationInfo != null) {
+        updates['verificationInfo'] = verificationInfo;
+      }
+      
+      await _firestore.collection('spaces').doc(spaceId).update(updates);
+      
+      debugPrint('User $userId claimed leadership of space $spaceId');
+      return true;
+    } catch (e) {
+      debugPrint('Error claiming leadership for space $spaceId by user $userId: $e');
+      return false;
+    }
+  }
+
+  @override
+  Future<bool> updateVisibility(String spaceId, bool isPrivate) async {
+    try {
+      await _firestore.collection('spaces').doc(spaceId).update({'isPrivate': isPrivate});
+      debugPrint('Successfully updated visibility for space $spaceId to ${isPrivate ? "private" : "public"}');
+      return true;
+    } catch (e) {
+      debugPrint('Error updating visibility for space $spaceId: $e');
+      return false;
+    }
+  }
+
+  @override
+  Future<bool> voteOnSpaceArchive(String spaceId, String userId, bool approve) async {
+    try {
+      // Check if user is admin
+      final isAdmin = await isSpaceAdmin(spaceId, userId);
+      if (!isAdmin) {
+        debugPrint('User $userId is not authorized to vote on archive for space $spaceId');
+        return false;
+      }
+      
+      // Get current archive status
+      final archiveStatus = await getSpaceArchiveStatus(spaceId);
+      if (archiveStatus['archiveState'] != 'voting') {
+        debugPrint('Archive process for space $spaceId is not in voting state');
+        return false;
+      }
+      
+      // Record the vote
+      final currentVotes = Map<String, bool>.from(archiveStatus['archiveVotes'] ?? {});
+      currentVotes[userId] = approve;
+      
+      // Update votes in Firestore
+      await _firestore.collection('spaces').doc(spaceId).update({
+        'archiveVotes': currentVotes,
+      });
+      
+      // Check if we have reached a majority (this is simplified, real logic might be more complex)
+      final space = await getSpaceById(spaceId);
+      if (space == null) {
+        return false;
+      }
+      
+      final totalAdmins = space.admins.length;
+      final approveCount = currentVotes.values.where((vote) => vote).length;
+      
+      // If majority approves, archive the space
+      if (approveCount > totalAdmins / 2) {
+        await _firestore.collection('spaces').doc(spaceId).update({
+          'archiveState': 'approved',
+          'lifecycleState': SpaceLifecycleState.archived.name,
+        });
+      }
+      
+      return true;
+    } catch (e) {
+      debugPrint('Error voting on space archive: $e');
+      return false;
     }
   }
 }

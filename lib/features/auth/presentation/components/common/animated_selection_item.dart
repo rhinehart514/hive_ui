@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:hive_ui/theme/app_colors.dart';
 import 'package:hive_ui/features/auth/presentation/utils/animation_constants.dart';
 
-/// A selection item with Apple-style animations for onboarding and other selection UIs
+/// A selection item with HIVE brand animations for onboarding and other selection UIs
 class AnimatedSelectionItem extends StatefulWidget {
   /// The text to display
   final String text;
@@ -54,7 +55,7 @@ class _AnimatedSelectionItemState extends State<AnimatedSelectionItem> with Sing
   void initState() {
     super.initState();
     _controller = AnimationController(
-      duration: AnimationConstants.quickDuration,
+      duration: AnimationConstants.microDuration,
       vsync: this,
     );
     
@@ -100,6 +101,7 @@ class _AnimatedSelectionItemState extends State<AnimatedSelectionItem> with Sing
 
   @override
   Widget build(BuildContext context) {
+    // Standard text styles following HIVE brand guidelines
     final defaultSelectedTextStyle = GoogleFonts.inter(
       color: Colors.black,
       fontWeight: FontWeight.w600,
@@ -107,7 +109,7 @@ class _AnimatedSelectionItemState extends State<AnimatedSelectionItem> with Sing
     );
     
     final defaultUnselectedTextStyle = GoogleFonts.inter(
-      color: Colors.white,
+      color: AppColors.white,
       fontWeight: FontWeight.w600,
       fontSize: 15,
     );
@@ -132,14 +134,21 @@ class _AnimatedSelectionItemState extends State<AnimatedSelectionItem> with Sing
             vertical: widget.verticalPadding,
           ),
           decoration: BoxDecoration(
-            color: widget.isSelected ? Colors.white : Colors.black,
+            color: widget.isSelected ? AppColors.gold : AnimationConstants.deepSurfaceColor,
             borderRadius: BorderRadius.circular(widget.borderRadius),
             border: Border.all(
               color: widget.isSelected 
                 ? Colors.transparent 
-                : Colors.white.withOpacity(0.2),
+                : AppColors.white.withOpacity(0.2),
               width: 1,
             ),
+            boxShadow: widget.isSelected ? [
+              BoxShadow(
+                color: AppColors.gold.withOpacity(0.2),
+                offset: const Offset(0, 2),
+                blurRadius: 4,
+              )
+            ] : null,
           ),
           child: Text(
             widget.text,

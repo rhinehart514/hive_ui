@@ -1,202 +1,179 @@
-import 'package:hive_ui/features/shared/domain/failures/failure.dart';
+import 'package:equatable/equatable.dart';
 
-/// Abstract base class for all feed-related failures
-abstract class FeedFailure extends Failure {
-  @override
-  String get message;
+/// Base class for all feed-related failures
+abstract class FeedFailure extends Equatable {
+  /// Error message
+  final String message;
   
-  @override
-  String get reason;
-}
-
-/// Failure that occurs when events cannot be loaded
-class EventsLoadFailure implements FeedFailure {
-  /// The original exception that caused this failure
+  /// Original exception that caused this failure
   final Object? originalException;
   
+  /// Constructor
+  const FeedFailure({
+    required this.message,
+    this.originalException,
+  });
+  
+  @override
+  List<Object?> get props => [message, originalException];
+  
+  @override
+  bool? get stringify => true;
+}
+
+/// Failure when loading events
+class EventsLoadFailure extends FeedFailure {
   /// Optional additional context about the failure
   final String? context;
   
   /// Constructor
-  EventsLoadFailure({
-    this.originalException,
+  const EventsLoadFailure({
+    Object? originalException,
     this.context,
-  });
+  }) : super(
+    message: 'Could not load events. Please try again later.',
+    originalException: originalException,
+  );
   
   @override
-  String get message => 'Could not load events. Please try again later.';
-  
-  @override
-  String get reason => 'Failed to load events: ${originalException?.toString() ?? "Unknown error"} ${context != null ? '($context)' : ''}';
-  
-  @override
-  String toString() => reason;
+  List<Object?> get props => [...super.props, context];
 }
 
-/// Failure that occurs when RSVP operations fail
-class RsvpFailure implements FeedFailure {
-  /// The event ID for which the RSVP failed
+/// Failure related to RSVP operations
+class RsvpFailure extends FeedFailure {
+  /// The ID of the event for which the RSVP operation failed
   final String eventId;
   
-  /// Whether the user was attempting to RSVP or cancel RSVP
+  /// The intended RSVP status
   final bool wasAttending;
   
-  /// The original exception that caused this failure
-  final Object? originalException;
-  
   /// Constructor
-  RsvpFailure({
+  const RsvpFailure({
     required this.eventId,
     required this.wasAttending,
-    this.originalException,
-  });
+    Object? originalException,
+  }) : super(
+    message: wasAttending 
+      ? 'Failed to RSVP to event'
+      : 'Failed to cancel RSVP to event',
+    originalException: originalException,
+  );
   
   @override
-  String get message => wasAttending 
-      ? 'Could not RSVP to this event. Please try again.'
-      : 'Could not cancel your RSVP. Please try again.';
-  
-  @override
-  String get reason => 'RSVP operation failed for event $eventId (attending: $wasAttending): ${originalException?.toString() ?? "Unknown error"}';
-  
-  @override
-  String toString() => reason;
+  List<Object?> get props => [...super.props, eventId, wasAttending];
 }
 
-/// Failure that occurs when repost operations fail
-class RepostFailure implements FeedFailure {
-  /// The content ID that failed to repost
+/// Failure related to reposting content
+class RepostFailure extends FeedFailure {
+  /// The ID of the content being reposted
   final String contentId;
   
-  /// Type of content (e.g., "event", "post")
+  /// The type of content being reposted
   final String contentType;
   
-  /// The original exception that caused this failure
-  final Object? originalException;
-  
   /// Constructor
-  RepostFailure({
+  const RepostFailure({
     required this.contentId,
     required this.contentType,
-    this.originalException,
-  });
+    Object? originalException,
+  }) : super(
+    message: 'Could not repost this $contentType. Please try again.',
+    originalException: originalException,
+  );
   
   @override
-  String get message => 'Could not repost this $contentType. Please try again.';
-  
-  @override
-  String get reason => 'Repost operation failed for $contentType $contentId: ${originalException?.toString() ?? "Unknown error"}';
-  
-  @override
-  String toString() => reason;
+  List<Object?> get props => [...super.props, contentId, contentType];
 }
 
-/// Failure that occurs when feed personalization fails
-class PersonalizationFailure implements FeedFailure {
-  /// The original exception that caused this failure
-  final Object? originalException;
-  
+/// Failure related to feed personalization
+class PersonalizationFailure extends FeedFailure {
   /// Constructor
-  PersonalizationFailure({
-    this.originalException,
-  });
-  
-  @override
-  String get message => 'Could not personalize your feed. Showing default content instead.';
-  
-  @override
-  String get reason => 'Feed personalization failed: ${originalException?.toString() ?? "Unknown error"}';
-  
-  @override
-  String toString() => reason;
+  const PersonalizationFailure({
+    Object? originalException,
+  }) : super(
+    message: 'Could not personalize your feed. Showing default content instead.',
+    originalException: originalException,
+  );
 }
 
-/// Failure that occurs due to network issues
-class NetworkFailure implements FeedFailure {
+/// Failure related to authentication
+class AuthFailure extends FeedFailure {
   /// Constructor
-  NetworkFailure();
-  
-  @override
-  String get message => 'Network connection issue. Please check your connection and try again.';
-  
-  @override
-  String get reason => 'Network connection failure detected while accessing feed data';
-  
-  @override
-  String toString() => reason;
+  const AuthFailure({
+    required String message,
+    Object? originalException,
+  }) : super(
+    message: message,
+    originalException: originalException,
+  );
 }
 
-/// Failure that occurs when an operation fails due to authentication issues
-class AuthenticationFailure implements FeedFailure {
+/// Failure related to network issues
+class NetworkFailure extends FeedFailure {
   /// Constructor
-  AuthenticationFailure();
-  
-  @override
-  String get message => 'Please sign in to perform this action.';
-  
-  @override
-  String get reason => 'Authentication required for this feed operation';
-  
-  @override
-  String toString() => reason;
+  const NetworkFailure({
+    Object? originalException,
+  }) : super(
+    message: 'Network connection issue. Please check your connection and try again.',
+    originalException: originalException,
+  );
 }
 
-/// Failure that occurs when offline access fails
-class OfflineAccessFailure implements FeedFailure {
+/// Failure related to authentication issues
+class AuthenticationFailure extends FeedFailure {
+  /// Constructor
+  const AuthenticationFailure({
+    String? message,
+    Object? originalException,
+  }) : super(
+    message: message ?? 'Please sign in to perform this action.',
+    originalException: originalException,
+  );
+}
+
+/// Failure related to offline operations
+class OfflineAccessFailure extends FeedFailure {
   /// The operation that was attempted while offline
   final String operation;
   
   /// Constructor
-  OfflineAccessFailure({
+  const OfflineAccessFailure({
     required this.operation,
-  });
+    Object? originalException,
+  }) : super(
+    message: 'This feature is not available offline. Please connect to the internet and try again.',
+    originalException: originalException,
+  );
   
   @override
-  String get message => 'This feature is not available offline. Please connect to the internet and try again.';
-  
-  @override
-  String get reason => 'Offline access failed for operation: $operation';
-  
-  @override
-  String toString() => reason;
+  List<Object?> get props => [...super.props, operation];
 }
 
-/// Failure that occurs when an event is not found
-class EventNotFoundFailure implements FeedFailure {
+/// Failure when an event is not found
+class EventNotFoundFailure extends FeedFailure {
   /// The event ID that wasn't found
   final String eventId;
   
   /// Constructor
-  EventNotFoundFailure({
+  const EventNotFoundFailure({
     required this.eventId,
-  });
+    Object? originalException,
+  }) : super(
+    message: 'Event not found. It may have been deleted.',
+    originalException: originalException,
+  );
   
   @override
-  String get message => 'Event not found. It may have been deleted.';
-  
-  @override
-  String get reason => 'Event with ID $eventId not found';
-  
-  @override
-  String toString() => reason;
+  List<Object?> get props => [...super.props, eventId];
 }
 
-/// Failure that occurs when a reposter profile cannot be loaded
-class ReposterProfileFailure implements FeedFailure {
-  /// The original exception that caused this failure
-  final Object? originalException;
-  
+/// Failure when a reposter profile cannot be loaded
+class ReposterProfileFailure extends FeedFailure {
   /// Constructor
-  ReposterProfileFailure({
-    this.originalException,
-  });
-  
-  @override
-  String get message => 'Could not complete this repost. Please try again.';
-  
-  @override
-  String get reason => 'Reposter profile failure: ${originalException?.toString() ?? "Unknown error"}';
-  
-  @override
-  String toString() => reason;
+  const ReposterProfileFailure({
+    Object? originalException,
+  }) : super(
+    message: 'Could not complete this repost. Please try again.',
+    originalException: originalException,
+  );
 } 

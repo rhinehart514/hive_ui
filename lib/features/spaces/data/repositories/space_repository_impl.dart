@@ -19,10 +19,12 @@ import 'package:hive_ui/features/events/data/mappers/event_mapper.dart';
 class SpaceRepositoryImpl implements SpacesRepository {
   final SpacesDataSource _dataSource;
   final FirebaseAuth _auth;
+  final FirebaseFirestore _firestore;
 
   /// Constructor
   SpaceRepositoryImpl(this._dataSource, {FirebaseAuth? auth}) 
-      : _auth = auth ?? FirebaseAuth.instance;
+      : _auth = auth ?? FirebaseAuth.instance,
+        _firestore = FirebaseFirestore.instance;
 
   @override
   Future<List<SpaceEntity>> getAllSpaces({
@@ -174,17 +176,21 @@ class SpaceRepositoryImpl implements SpacesRepository {
   @override
   Future<bool> hasJoinedSpace(String spaceId, {String? userId}) async {
     try {
-      // Use current user ID if not provided
       final uid = userId ?? _auth.currentUser?.uid;
-      if (uid == null) {
-        debugPrint('No user ID provided and no current user');
-        return false;
-      }
+      if (uid == null) return false;
       
-      return _dataSource.hasJoinedSpace(spaceId, userId: uid);
+      // Check if user is in the members collection
+      final memberDoc = await _firestore
+          .collection('spaces')
+          .doc(spaceId)
+          .collection('members')
+          .doc(uid)
+          .get();
+      
+      return memberDoc.exists;
     } catch (e) {
-      debugPrint('Error checking if space is joined: $e');
-      return false;
+      debugPrint('Error checking if user has joined space: $e');
+      rethrow;
     }
   }
 
@@ -644,348 +650,30 @@ class SpaceRepositoryImpl implements SpacesRepository {
   }
 
   @override
-  Future<void> requestToJoinSpace(String spaceId, String userId) async {
-    final spaceRef = FirebaseFirestore.instance.collection('spaces').doc(spaceId);
-    final memberRef = spaceRef.collection('members').doc(userId);
-    final requestRef = spaceRef.collection('joinRequests').doc(userId);
-
+  Future<SpaceClaimStatus> getClaimStatus(String spaceId) async {
     try {
-      final spaceDoc = await spaceRef.get();
-      if (!spaceDoc.exists) throw Exception('Space not found');
-      final spaceData = spaceDoc.data()!;
-      if (!(spaceData['isPrivate'] as bool? ?? false)) {
-        throw Exception('Space is not private. Use joinSpace directly.');
-      }
-
-      final memberDoc = await memberRef.get();
-      if (memberDoc.exists) throw Exception('User is already a member');
-
-      final requestDoc = await requestRef.get();
-      if (requestDoc.exists) throw Exception('Join request already pending');
-
-      // Add request (document ID is the user ID)
-      await requestRef.set({
-        'userId': userId,
-        'requestedAt': FieldValue.serverTimestamp(),
-      });
-      debugPrint('User $userId requested to join space $spaceId');
-    } catch (e) {
-      debugPrint('Error requesting to join space $spaceId: $e');
-      rethrow; // Rethrow to be handled by the caller
-    }
-  }
-
-  @override
-  Future<List<String>> getJoinRequests(String spaceId) async {
-    try {
-      final requestsSnapshot = await FirebaseFirestore.instance
-          .collection('spaces')
-          .doc(spaceId)
-          .collection('joinRequests')
-          .get();
-      return requestsSnapshot.docs.map((doc) => doc.id).toList();
-    } catch (e) {
-      debugPrint('Error fetching join requests for space $spaceId: $e');
-      return [];
-    }
-  }
-
-  @override
-  Future<bool> approveJoinRequest(String spaceId, String userIdToApprove) async {
-    final spaceRef = FirebaseFirestore.instance.collection('spaces').doc(spaceId);
-    final requestRef = spaceRef.collection('joinRequests').doc(userIdToApprove);
-    // Assume _dataSource.joinSpace handles adding to members collection and memberIds array
-
-    try {
-      // Verify request exists
-      final requestDoc = await requestRef.get();
-      if (!requestDoc.exists) {
-         debugPrint('No pending join request found for user $userIdToApprove in space $spaceId');
-         return false;
-      }
-
-      // Use the existing joinSpace logic (now part of dataSource)
-      // This assumes joinSpace correctly adds the member and updates the array.
-      // If joinSpace doesn't handle adding to the members subcollection AND the memberIds array,
-      // that logic needs to be implemented here or within joinSpace.
-      await _dataSource.joinSpace(spaceId, userId: userIdToApprove);
+      final spaceDoc = await _firestore.collection('spaces').doc(spaceId).get();
+      final data = spaceDoc.data();
       
-      // Remove the request now that they've joined
-      await requestRef.delete();
-      debugPrint('Approved join request for user $userIdToApprove in space $spaceId');
-      return true;
-    } catch (e) {
-      debugPrint('Error approving join request for $userIdToApprove in $spaceId: $e');
-      return false;
-    }
-  }
-
-  @override
-  Future<bool> denyJoinRequest(String spaceId, String userIdToDeny) async {
-    final requestRef = FirebaseFirestore.instance
-        .collection('spaces')
-        .doc(spaceId)
-        .collection('joinRequests')
-        .doc(userIdToDeny);
-
-    try {
-      // Verify request exists before deleting
-      final requestDoc = await requestRef.get();
-      if (!requestDoc.exists) {
-         debugPrint('No pending join request found for user $userIdToDeny in space $spaceId to deny');
-         return true; // Or false if we want to indicate no action was taken
+      if (data == null) {
+        throw Exception('Space not found');
       }
-
-      await requestRef.delete();
-      debugPrint('Denied join request for user $userIdToDeny in space $spaceId');
-      return true;
-    } catch (e) {
-      debugPrint('Error denying join request for $userIdToDeny in $spaceId: $e');
-      return false;
-    }
-  }
-
-  @override
-  Future<bool> updateSpaceActivity(String spaceId) async {
-    try {
-      final spaceRef = FirebaseFirestore.instance.collection('spaces').doc(spaceId);
-      await spaceRef.update({
-        'lastActivityAt': FieldValue.serverTimestamp(), // Use server time
-      });
-      debugPrint('Updated lastActivityAt for space $spaceId');
-      return true;
-    } catch (e) {
-      debugPrint('Error updating lastActivityAt for space $spaceId: $e');
-      return false;
-    }
-  }
-
-  @override
-  Future<bool> initiateSpaceArchive(String spaceId, String initiatorId) async {
-    final spaceRef = FirebaseFirestore.instance.collection('spaces').doc(spaceId);
-
-    try {
-      return await FirebaseFirestore.instance.runTransaction((transaction) async {
-        final spaceDoc = await transaction.get(spaceRef);
-        if (!spaceDoc.exists) throw Exception('Space not found.');
-        final spaceData = spaceDoc.data()!;
-
-        // Verify initiator is admin/creator
-        final admins = List<String>.from(spaceData['admins'] ?? []);
-        final creatorId = spaceData['creatorId'] as String?;
-        if (initiatorId != creatorId && !admins.contains(initiatorId)) {
-          throw Exception('User is not authorized to initiate archive.');
-        }
-
-        // Check if Hive Exclusive
-        if (!(spaceData['isHiveExclusive'] as bool? ?? false)) {
-          throw Exception('Cannot archive non-Hive Exclusive spaces.');
-        }
-
-        // Check current archive state
-        final currentArchiveState = spaceData['archiveState'] as String? ?? 'none';
-        if (currentArchiveState != 'none') {
-          throw Exception('Space is already being archived or has been archived/rejected.');
-        }
-
-        // Initiate voting
-        transaction.update(spaceRef, {
-          'archiveState': 'voting',
-          'archiveVotes': { initiatorId: true }, // Initiator automatically votes yes
-        });
-        debugPrint('Initiated archive voting for space $spaceId by $initiatorId');
-        return true;
-      });
-    } catch (e) {
-      debugPrint('Error initiating archive for space $spaceId: $e');
-      // Rethrow specific exceptions for clearer feedback
-      if (e.toString().contains('not authorized') || 
-          e.toString().contains('non-Hive Exclusive') ||
-          e.toString().contains('already being archived')) {
-        rethrow;
-      }
-      return false;
-    }
-  }
-
-  @override
-  Future<String> voteForSpaceArchive(String spaceId, String voterId, bool approve) async {
-    final spaceRef = FirebaseFirestore.instance.collection('spaces').doc(spaceId);
-
-    try {
-      return await FirebaseFirestore.instance.runTransaction((transaction) async {
-        final spaceDoc = await transaction.get(spaceRef);
-        if (!spaceDoc.exists) throw Exception('Space not found.');
-        final spaceData = spaceDoc.data()!;
-
-        // Verify voter is admin/creator
-        final admins = List<String>.from(spaceData['admins'] ?? []);
-        final creatorId = spaceData['creatorId'] as String?;
-        final currentAdmins = Set<String>.from(admins);
-        if (creatorId != null) currentAdmins.add(creatorId);
-        if (!currentAdmins.contains(voterId)) {
-          throw Exception('User is not authorized to vote.');
-        }
-
-        // Check current archive state
-        final currentArchiveState = spaceData['archiveState'] as String? ?? 'none';
-        if (currentArchiveState != 'voting') {
-          throw Exception('Archive voting is not currently active for this space.');
-        }
-
-        // Record vote
-        final currentVotes = Map<String, bool>.from(spaceData['archiveVotes'] ?? {});
-        currentVotes[voterId] = approve;
-
-        // Calculate results
-        int totalEligibleVoters = currentAdmins.length;
-        int approveVotes = 0;
-        int denyVotes = 0;
-
-        currentVotes.forEach((id, vote) {
-          // Only count votes from current admins/creator
-          if (currentAdmins.contains(id)) {
-            if (vote) {
-              approveVotes++;
-            } else {
-              denyVotes++;
-            }
-          }
-        });
-
-        String finalState = 'voting'; // Default unless majority reached
-        Map<String, dynamic> updates = {'archiveVotes': currentVotes};
-
-        // Check for majority
-        if (approveVotes > totalEligibleVoters / 2) {
-          finalState = 'archived';
-          updates['archiveState'] = finalState;
-          updates['lifecycleState'] = 'archived'; // Update lifecycle state as well
-          debugPrint('Archive approved for space $spaceId');
-        } else if (denyVotes >= totalEligibleVoters / 2) { // Note: >= for rejection majority
-          finalState = 'rejected';
-          updates['archiveState'] = finalState;
-          // Reset votes? Or keep them? Keep for now for audit.
-          debugPrint('Archive rejected for space $spaceId');
-        }
-        
-        transaction.update(spaceRef, updates);
-        return finalState;
-      });
-    } catch (e) {
-      debugPrint('Error voting for archive on space $spaceId: $e');
-       if (e.toString().contains('not authorized') || 
-           e.toString().contains('not currently active')) {
-         rethrow;
-       }
-      // Indicate error - perhaps return current state or throw?
-      // Returning current state might be confusing. Let's rethrow generally.
-      rethrow; 
-    }
-  }
-
-  @override
-  Future<Map<String, dynamic>> getSpaceArchiveStatus(String spaceId) async {
-    try {
-      final spaceDoc = await FirebaseFirestore.instance.collection('spaces').doc(spaceId).get();
-      if (!spaceDoc.exists) throw Exception('Space not found.');
-      final spaceData = spaceDoc.data()!;
-
-      return {
-        'archiveState': spaceData['archiveState'] as String? ?? 'none',
-        'archiveVotes': Map<String, bool>.from(spaceData['archiveVotes'] ?? {}),
-      };
-    } catch (e) {
-      debugPrint('Error getting archive status for space $spaceId: $e');
-      return {
-        'archiveState': 'error',
-        'archiveVotes': {},
-      }; // Return error state
-    }
-  }
-
-  @override
-  Future<List<SpaceEntity>> getFeaturedSpaces({int limit = 20}) async {
-    try {
-      final querySnapshot = await FirebaseFirestore.instance
-          .collection('spaces')
-          .where('isFeatured', isEqualTo: true)
-          // Optional: Add sorting, e.g., by activity or name
-          // .orderBy('lastActivityAt', descending: true)
-          .limit(limit)
-          .get();
-
-      // Convert snapshots to SpaceEntity objects
-      // This requires a way to map Firestore data back to SpaceEntity.
-      // Assuming SpaceModel.fromFirestore exists and can be mapped to SpaceEntity.
-      // Or, implement a direct mapping here if needed.
-      final spaces = querySnapshot.docs.map((doc) {
-          // WARNING: Direct mapping assumes SpaceModel structure aligns with entity needs
-          // and we have a reliable way to get SpaceType if needed for SpaceModel.fromFirestore.
-          // A dedicated mapping function or using the DataSource might be safer.
-          final model = SpaceModel.fromFirestore(doc); // Simplified assumption
-          return model.toEntity();
-      }).toList();
-
-      return spaces;
-    } catch (e) {
-      debugPrint('Error fetching featured spaces: $e');
-      return [];
-    }
-  }
-
-  @override
-  Future<List<SpaceEntity>> getNewestSpaces({int limit = 20}) async {
-    try {
-      final querySnapshot = await FirebaseFirestore.instance
-          .collection('spaces')
-          .orderBy('createdAt', descending: true)
-          .limit(limit)
-          .get();
-
-      // Map snapshots to entities (same mapping considerations as getFeaturedSpaces)
-      final spaces = querySnapshot.docs.map((doc) {
-          final model = SpaceModel.fromFirestore(doc); // Simplified assumption
-          return model.toEntity();
-      }).toList();
       
-      return spaces;
+      final claimStatus = data['claimStatus'] as String? ?? 'unclaimed';
+      
+      switch (claimStatus) {
+        case 'claimed':
+          return SpaceClaimStatus.claimed;
+        case 'pending':
+          return SpaceClaimStatus.pending;
+        case 'unclaimed':
+        default:
+          return SpaceClaimStatus.unclaimed;
+      }
     } catch (e) {
-      debugPrint('Error fetching newest spaces: $e');
-      return [];
+      debugPrint('Error getting claim status: $e');
+      return SpaceClaimStatus.unclaimed;
     }
-  }
-
-  // Convert SpaceLifecycleState enum to string
-  String _lifecycleStateToString(SpaceLifecycleState state) {
-    return state.toString().split('.').last;
-  }
-  
-  // Convert string to SpaceLifecycleState enum
-  SpaceLifecycleState _stringToLifecycleState(String stateStr) {
-    return SpaceLifecycleState.values.firstWhere(
-      (e) => e.toString().split('.').last == stateStr,
-      orElse: () => SpaceLifecycleState.active,
-    );
-  }
-  
-  // Convert SpaceClaimStatus enum to string
-  String _claimStatusToString(SpaceClaimStatus status) {
-    return status.toString().split('.').last;
-  }
-  
-  // Convert string to SpaceClaimStatus enum
-  SpaceClaimStatus _stringToClaimStatus(String statusStr) {
-    return SpaceClaimStatus.values.firstWhere(
-      (e) => e.toString().split('.').last == statusStr,
-      orElse: () => SpaceClaimStatus.unclaimed,
-    );
-  }
-  
-  // Get the appropriate collection path based on space type
-  String _getSpaceCollectionPath(SpaceType type) {
-    // Default to 'spaces' collection
-    return 'spaces';
   }
 
   @override
@@ -1147,6 +835,366 @@ class SpaceRepositoryImpl implements SpacesRepository {
       return true;
     } catch (e) {
       debugPrint('Error updating space member role: $e');
+      return false;
+    }
+  }
+
+  @override
+  Future<bool> approveJoinRequest(String spaceId, String userId) async {
+    try {
+      // First check if there is a pending request for this user
+      final requestDocRef = _firestore
+          .collection('spaces')
+          .doc(spaceId)
+          .collection('joinRequests')
+          .doc(userId);
+          
+      final requestDoc = await requestDocRef.get();
+      if (!requestDoc.exists) {
+        debugPrint('No join request found for user $userId in space $spaceId');
+        return false;
+      }
+      
+      // Start a batch operation to ensure atomicity
+      final batch = _firestore.batch();
+      
+      // Delete the join request
+      batch.delete(requestDocRef);
+      
+      // Add the user to the space members
+      final memberDocRef = _firestore
+          .collection('spaces')
+          .doc(spaceId)
+          .collection('members')
+          .doc(userId);
+          
+      batch.set(memberDocRef, {
+        'userId': userId,
+        'role': 'member',
+        'joinedAt': FieldValue.serverTimestamp(),
+      });
+      
+      // Update the space document with the new member count
+      final spaceRef = _firestore.collection('spaces').doc(spaceId);
+      batch.update(spaceRef, {
+        'memberCount': FieldValue.increment(1),
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+      
+      // Commit the batch
+      await batch.commit();
+      
+      return true;
+    } catch (e) {
+      debugPrint('Error approving join request: $e');
+      return false;
+    }
+  }
+
+  @override
+  Future<bool> claimLeadership(String spaceId, String userId, {String? verificationInfo}) async {
+    try {
+      // Verify space exists
+      final space = await getSpaceById(spaceId);
+      if (space == null) {
+        debugPrint('Space not found when claiming leadership');
+        return false;
+      }
+      
+      // Check if the space is already claimed
+      if (space.claimStatus == SpaceClaimStatus.claimed) {
+        debugPrint('Space is already claimed');
+        return false;
+      }
+      
+      // Check if user is already a member
+      final isMember = await hasJoinedSpace(spaceId, userId: userId);
+      if (!isMember) {
+        // Join the space first if not already a member
+        await joinSpace(spaceId, userId: userId);
+      }
+      
+      // Update space with claim information
+      await _firestore.collection('spaces').doc(spaceId).update({
+        'claimStatus': 'claimed',
+        'creatorId': userId, // Update creator to the claiming user
+        'admins': FieldValue.arrayUnion([userId]),
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+      
+      // Add claim record to the claims subcollection
+      await _firestore.collection('spaces/$spaceId/claims').add({
+        'claimantId': userId,
+        'verificationInfo': verificationInfo,
+        'status': 'approved',
+        'claimedAt': FieldValue.serverTimestamp(),
+      });
+      
+      return true;
+    } catch (e) {
+      debugPrint('Error claiming leadership: $e');
+      return false;
+    }
+  }
+
+  @override
+  Future<bool> denyJoinRequest(String spaceId, String userId) async {
+    try {
+      // Check if there is a pending request for this user
+      final requestDocRef = _firestore
+          .collection('spaces')
+          .doc(spaceId)
+          .collection('joinRequests')
+          .doc(userId);
+          
+      final requestDoc = await requestDocRef.get();
+      if (!requestDoc.exists) {
+        debugPrint('No join request found for user $userId in space $spaceId');
+        return false;
+      }
+      
+      // Simply delete the join request
+      await requestDocRef.delete();
+      
+      return true;
+    } catch (e) {
+      debugPrint('Error denying join request: $e');
+      return false;
+    }
+  }
+
+  @override
+  Future<List<SpaceEntity>> getFeaturedSpaces({int limit = 20}) async {
+    try {
+      final querySnapshot = await FirebaseFirestore.instance
+          .collection('spaces')
+          .where('isFeatured', isEqualTo: true)
+          .orderBy('lastActivityAt', descending: true)
+          .limit(limit)
+          .get();
+
+      // Map snapshots to entities
+      final spaces = querySnapshot.docs.map((doc) {
+          final model = SpaceModel.fromFirestore(doc);
+          return model.toEntity();
+      }).toList();
+      
+      return spaces;
+    } catch (e) {
+      debugPrint('Error fetching featured spaces: $e');
+      return [];
+    }
+  }
+
+  @override
+  Future<List<SpaceEntity>> getNewestSpaces({int limit = 20}) async {
+    try {
+      final querySnapshot = await FirebaseFirestore.instance
+          .collection('spaces')
+          .orderBy('createdAt', descending: true)
+          .limit(limit)
+          .get();
+
+      // Map snapshots to entities
+      final spaces = querySnapshot.docs.map((doc) {
+          final model = SpaceModel.fromFirestore(doc);
+          return model.toEntity();
+      }).toList();
+      
+      return spaces;
+    } catch (e) {
+      debugPrint('Error fetching newest spaces: $e');
+      return [];
+    }
+  }
+
+  @override
+  Future<void> requestToJoinSpace(String spaceId, String userId) async {
+    try {
+      // Check if space exists
+      final spaceDoc = await _firestore.collection('spaces').doc(spaceId).get();
+      if (!spaceDoc.exists) {
+        throw Exception('Space not found');
+      }
+      
+      // Check if the user is already a member
+      final isMember = await hasJoinedSpace(spaceId, userId: userId);
+      if (isMember) {
+        throw Exception('User is already a member of this space');
+      }
+      
+      // Check if there is already a pending request
+      final requestDoc = await _firestore
+          .collection('spaces')
+          .doc(spaceId)
+          .collection('joinRequests')
+          .doc(userId)
+          .get();
+          
+      if (requestDoc.exists) {
+        throw Exception('Join request already exists');
+      }
+      
+      // Create the join request
+      await _firestore
+          .collection('spaces')
+          .doc(spaceId)
+          .collection('joinRequests')
+          .doc(userId)
+          .set({
+        'userId': userId,
+        'requestedAt': FieldValue.serverTimestamp(),
+        'status': 'pending',
+      });
+    } catch (e) {
+      debugPrint('Error requesting to join space: $e');
+      rethrow;
+    }
+  }
+
+  @override
+  Future<List<String>> getJoinRequests(String spaceId) async {
+    try {
+      final querySnapshot = await _firestore
+          .collection('spaces')
+          .doc(spaceId)
+          .collection('joinRequests')
+          .where('status', isEqualTo: 'pending')
+          .get();
+          
+      return querySnapshot.docs.map((doc) => doc.id).toList();
+    } catch (e) {
+      debugPrint('Error getting join requests: $e');
+      return [];
+    }
+  }
+
+  @override
+  Future<bool> initiateSpaceArchive(String spaceId, String initiatorId) async {
+    try {
+      // Check if the space exists
+      final spaceDoc = await _firestore.collection('spaces').doc(spaceId).get();
+      if (!spaceDoc.exists) {
+        return false;
+      }
+      
+      // Check if the initiator is an admin
+      final spaceData = spaceDoc.data()!;
+      final admins = List<String>.from(spaceData['admins'] ?? []);
+      if (!admins.contains(initiatorId)) {
+        debugPrint('Only admins can initiate space archive');
+        return false;
+      }
+      
+      // Create archive record
+      await _firestore.collection('spaces').doc(spaceId).update({
+        'archiveStatus': 'pending',
+        'archiveInitiator': initiatorId,
+        'archiveInitiatedAt': FieldValue.serverTimestamp(),
+        'archiveVotes': {initiatorId: true}, // Initiator automatically votes yes
+      });
+      
+      return true;
+    } catch (e) {
+      debugPrint('Error initiating space archive: $e');
+      return false;
+    }
+  }
+
+  @override
+  Future<bool> voteOnSpaceArchive(String spaceId, String userId, bool approve) async {
+    try {
+      // Check if the space exists and has a pending archive
+      final spaceDoc = await _firestore.collection('spaces').doc(spaceId).get();
+      if (!spaceDoc.exists) {
+        return false;
+      }
+      
+      final spaceData = spaceDoc.data()!;
+      if (spaceData['archiveStatus'] != 'pending') {
+        debugPrint('No pending archive to vote on');
+        return false;
+      }
+      
+      // Update the vote
+      await _firestore.collection('spaces').doc(spaceId).update({
+        'archiveVotes.$userId': approve,
+      });
+      
+      return true;
+    } catch (e) {
+      debugPrint('Error voting on space archive: $e');
+      return false;
+    }
+  }
+
+  @override
+  Future<Map<String, dynamic>> getSpaceArchiveStatus(String spaceId) async {
+    try {
+      final spaceDoc = await _firestore.collection('spaces').doc(spaceId).get();
+      if (!spaceDoc.exists) {
+        return {'status': 'not_initiated'};
+      }
+      
+      final spaceData = spaceDoc.data()!;
+      final status = spaceData['archiveStatus'] as String? ?? 'not_initiated';
+      final votes = Map<String, bool>.from(spaceData['archiveVotes'] ?? {});
+      
+      return {
+        'status': status,
+        'votes': votes,
+        'initiator': spaceData['archiveInitiator'],
+        'initiatedAt': spaceData['archiveInitiatedAt'],
+      };
+    } catch (e) {
+      debugPrint('Error getting space archive status: $e');
+      return {'status': 'error', 'error': e.toString()};
+    }
+  }
+
+  @override
+  Future<bool> isSpaceAdmin(String spaceId, String userId) async {
+    try {
+      final spaceDoc = await _firestore.collection('spaces').doc(spaceId).get();
+      if (!spaceDoc.exists) {
+        return false;
+      }
+      
+      final spaceData = spaceDoc.data()!;
+      final admins = List<String>.from(spaceData['admins'] ?? []);
+      
+      return admins.contains(userId);
+    } catch (e) {
+      debugPrint('Error checking if user is space admin: $e');
+      return false;
+    }
+  }
+
+  @override
+  Future<bool> updateVisibility(String spaceId, bool isPrivate) async {
+    try {
+      await _firestore.collection('spaces').doc(spaceId).update({
+        'isPrivate': isPrivate,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+      
+      return true;
+    } catch (e) {
+      debugPrint('Error updating space visibility: $e');
+      return false;
+    }
+  }
+
+  @override
+  Future<bool> updateSpaceActivity(String spaceId) async {
+    try {
+      await _firestore.collection('spaces').doc(spaceId).update({
+        'lastActivityAt': FieldValue.serverTimestamp(),
+      });
+      
+      return true;
+    } catch (e) {
+      debugPrint('Error updating space activity: $e');
       return false;
     }
   }

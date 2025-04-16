@@ -18,10 +18,10 @@ enum HiveButtonSize {
 
 /// Button variants for the standardized HiveButton
 enum HiveButtonVariant {
-  /// Filled button with gold background
+  /// Filled button with white background
   primary,
 
-  /// Outlined button with gold border
+  /// Outlined button with white border
   secondary,
 
   /// Outlined button with white border
@@ -239,12 +239,19 @@ class HiveButton extends StatelessWidget {
 
   /// Get the button style based on the variant and size
   ButtonStyle _getButtonStyle() {
-    // Get the border radius based on component style
-    final double radius = componentStyle.getBorderRadius(
-      standard: 12.0,
-      important: 0.0,
-      special: 4.0,
-    );
+    // Get the border radius based on component style and size
+    // Using pill shape (24px) for small buttons, consistent with the design system
+    double radius = 24.0;
+    
+    // For medium and large buttons, adjust if needed based on component style
+    if (size != HiveButtonSize.small) {
+      radius = componentStyle.getBorderRadius(
+        standard: 24.0, // Changed from 12.0 to 24.0 for pill-like shape
+        important: 24.0, // Changed from 0.0 to 24.0 to maintain consistency
+        special: 24.0,   // Changed from 4.0 to 24.0 to maintain consistency
+      );
+    }
+    
     final BorderRadius borderRadius = BorderRadius.circular(radius);
 
     switch (variant) {
@@ -265,15 +272,15 @@ class HiveButton extends StatelessWidget {
   /// Get primary (filled) button style
   ButtonStyle _getPrimaryButtonStyle(BorderRadius borderRadius) {
     // Default standard style
-    Color backgroundColor = AppColors.gold;
+    Color backgroundColor = Colors.white; // Changed from AppColors.gold to white
     Color foregroundColor = Colors.black;
 
     // Apply style variations
     if (componentStyle == HiveComponentStyle.important) {
-      // For important style, use a gradient background in the container
-      backgroundColor = Colors.transparent;
+      // For important style, maintain white but with slightly higher opacity
+      backgroundColor = Colors.white;
     } else if (componentStyle == HiveComponentStyle.special) {
-      backgroundColor = AppColors.gold.withOpacity(0.9);
+      backgroundColor = Colors.white.withOpacity(0.9);
       foregroundColor = Colors.black;
     }
 
@@ -282,22 +289,19 @@ class HiveButton extends StatelessWidget {
       foregroundColor: foregroundColor,
       disabledBackgroundColor: Colors.grey[800],
       disabledForegroundColor: Colors.grey[500],
-      elevation: componentStyle == HiveComponentStyle.standard ? 0 : 2,
+      elevation: 0, // No elevation for any style
       shape: RoundedRectangleBorder(borderRadius: borderRadius),
       padding: _getPadding(),
     );
   }
 
-  /// Get secondary (outlined gold) button style
+  /// Get secondary (outlined) button style
   ButtonStyle _getSecondaryButtonStyle(BorderRadius borderRadius) {
-    // Apply gold border with style-specific opacity
-    final double opacity = componentStyle.getGoldAccentOpacity();
-
     return OutlinedButton.styleFrom(
-      foregroundColor: AppColors.gold,
+      foregroundColor: Colors.white, // Changed from AppColors.gold to white
       disabledForegroundColor: Colors.grey[500],
       side: BorderSide(
-        color: AppColors.gold.withOpacity(opacity),
+        color: Colors.white.withOpacity(0.3), // Use white with opacity
         width: componentStyle.getBorderWidth(),
       ),
       shape: RoundedRectangleBorder(borderRadius: borderRadius),

@@ -28,6 +28,7 @@ import 'package:hive_ui/features/auth/presentation/components/onboarding/field_p
 import 'package:hive_ui/features/auth/presentation/components/onboarding/residence_page.dart';
 import 'package:hive_ui/features/auth/presentation/components/onboarding/interests_page.dart';
 import 'package:hive_ui/features/auth/presentation/components/onboarding/account_tier_page.dart';
+import 'package:hive_ui/features/auth/presentation/components/onboarding/progress_indicator.dart';
 
 class OnboardingProfilePage extends ConsumerStatefulWidget {
   final bool skipToDefaults;
@@ -1220,35 +1221,9 @@ class _OnboardingProfilePageState extends ConsumerState<OnboardingProfilePage>
   }
 
   void _nextPage() {
-    debugPrint('_nextPage called - navigating to next onboarding page');
-
-    // Add stronger haptic feedback for better physical confirmation
-    HapticFeedback.mediumImpact();
-
-    // Special case for non-degree seeking students to skip field selection
-    if (_pageController.page?.round() == 1 &&
-        _selectedYear == 'Non-Degree Seeking') {
-      debugPrint('Skipping field selection for Non-Degree Seeking student');
-      // Skip the field of study page and go directly to residence
-      _pageController.animateToPage(
-        3, // Index of residence page
-        duration: const Duration(milliseconds: 450),
-        curve: Curves.easeOutCubic, // iOS-style deceleration curve
-      );
-      return;
-    }
-
-    // Get current page and determine target page
-    int currentPage = _pageController.page?.round() ?? 0;
-    int targetPage = currentPage + 1;
-
-    debugPrint('Navigating from page $currentPage to page $targetPage');
-
-    // Normal page navigation with improved iOS-style animation
-    _pageController.animateToPage(
-      targetPage,
-      duration: const Duration(milliseconds: 450),
-      curve: Curves.easeOutCubic, // iOS-style deceleration curve
+    _pageController.nextPage(
+      duration: const Duration(milliseconds: 350),
+      curve: Curves.easeInOut,
     );
   }
 
@@ -1307,23 +1282,16 @@ class _OnboardingProfilePageState extends ConsumerState<OnboardingProfilePage>
               firstNameController: _firstNameController,
               lastNameController: _lastNameController,
               onContinue: () {
-                // Only proceed if names are valid
                     if (_isNameValid()) {
                       _nextPage();
-                } else {
-                  // Provide feedback that fields need to be filled
-                  HapticFeedback.mediumImpact();
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Please enter both first and last name'),
-                      backgroundColor: Colors.redAccent,
-                      duration: Duration(seconds: 2),
-      ),
-    );
-  }
-              },
+                    }
+                  },
               isNameValid: _isNameValid(),
-              progressIndicator: _buildProgressIndicator(6, 0),
+              progressIndicator: _buildProgressIndicator(),
+              onTextChanged: () {
+                // This forces a rebuild to update the isNameValid state
+                setState(() {});
+              },
             ),
             YearPage(
               selectedYear: _selectedYear,
@@ -1331,7 +1299,7 @@ class _OnboardingProfilePageState extends ConsumerState<OnboardingProfilePage>
               onYearSelected: (year) {
                 setState(() => _selectedYear = year);
               },
-              progressIndicator: _buildProgressIndicator(6, 1),
+              progressIndicator: _buildProgressIndicator(),
               onContinue: () {
                 if (_selectedYear != null) {
                     _nextPage();
@@ -1353,7 +1321,7 @@ class _OnboardingProfilePageState extends ConsumerState<OnboardingProfilePage>
               onMajorSelected: (major) {
                 setState(() => _selectedMajor = major);
               },
-              progressIndicator: _buildProgressIndicator(6, 2),
+              progressIndicator: _buildProgressIndicator(),
               onContinue: () {
                 if (_selectedMajor != null) {
                   _nextPage();
@@ -1371,11 +1339,11 @@ class _OnboardingProfilePageState extends ConsumerState<OnboardingProfilePage>
             ),
             ResidencePage(
               selectedResidence: _selectedResidence,
-              filteredResidences: _filteredResidences,
+              residenceOptions: _filteredResidences,
               onResidenceSelected: (res) {
                 setState(() => _selectedResidence = res);
               },
-              progressIndicator: _buildProgressIndicator(6, 3),
+              progressIndicator: _buildProgressIndicator(),
               onContinue: () {
                 if (_selectedResidence != null) {
                   _nextPage();
@@ -1394,24 +1362,18 @@ class _OnboardingProfilePageState extends ConsumerState<OnboardingProfilePage>
             InterestsPage(
               selectedInterests: _selectedInterests,
               interestOptions: _interestOptions,
-              onInterestToggle: _toggleInterest,
-              progressIndicator: _buildProgressIndicator(6, 4),
-              onContinue: () {
-                if (_selectedInterests.length >= _minInterests) {
-                  _nextPage();
-                } else {
-                  HapticFeedback.mediumImpact();
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('Please select at least $_minInterests interests'),
-                      backgroundColor: Colors.redAccent,
-                      duration: const Duration(seconds: 2),
-      ),
-    );
-  }
-              },
+              onInterestToggled: _toggleInterest,
               minInterests: _minInterests,
               maxInterests: _maxInterests,
+              progressIndicator: _buildProgressIndicator(),
+              onContinue: () {
+                if (_selectedInterests.length >= _minInterests) {
+                  _pageController.nextPage(
+                    duration: const Duration(milliseconds: 350),
+            curve: Curves.easeInOut,
+                  );
+                }
+              },
             ),
             AccountTierPage(
               selectedTier: _selectedTier,
@@ -1419,7 +1381,7 @@ class _OnboardingProfilePageState extends ConsumerState<OnboardingProfilePage>
               onTierSelected: (tier) {
                 setState(() => _selectedTier = tier);
               },
-              progressIndicator: _buildProgressIndicator(6, 5),
+              progressIndicator: _buildProgressIndicator(),
               onContinue: _completeOnboarding,
             ),
           ],
@@ -1428,35 +1390,10 @@ class _OnboardingProfilePageState extends ConsumerState<OnboardingProfilePage>
     );
   }
 
-  Widget _buildProgressIndicator(int totalPages, int currentPage) {
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 16),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: List.generate(totalPages, (index) {
-          final isActive = index <= currentPage;
-          final isCurrentPage = index == currentPage;
-
-          return AnimatedContainer(
-            duration: const Duration(milliseconds: 350),
-            curve: Curves.easeOutCubic,
-            width: isCurrentPage ? 24 : 8,
-            height: 8,
-            margin: const EdgeInsets.symmetric(horizontal: 4),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(4),
-              color: isActive ? Colors.white : Colors.white24,
-              boxShadow: isActive ? [
-                BoxShadow(
-                  color: Colors.white.withOpacity(0.2),
-                  blurRadius: 4,
-                  spreadRadius: 0,
-                ),
-              ] : null,
-            ),
-          );
-        }),
-      ),
+  Widget _buildProgressIndicator() {
+    return OnboardingProgressIndicator(
+      totalSteps: 6,
+      currentStep: _currentPage,
     );
   }
 
@@ -3048,9 +2985,8 @@ class _OnboardingProfilePageState extends ConsumerState<OnboardingProfilePage>
     final firstName = _firstNameController.text.trim();
     final lastName = _lastNameController.text.trim();
     
-    // Debug output to help diagnose the issue
-    debugPrint('Name validation check: First name: "$firstName", Last name: "$lastName"');
-    debugPrint('Is name valid? ${firstName.isNotEmpty && lastName.isNotEmpty}');
+    // Update button state immediately when text changes
+    setState(() {});
     
     return firstName.isNotEmpty && lastName.isNotEmpty;
   }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'app_colors.dart';
 import 'app_typography.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 /// Main theme definition for HIVE UI
 /// Combines all design tokens into a ThemeData object
@@ -11,18 +12,22 @@ class AppTheme {
     return ThemeData(
       // Base theme properties
       brightness: Brightness.dark,
-      primaryColor: AppColors.gold,
+      primaryColor: AppColors.white,
       primarySwatch: AppColors.primarySwatch,
       scaffoldBackgroundColor: AppColors.black,
       canvasColor: AppColors.black,
       
       // Color scheme
       colorScheme: const ColorScheme.dark(
-        primary: AppColors.gold,
-        secondary: AppColors.gold,
-        surface: AppColors.darkGray,
-        background: AppColors.black,
+        primary: AppColors.white,
+        secondary: AppColors.white,
+        surface: Colors.black,
+        background: Colors.black,
         error: AppColors.error,
+        onPrimary: AppColors.black,
+        onSecondary: AppColors.black,
+        onSurface: AppColors.white,
+        onBackground: AppColors.white,
       ),
       
       // Text theme using our typography styles
@@ -74,7 +79,7 @@ class AppTheme {
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
           minimumSize: const Size(0, 48),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(24),
           ),
           textStyle: AppTypography.labelLarge.copyWith(color: AppColors.black),
         ),
@@ -87,7 +92,7 @@ class AppTheme {
           minimumSize: const Size(0, 48),
           side: BorderSide(color: AppColors.white.withOpacity(0.3), width: 1.0),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(24),
           ),
           textStyle: AppTypography.labelLarge,
         ).copyWith(
@@ -106,7 +111,7 @@ class AppTheme {
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           minimumSize: const Size(0, 48),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(24),
           ),
           textStyle: AppTypography.interactive,
         ).copyWith(
@@ -122,26 +127,38 @@ class AppTheme {
       // Input decoration theme
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: AppColors.darkGray,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        fillColor: AppColors.black.withOpacity(0.3),
+        labelStyle: GoogleFonts.inter(
+          color: AppColors.white.withOpacity(0.7),
+          fontWeight: FontWeight.w400,
+        ),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: AppColors.white.withOpacity(0.2)),
+          borderSide: BorderSide(
+              color: AppColors.white.withOpacity(0.2), width: 0.5),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: AppColors.white.withOpacity(0.2)),
+          borderSide: BorderSide(
+              color: AppColors.white.withOpacity(0.2), width: 0.5),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: AppColors.gold),
+          borderSide: const BorderSide(color: AppColors.white, width: 1),
         ),
         errorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: AppColors.error),
+          borderSide: const BorderSide(color: AppColors.error, width: 0.5),
         ),
-        labelStyle: AppTypography.bodyMedium,
-        hintStyle: AppTypography.bodyMedium,
+        focusedErrorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: AppColors.error, width: 1),
+        ),
+        errorStyle: GoogleFonts.inter(
+          color: AppColors.error,
+          fontSize: 12,
+          fontWeight: FontWeight.w400,
+        ),
       ),
       
       // Tab bar theme

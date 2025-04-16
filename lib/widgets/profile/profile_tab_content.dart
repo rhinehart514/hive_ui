@@ -11,6 +11,7 @@ import 'package:hive_ui/features/profile/presentation/providers/profile_provider
 import 'package:hive_ui/features/profile/presentation/widgets/profile_spaces_list.dart';
 import 'package:hive_ui/providers/friend_providers.dart' as friend_providers;
 import 'package:intl/intl.dart';
+import 'package:hive_ui/features/profile/presentation/widgets/trail_visualization.dart';
 
 /// Type of tab in the profile page
 enum ProfileTabType {
@@ -884,6 +885,24 @@ class FriendCard extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+// Add a Trail/Activity tab to the tab content
+class ProfileTrailTab extends StatelessWidget {
+  final String? userId;
+  
+  const ProfileTrailTab({
+    Key? key,
+    this.userId,
+  }) : super(key: key);
+  
+  @override
+  Widget build(BuildContext context) {
+    return TrailVisualization(
+      userId: userId,
+      showHeader: false,
     );
   }
 }

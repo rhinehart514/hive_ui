@@ -282,52 +282,72 @@ class SpaceRepositoryAdapter implements SpacesRepository {
 
   @override
   Future<void> requestToJoinSpace(String spaceId, String userId) {
-    throw UnimplementedError();
+    return _spacesRepository.requestToJoinSpace(spaceId, userId);
   }
 
   @override
   Future<List<String>> getJoinRequests(String spaceId) {
-    throw UnimplementedError();
+    return _spacesRepository.getJoinRequests(spaceId);
   }
 
   @override
   Future<bool> approveJoinRequest(String spaceId, String userIdToApprove) {
-    throw UnimplementedError();
+    return _spacesRepository.approveJoinRequest(spaceId, userIdToApprove);
   }
 
   @override
   Future<bool> denyJoinRequest(String spaceId, String userIdToDeny) {
-    throw UnimplementedError();
+    return _spacesRepository.denyJoinRequest(spaceId, userIdToDeny);
   }
 
   @override
   Future<bool> initiateSpaceArchive(String spaceId, String initiatorId) {
-    throw UnimplementedError();
+    return _spacesRepository.initiateSpaceArchive(spaceId, initiatorId);
   }
 
   @override
-  Future<String> voteForSpaceArchive(String spaceId, String voterId, bool approve) {
-    throw UnimplementedError();
+  Future<bool> voteOnSpaceArchive(String spaceId, String userId, bool approve) {
+    return _spacesRepository.voteOnSpaceArchive(spaceId, userId, approve);
   }
 
   @override
   Future<Map<String, dynamic>> getSpaceArchiveStatus(String spaceId) {
-    throw UnimplementedError();
+    return _spacesRepository.getSpaceArchiveStatus(spaceId);
   }
 
   @override
   Future<List<SpaceEntity>> getFeaturedSpaces({int limit = 20}) {
-    throw UnimplementedError();
+    return _spacesRepository.getFeaturedSpaces(limit: limit);
   }
 
   @override
   Future<List<SpaceEntity>> getNewestSpaces({int limit = 20}) {
-    throw UnimplementedError();
+    return _spacesRepository.getNewestSpaces(limit: limit);
   }
 
   @override
   Future<bool> updateSpaceActivity(String spaceId) {
-    throw UnimplementedError();
+    return _spacesRepository.updateSpaceActivity(spaceId);
+  }
+
+  @override
+  Future<bool> isSpaceAdmin(String spaceId, String userId) {
+    return _spacesRepository.isSpaceAdmin(spaceId, userId);
+  }
+
+  @override
+  Future<SpaceClaimStatus> getClaimStatus(String spaceId) {
+    return _spacesRepository.getClaimStatus(spaceId);
+  }
+
+  @override
+  Future<bool> claimLeadership(String spaceId, String userId, {String? verificationInfo}) {
+    return _spacesRepository.claimLeadership(spaceId, userId, verificationInfo: verificationInfo);
+  }
+
+  @override
+  Future<bool> updateVisibility(String spaceId, bool isPrivate) {
+    return _spacesRepository.updateVisibility(spaceId, isPrivate);
   }
 
   // --- End Stubs ---

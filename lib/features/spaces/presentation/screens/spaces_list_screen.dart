@@ -8,7 +8,6 @@ import 'package:hive_ui/features/spaces/domain/entities/space_entity.dart';
 import 'package:hive_ui/features/spaces/presentation/providers/space_search_provider.dart';
 import 'package:hive_ui/features/spaces/presentation/widgets/discover_spaces_content.dart';
 import 'package:hive_ui/features/spaces/presentation/widgets/my_spaces_content.dart';
-import 'package:hive_ui/features/spaces/presentation/widgets/requests_content.dart';
 import 'package:hive_ui/features/spaces/presentation/widgets/spaces_error_state.dart';
 import 'package:hive_ui/features/spaces/presentation/widgets/spaces_loading_state.dart';
 import 'package:hive_ui/features/spaces/presentation/widgets/spaces_search_bar.dart';
@@ -33,7 +32,7 @@ class _SpacesListScreenState extends ConsumerState<SpacesListScreen> with Single
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(length: 2, vsync: this);
     _tabController.addListener(() {
       // This ensures state is rebuilt when tab changes
       if (!_tabController.indexIsChanging) {
@@ -98,7 +97,6 @@ class _SpacesListScreenState extends ConsumerState<SpacesListScreen> with Single
                       // Replace with actual implementations once we create these widgets
                       MySpacesContent(),
                       DiscoverSpacesContent(),
-                      RequestsContent(),
                     ],
                   ),
           ),
@@ -155,7 +153,6 @@ class _SpacesListScreenState extends ConsumerState<SpacesListScreen> with Single
         tabs: const [
           Tab(text: 'My Spaces'),
           Tab(text: 'Discover'),
-          Tab(text: 'Requests'),
         ],
       ),
     );
