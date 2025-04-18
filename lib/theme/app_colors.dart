@@ -23,6 +23,9 @@ class AppColors {
   /// Primary accent color
   static const primary = gold;
   
+  /// Alias for accent color used in many places
+  static const accent = gold;
+  
   /// Text color for dark theme
   static const textDark = Colors.white;
   

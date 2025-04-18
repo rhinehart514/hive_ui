@@ -21,6 +21,75 @@ class FeedFriendMotionCard extends ConsumerStatefulWidget {
     required this.signalContent,
     this.onTap,
   }) : super(key: key);
+  
+  /// Creates a compact version of the card for use in the signal strip
+  /// This is a factory method that simplifies creation with specific parameters
+  static Widget compact({
+    String? avatarUrl,
+    String? username,
+    String? action,
+    VoidCallback? onTap,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          // Avatar
+          Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              color: Colors.grey.shade800,
+              shape: BoxShape.circle,
+              image: avatarUrl != null
+                  ? DecorationImage(
+                      image: NetworkImage(avatarUrl),
+                      fit: BoxFit.cover,
+                    )
+                  : null,
+            ),
+            child: avatarUrl == null
+                ? Icon(
+                    Icons.person,
+                    color: Colors.grey.shade400,
+                    size: 24,
+                  )
+                : null,
+          ),
+          
+          const SizedBox(height: 8),
+          
+          // Name
+          Text(
+            username ?? 'User',
+            style: GoogleFonts.inter(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              color: Colors.white,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          
+          const SizedBox(height: 2),
+          
+          // Action text
+          Text(
+            action ?? 'did something',
+            style: GoogleFonts.inter(
+              fontSize: 11,
+              fontWeight: FontWeight.w400,
+              color: Colors.white.withOpacity(0.7),
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    );
+  }
 
   @override
   ConsumerState<FeedFriendMotionCard> createState() => _FeedFriendMotionCardState();

@@ -29,6 +29,21 @@ class SignalContent extends Equatable {
   /// URL for associated image, if any
   final String? imageUrl;
   
+  /// Action text for the content (e.g., "joined a space")
+  final String? action;
+  
+  /// Member count for spaces and clubs
+  final int? memberCount;
+  
+  /// Timestamp for when the content was generated
+  DateTime get timestamp => createdAt;
+  
+  /// Whether the content is marked as hot
+  final bool isHot;
+  
+  /// Whether the content is marked as trending
+  final bool isTrending;
+  
   /// Constructor
   SignalContent({
     required this.id,
@@ -40,6 +55,10 @@ class SignalContent extends Equatable {
     DateTime? createdAt,
     this.expiresAt,
     this.imageUrl,
+    this.action,
+    this.memberCount,
+    this.isHot = false,
+    this.isTrending = false,
   }) : createdAt = createdAt ?? DateTime.now();
   
   /// Check if the signal content is expired
@@ -57,6 +76,10 @@ class SignalContent extends Equatable {
     priority,
     createdAt,
     expiresAt,
+    isHot,
+    isTrending,
+    action,
+    memberCount,
   ];
 }
 
@@ -100,4 +123,16 @@ enum SignalType {
   
   /// Friend motion notification
   friendMotion,
+  
+  /// Club related content
+  club,
+  
+  /// Time marker content
+  timeMarker,
+  
+  /// Photo content
+  photo,
+  
+  /// Space related content
+  space,
 } 

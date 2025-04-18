@@ -7,6 +7,7 @@ import 'package:hive_ui/features/feed/domain/entities/signal_content.dart';
 import 'package:hive_ui/features/feed/presentation/providers/signal_provider.dart';
 import 'package:hive_ui/features/feed/presentation/widgets/feed_friend_motion_card.dart';
 import 'package:hive_ui/theme/app_colors.dart';
+import 'package:hive_ui/theme/app_theme.dart';
 import 'package:hive_ui/main.dart' show firebaseVerificationProvider;
 
 /// A horizontally-scrollable strip that appears at the top of the feed
@@ -44,7 +45,7 @@ class SignalStrip extends ConsumerStatefulWidget {
   /// Constructor
   const SignalStrip({
     super.key,
-    this.height = 125.0,
+    this.height = 110.0,
     this.padding = const EdgeInsets.symmetric(horizontal: 16.0),
     this.onCardTap,
     this.maxCards = 5,
@@ -68,7 +69,7 @@ class _SignalStripState extends ConsumerState<SignalStrip>
   void initState() {
     super.initState();
     _animationController = AnimationController(
-      duration: const Duration(milliseconds: 600),
+      duration: const Duration(milliseconds: 450),
       vsync: this,
     );
     _fadeAnimation = CurvedAnimation(
@@ -77,7 +78,7 @@ class _SignalStripState extends ConsumerState<SignalStrip>
     );
     
     // Start the animation after a short delay
-    Future.delayed(const Duration(milliseconds: 200), () {
+    Future.delayed(const Duration(milliseconds: 150), () {
       if (mounted) {
         _animationController.forward();
       }
@@ -130,6 +131,7 @@ class _SignalStripState extends ConsumerState<SignalStrip>
         left: widget.padding.left, 
         right: widget.padding.right,
         bottom: 8,
+        top: 4,
       ),
       child: Row(
         children: [
@@ -199,16 +201,12 @@ class _SignalStripState extends ConsumerState<SignalStrip>
           return _buildEmptyState();
         }
         
-        // Mark the first item as viewed - AFTER the build is complete
-        if (contentList.isNotEmpty) {
-          // Use microtask to schedule after build completion
-          Future.microtask(() {
-            // Make sure the widget is still mounted
-            if (mounted) {
-              ref.read(signalStripProvider.notifier).logContentView(contentList[0].id);
-            }
-          });
-        }
+        // Same logic as above - log view for first card
+        Future.microtask(() {
+          if (mounted && contentList.isNotEmpty) {
+            ref.read(signalStripProvider.notifier).logContentView(contentList[0].id);
+          }
+        });
         
         return ListView.builder(
           scrollDirection: Axis.horizontal,
@@ -221,445 +219,469 @@ class _SignalStripState extends ConsumerState<SignalStrip>
         );
       },
       loading: () => _buildLoadingState(),
-      error: (error, stack) => _buildErrorState(error),
+      error: (error, stackTrace) => _buildErrorState(),
     );
   }
   
+  /// Builds a signal card based on the content type
   Widget _buildSignalCard(SignalContent content) {
-    // Determine card style based on signal type
-    final cardStyle = _getCardStyle(content.type);
-    
-    // Determine the icon based on the content type
-    final icon = _getIconForType(content.type);
-    
-    // Special handling for friend motion cards
-    if (content.type == SignalType.friendMotion) {
-      return _buildFriendMotionCard(content);
-    }
-    
-    return GestureDetector(
-      onTap: () => _handleCardTap(content),
-      child: Container(
-        width: 280,
-        margin: const EdgeInsets.only(right: 12),
-        child: widget.useGlassEffect
-            ? _buildGlassCard(content, cardStyle, icon)
-            : _buildStandardCard(content, cardStyle, icon),
-      ),
-    );
-  }
-  
-  Widget _buildGlassCard(
-    SignalContent content, 
-    _SignalCardStyle style,
-    IconData icon,
-  ) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(8),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+    return Padding(
+      padding: const EdgeInsets.only(right: 12.0),
+      child: GestureDetector(
+        onTap: () {
+          HapticFeedback.lightImpact();
+          if (widget.onCardTap != null) {
+            widget.onCardTap!(content);
+          }
+        },
         child: Container(
-          padding: const EdgeInsets.all(16),
+          width: 140,
           decoration: BoxDecoration(
-            color: AppColors.dark2.withOpacity(widget.glassOpacity),
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(
-              color: Colors.white.withOpacity(0.15),
-              width: 0.5,
-            ),
+            color: AppColors.dark2,
+            borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.05),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
+              ),
+            ],
           ),
-          child: _buildCardContent(content, style, icon),
+          clipBehavior: Clip.hardEdge,
+          child: Stack(
+            children: [
+              // Card content based on type
+              _buildCardContent(content),
+              
+              // Glass effect overlay (optional)
+              if (widget.useGlassEffect)
+                Positioned.fill(
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+                    child: BackdropFilter(
+                      filter: ImageFilter.blur(sigmaX: 0.5, sigmaY: 0.5),
+                      child: Container(
+                        color: Colors.black.withOpacity(widget.glassOpacity),
+                      ),
+                    ),
+                  ),
+                ),
+              
+              // Indicator for hot/trending items
+              if (content.isHot || content.isTrending)
+                Positioned(
+                  top: 8,
+                  right: 8,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: content.isHot ? Colors.red.withOpacity(0.9) : AppColors.accent.withOpacity(0.9),
+                      borderRadius: BorderRadius.circular(AppTheme.radiusFull),
+                    ),
+                    child: Text(
+                      content.isHot ? '🔥 HOT' : 'TRENDING',
+                      style: GoogleFonts.inter(
+                        fontSize: 8,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                ),
+                
+              // Time indicator for recency
+              Positioned(
+                bottom: 8,
+                right: 8,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withOpacity(0.6),
+                    borderRadius: BorderRadius.circular(AppTheme.radiusFull),
+                  ),
+                  child: Text(
+                    _formatTimeAgo(content.timestamp),
+                    style: GoogleFonts.inter(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w500,
+                      color: Colors.white.withOpacity(0.9),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
   
-  Widget _buildStandardCard(
-    SignalContent content, 
-    _SignalCardStyle style,
-    IconData icon,
-  ) {
-    return Card(
-      elevation: 0,
-      color: AppColors.dark2,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(8),
-        side: BorderSide(
-          color: Colors.white.withOpacity(0.1),
-          width: 0.5,
-        ),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: _buildCardContent(content, style, icon),
-      ),
-    );
-  }
-  
-  /// Format a DateTime as a relative time string (e.g. "5m ago", "2h ago")
-  String _getTimeAgo(DateTime dateTime) {
-    final now = DateTime.now();
-    final difference = now.difference(dateTime);
+  /// Formats a timestamp into a human-readable string
+  String _formatTimeAgo(DateTime? timestamp) {
+    if (timestamp == null) return ''; 
     
-    if (difference.inMinutes < 1) {
-      return 'Just now';
-    } else if (difference.inMinutes < 60) {
+    final now = DateTime.now();
+    final difference = now.difference(timestamp);
+    
+    if (difference.inMinutes < 60) {
       return '${difference.inMinutes}m ago';
     } else if (difference.inHours < 24) {
       return '${difference.inHours}h ago';
     } else if (difference.inDays < 7) {
       return '${difference.inDays}d ago';
-    } else if (difference.inDays < 30) {
-      return '${(difference.inDays / 7).floor()}w ago';
     } else {
-      return '${(difference.inDays / 30).floor()}mo ago';
+      return '${(difference.inDays / 7).floor()}w ago';
     }
   }
   
-  Widget _buildCardContent(
-    SignalContent content,
-    _SignalCardStyle style,
-    IconData icon,
-  ) {
-    // Get formatted time text
-    final formattedTimeAgo = _getTimeAgo(content.createdAt);
-    
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // Header row with icon and time
-        Row(
-          children: [
-            // Icon with background
-            Container(
-              width: 36,
-              height: 36,
-              decoration: BoxDecoration(
-                color: style.iconBackgroundColor,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Icon(
-                icon,
-                size: 20,
-                color: style.iconColor,
-              ),
+  /// Builds the inner content of the card based on type
+  Widget _buildCardContent(SignalContent content) {
+    switch (content.type) {
+      case SignalType.club:
+        return _buildClubCard(content);
+      case SignalType.friendMotion:
+        return _buildFriendMotionCard(content);
+      case SignalType.timeMarker:
+        return _buildTimeMarkerCard(content);
+      case SignalType.photo:
+        return _buildPhotoCard(content);
+      case SignalType.space:
+        return _buildSpaceCard(content);
+      default:
+        return _buildDefaultCard(content);
+    }
+  }
+  
+  // Various card type implementations
+  Widget _buildClubCard(SignalContent content) {
+    return Container(
+      color: AppColors.dark2,
+      padding: const EdgeInsets.all(12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Title
+          Text(
+            content.title ?? 'Club Activity',
+            style: GoogleFonts.inter(
+              fontSize: 14,
+              fontWeight: FontWeight.w700,
+              color: Colors.white,
             ),
-            
-            const SizedBox(width: 8),
-            
-            // Time ago text
-            Expanded(
-              child: Text(
-                formattedTimeAgo,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          
+          const SizedBox(height: 4),
+          
+          // Description with emoji
+          Text(
+            content.description ?? 'Something is happening',
+            style: GoogleFonts.inter(
+              fontSize: 12,
+              fontWeight: FontWeight.w400,
+              color: Colors.white.withOpacity(0.8),
+              height: 1.4,
+            ),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+          
+          const Spacer(),
+          
+          // Members info
+          Row(
+            children: [
+              const Icon(
+                Icons.person,
+                size: 14,
+                color: AppColors.textSecondary,
+              ),
+              const SizedBox(width: 4),
+              Text(
+                '${content.memberCount ?? 0} members',
                 style: GoogleFonts.inter(
-                  fontSize: 13,
-                  color: style.iconColor,
-                  fontWeight: FontWeight.w600,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w500,
+                  color: AppColors.textSecondary,
                 ),
               ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+  
+  Widget _buildFriendMotionCard(SignalContent content) {
+    return Container(
+      color: AppColors.dark2,
+      child: Column(
+        children: [
+          Expanded(
+            child: Center(
+              child: FeedFriendMotionCard.compact(
+                avatarUrl: content.imageUrl,
+                username: content.title ?? 'Friend',
+                action: content.action ?? 'did something',
+                onTap: () {
+                  if (widget.onCardTap != null) {
+                    widget.onCardTap!(content);
+                  }
+                },
+              ),
             ),
-          ],
+          ),
+        ],
+      ),
+    );
+  }
+  
+  Widget _buildTimeMarkerCard(SignalContent content) {
+    return Container(
+      color: AppColors.dark2,
+      padding: const EdgeInsets.all(12),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          // Clock icon
+          Icon(
+            Icons.access_time_rounded,
+            size: 24,
+            color: AppColors.accent,
+          ),
+          
+          const SizedBox(height: 8),
+          
+          // Time text
+          Text(
+            content.title ?? 'Time marker',
+            style: GoogleFonts.inter(
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+              color: Colors.white,
+              letterSpacing: 0.5,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          
+          const SizedBox(height: 4),
+          
+          // Description
+          Text(
+            content.description ?? '',
+            style: GoogleFonts.inter(
+              fontSize: 11,
+              fontWeight: FontWeight.w400,
+              color: Colors.white.withOpacity(0.7),
+            ),
+            textAlign: TextAlign.center,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
+      ),
+    );
+  }
+  
+  Widget _buildPhotoCard(SignalContent content) {
+    return Stack(
+      children: [
+        // Image background
+        Positioned.fill(
+          child: content.imageUrl != null 
+              ? Image.network(
+                  content.imageUrl!,
+                  fit: BoxFit.cover,
+                )
+              : Container(color: Colors.grey.shade800),
         ),
         
-        const SizedBox(height: 12),
-        
-        // Title
-        Text(
-          content.title,
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
-          style: GoogleFonts.inter(
-            fontSize: 16,
-            fontWeight: FontWeight.w700,
-            color: Colors.white,
-            height: 1.3,
+        // Gradient overlay
+        Positioned.fill(
+          child: Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  Colors.transparent,
+                  Colors.black.withOpacity(0.7),
+                ],
+                stops: const [0.5, 1.0],
+              ),
+            ),
           ),
         ),
         
-        const SizedBox(height: 4),
-        
-        // Description
-        Expanded(
+        // Title at bottom
+        Positioned(
+          left: 12,
+          right: 12,
+          bottom: 12,
           child: Text(
-            content.description,
+            content.title ?? 'Photo Challenge',
+            style: GoogleFonts.inter(
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+              color: Colors.white,
+            ),
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
-            style: GoogleFonts.inter(
-              fontSize: 14,
-              fontWeight: FontWeight.w400,
-              color: Colors.white.withOpacity(0.7),
-              height: 1.4,
-            ),
           ),
         ),
       ],
     );
   }
   
-  IconData _getIconForType(SignalType type) {
-    switch (type) {
-      case SignalType.lastNight:
-        return Icons.nightlife;
-      case SignalType.topEvent:
-        return Icons.event;
-      case SignalType.trySpace:
-        return Icons.people;
-      case SignalType.hiveLab:
-        return Icons.science;
-      case SignalType.underratedGem:
-        return Icons.diamond;
-      case SignalType.universityNews:
-        return Icons.school;
-      case SignalType.communityUpdate:
-        return Icons.campaign;
-      case SignalType.timeMorning:
-        return Icons.wb_sunny;
-      case SignalType.timeAfternoon:
-        return Icons.wb_twilight;
-      case SignalType.timeEvening:
-        return Icons.nightlight_round;
-      case SignalType.spaceHeat:
-        return Icons.local_fire_department;
-      case SignalType.ritualLaunch:
-        return Icons.rocket_launch;
-      case SignalType.friendMotion:
-        return Icons.directions_walk;
-      default:
-        return Icons.info;
-    }
-  }
-
-  _SignalCardStyle _getCardStyle(SignalType type) {
-    switch (type) {
-      case SignalType.lastNight:
-        return _SignalCardStyle(
-          gradientColors: [
-            const Color(0xFF2E0B33).withOpacity(0.7),
-            const Color(0xFF1A062D).withOpacity(0.7),
-          ],
-          iconColor: Colors.purple,
-          iconBackgroundColor: Colors.purple.withOpacity(0.25),
-        );
-      case SignalType.topEvent:
-        return _SignalCardStyle(
-          gradientColors: [
-            const Color(0xFF33190B).withOpacity(0.7),
-            const Color(0xFF1B0D04).withOpacity(0.7),
-          ],
-          iconColor: Colors.orange,
-          iconBackgroundColor: Colors.orange.withOpacity(0.25),
-        );
-      case SignalType.trySpace:
-        return _SignalCardStyle(
-          gradientColors: [
-            const Color(0xFF0B2E33).withOpacity(0.7),
-            const Color(0xFF031F24).withOpacity(0.7),
-          ],
-          iconColor: Colors.teal,
-          iconBackgroundColor: Colors.teal.withOpacity(0.25),
-        );
-      case SignalType.hiveLab:
-        return _SignalCardStyle(
-          gradientColors: [
-            const Color(0xFF33310B).withOpacity(0.7),
-            const Color(0xFF1F1D04).withOpacity(0.7),
-          ],
-          iconColor: AppColors.yellow,
-          iconBackgroundColor: AppColors.yellow.withOpacity(0.25),
-        );
-      case SignalType.underratedGem:
-        return _SignalCardStyle(
-          gradientColors: [
-            const Color(0xFF0B1933).withOpacity(0.7),
-            const Color(0xFF030F24).withOpacity(0.7),
-          ],
-          iconColor: Colors.blue,
-          iconBackgroundColor: Colors.blue.withOpacity(0.25),
-        );
-      case SignalType.universityNews:
-        return _SignalCardStyle(
-          gradientColors: [
-            const Color(0xFF333333).withOpacity(0.7),
-            const Color(0xFF1A1A1A).withOpacity(0.7),
-          ],
-          iconColor: AppColors.white,
-          iconBackgroundColor: AppColors.white.withOpacity(0.25),
-        );
-      case SignalType.communityUpdate:
-        return _SignalCardStyle(
-          gradientColors: [
-            const Color(0xFF152A18).withOpacity(0.7),
-            const Color(0xFF0F1C11).withOpacity(0.7),
-          ],
-          iconColor: Colors.green,
-          iconBackgroundColor: Colors.green.withOpacity(0.25),
-        );
-      case SignalType.timeMorning:
-        return _SignalCardStyle(
-          gradientColors: [
-            const Color(0xFF3B2502).withOpacity(0.7),
-            const Color(0xFF261701).withOpacity(0.7),
-          ],
-          iconColor: Colors.orange,
-          iconBackgroundColor: Colors.orange.withOpacity(0.25),
-        );
-      case SignalType.timeAfternoon:
-        return _SignalCardStyle(
-          gradientColors: [
-            const Color(0xFF33190B).withOpacity(0.7),
-            const Color(0xFF1B0D04).withOpacity(0.7),
-          ],
-          iconColor: AppColors.gold,
-          iconBackgroundColor: AppColors.gold.withOpacity(0.25),
-        );
-      case SignalType.timeEvening:
-        return _SignalCardStyle(
-          gradientColors: [
-            const Color(0xFF0B0F33).withOpacity(0.7),
-            const Color(0xFF060924).withOpacity(0.7),
-          ],
-          iconColor: Colors.indigo,
-          iconBackgroundColor: Colors.indigo.withOpacity(0.25),
-        );
-      case SignalType.spaceHeat:
-        return _SignalCardStyle(
-          gradientColors: [
-            const Color(0xFF330B0B).withOpacity(0.7),
-            const Color(0xFF240606).withOpacity(0.7),
-          ],
-          iconColor: Colors.red,
-          iconBackgroundColor: Colors.red.withOpacity(0.25),
-        );
-      case SignalType.ritualLaunch:
-        return _SignalCardStyle(
-          gradientColors: [
-            const Color(0xFF2E0B33).withOpacity(0.7),
-            const Color(0xFF1A062D).withOpacity(0.7),
-          ],
-          iconColor: Colors.purple,
-          iconBackgroundColor: Colors.purple.withOpacity(0.25),
-        );
-      case SignalType.friendMotion:
-        return _SignalCardStyle(
-          gradientColors: [
-            const Color(0xFF0B2933).withOpacity(0.7),
-            const Color(0xFF061924).withOpacity(0.7),
-          ],
-          iconColor: Colors.cyan,
-          iconBackgroundColor: Colors.cyan.withOpacity(0.25),
-        );
-      default:
-        return _SignalCardStyle(
-          gradientColors: [
-            const Color(0xFF333333).withOpacity(0.7),
-            const Color(0xFF1A1A1A).withOpacity(0.7),
-          ],
-          iconColor: AppColors.white,
-          iconBackgroundColor: AppColors.white.withOpacity(0.25),
-        );
-    }
+  Widget _buildSpaceCard(SignalContent content) {
+    return Container(
+      color: AppColors.dark2,
+      padding: const EdgeInsets.all(12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Space title
+          Text(
+            content.title ?? 'Space Name',
+            style: GoogleFonts.inter(
+              fontSize: 14,
+              fontWeight: FontWeight.w700,
+              color: Colors.white,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          
+          const SizedBox(height: 4),
+          
+          // Space description
+          Text(
+            content.description ?? 'Space description',
+            style: GoogleFonts.inter(
+              fontSize: 12,
+              fontWeight: FontWeight.w400,
+              color: Colors.white.withOpacity(0.8),
+            ),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+          
+          const Spacer(),
+          
+          // Members count
+          Row(
+            children: [
+              const Icon(
+                Icons.group,
+                size: 14,
+                color: AppColors.textSecondary,
+              ),
+              const SizedBox(width: 4),
+              Text(
+                '${content.memberCount ?? 0} members',
+                style: GoogleFonts.inter(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w500,
+                  color: AppColors.textSecondary,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
   }
   
-  void _handleCardTap(SignalContent content) {
-    // Provide haptic feedback
-    HapticFeedback.selectionClick();
-    
-    // Log the tap
-    ref.read(signalStripProvider.notifier).logContentTap(content.id);
-    
-    // Call the callback
-    widget.onCardTap?.call(content);
+  Widget _buildDefaultCard(SignalContent content) {
+    return Container(
+      color: AppColors.dark2,
+      padding: const EdgeInsets.all(12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            content.title ?? 'Signal',
+            style: GoogleFonts.inter(
+              fontSize: 14,
+              fontWeight: FontWeight.w700,
+              color: Colors.white,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          
+          const SizedBox(height: 4),
+          
+          Text(
+            content.description ?? 'Signal details',
+            style: GoogleFonts.inter(
+              fontSize: 12,
+              fontWeight: FontWeight.w400,
+              color: Colors.white.withOpacity(0.8),
+            ),
+            maxLines: 3,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
+      ),
+    );
   }
   
+  // State widgets
   Widget _buildEmptyState() {
     return Center(
-      child: Opacity(
-        opacity: 0.6,
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.notifications_none,
-              color: AppColors.white.withOpacity(0.7),
-              size: 28,
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'No signals right now',
-              style: GoogleFonts.inter(
-                color: AppColors.white.withOpacity(0.7),
-                fontSize: 14,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ],
+      child: Text(
+        'No signals yet',
+        style: GoogleFonts.inter(
+          fontSize: 14,
+          fontWeight: FontWeight.w500,
+          color: AppColors.textSecondary,
         ),
       ),
     );
   }
   
   Widget _buildLoadingState() {
-    return const Center(
-      child: SizedBox(
-        width: 24,
-        height: 24,
-        child: CircularProgressIndicator(
-          strokeWidth: 2,
-          valueColor: AlwaysStoppedAnimation<Color>(AppColors.yellow),
-        ),
-      ),
-    );
-  }
-  
-  Widget _buildErrorState(Object error) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 24),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.error_outline,
-              color: Colors.red.shade300,
-              size: 24,
+    return ListView.builder(
+      scrollDirection: Axis.horizontal,
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: 3,
+      itemBuilder: (context, index) {
+        return Padding(
+          padding: const EdgeInsets.only(right: 12.0),
+          child: Container(
+            width: 140,
+            decoration: BoxDecoration(
+              color: AppColors.dark2,
+              borderRadius: BorderRadius.circular(AppTheme.radiusSm),
             ),
-            const SizedBox(height: 8),
-            Text(
-              'Could not load signal content',
-              textAlign: TextAlign.center,
-              style: GoogleFonts.inter(
-                color: AppColors.white.withOpacity(0.7),
-                fontSize: 14,
-                fontWeight: FontWeight.w500,
+            child: const Center(
+              child: SizedBox(
+                width: 24,
+                height: 24,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: AppColors.textSecondary,
+                ),
               ),
             ),
-          ],
+          ),
+        );
+      },
+    );
+  }
+  
+  Widget _buildErrorState() {
+    return Center(
+      child: Text(
+        'Could not load signals',
+        style: GoogleFonts.inter(
+          fontSize: 14,
+          fontWeight: FontWeight.w500,
+          color: AppColors.textSecondary,
         ),
       ),
     );
   }
-  
-  /// Build a specialized Friend Motion card
-  Widget _buildFriendMotionCard(SignalContent content) {
-    return Padding(
-      padding: const EdgeInsets.only(right: 12),
-      child: FeedFriendMotionCard(
-        signalContent: content,
-        onTap: () => _handleCardTap(content),
-      ),
-    );
-  }
-}
-
-/// Helper class for styling signal cards
-class _SignalCardStyle {
-  final List<Color> gradientColors;
-  final Color iconColor;
-  final Color iconBackgroundColor;
-  
-  const _SignalCardStyle({
-    required this.gradientColors,
-    required this.iconColor,
-    required this.iconBackgroundColor,
-  });
 } 

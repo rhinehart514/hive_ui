@@ -13,6 +13,8 @@ import 'package:hive_ui/features/feed/presentation/widgets/repost_button.dart';
 import 'package:hive_ui/features/feed/presentation/widgets/boost_dialog.dart';
 import 'package:hive_ui/features/auth/providers/role_providers.dart';
 import 'package:hive_ui/features/feed/presentation/providers/boost_provider.dart';
+import 'package:intl/intl.dart';
+import 'package:hive_ui/features/feed/presentation/widgets/feed_item_card.dart';
 
 /// Factory class for creating feed item widgets
 class FeedItemFactory {
@@ -791,4 +793,112 @@ class _ShineTextState extends State<ShineText> with SingleTickerProviderStateMix
       },
     );
   }
+}
+
+/// Creates an event card with Twitter/X-like styling
+Widget buildEventCard(
+  BuildContext context,
+  Event event,
+  bool isRsvped,
+  VoidCallback onRsvpTap,
+  VoidCallback onCardTap,
+) {
+  // Format the time in a concise way
+  final formattedTime = _formatEventTime(event);
+  
+  // Create the actions for the card
+  final actions = [
+    FeedItemCard.buildActionButton(
+      context, 
+      Icons.event_available,
+      isRsvped ? 'Going' : 'RSVP',
+      onRsvpTap,
+    ),
+    FeedItemCard.buildActionButton(
+      context, 
+      Icons.repeat_rounded,
+      'Repost',
+      () => HapticFeedback.lightImpact(),
+    ),
+    FeedItemCard.buildActionButton(
+      context, 
+      Icons.bookmark_border_rounded,
+      'Save',
+      () => HapticFeedback.lightImpact(),
+    ),
+  ];
+  
+  return FeedItemCard(
+    leading: CircleAvatar(
+      radius: 20,
+      backgroundColor: AppColors.dark2,
+      backgroundImage: event.imageUrl != null && event.imageUrl!.isNotEmpty
+          ? NetworkImage(event.imageUrl!)
+          : null,
+      child: event.imageUrl == null || event.imageUrl!.isEmpty
+          ? const Icon(Icons.event, color: AppColors.textSecondary)
+          : null,
+    ),
+    title: event.title,
+    subtitle: event.location,
+    timeAgo: formattedTime,
+    content: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (event.description != null && event.description!.isNotEmpty)
+          Text(
+            event.description!,
+            style: const TextStyle(
+              fontSize: 14,
+              color: AppColors.textPrimary,
+              height: 1.4,
+            ),
+            maxLines: 3,
+            overflow: TextOverflow.ellipsis,
+          ),
+      ],
+    ),
+    actions: actions,
+    onTap: onCardTap,
+    isEvent: true,
+  );
+}
+
+/// Helper method to format event time in a concise Twitter-like way
+String _formatEventTime(Event event) {
+  if (event.startDate == null) return '';
+
+  final now = DateTime.now();
+  final today = DateTime(now.year, now.month, now.day);
+  final tomorrow = today.add(const Duration(days: 1));
+  final startDate = DateTime(
+    event.startDate.year,
+    event.startDate.month,
+    event.startDate.day,
+  );
+  
+  // Get just the time portion (e.g., "3:45 PM")
+  final timeFormat = DateFormat('h:mm a');
+  final startTimeStr = timeFormat.format(event.startDate);
+  
+  // For events today
+  if (startDate.isAtSameMomentAs(today)) {
+    return 'Today at $startTimeStr';
+  }
+  
+  // For events tomorrow
+  if (startDate.isAtSameMomentAs(tomorrow)) {
+    return 'Tomorrow at $startTimeStr';
+  }
+  
+  // For events within a week
+  final difference = startDate.difference(today).inDays;
+  if (difference > 0 && difference < 7) {
+    final dayFormat = DateFormat('EEEE'); // Full day name
+    return '${dayFormat.format(event.startDate)} at $startTimeStr';
+  }
+  
+  // For other events
+  final dateFormat = DateFormat('MMM d');
+  return '${dateFormat.format(event.startDate)} at $startTimeStr';
 } 
