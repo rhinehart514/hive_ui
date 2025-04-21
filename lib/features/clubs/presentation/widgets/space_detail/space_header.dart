@@ -284,19 +284,20 @@ class SpaceHeader extends StatelessWidget {
     return Column(
       mainAxisSize: MainAxisSize.min,
       mainAxisAlignment: MainAxisAlignment.center,
+      crossAxisAlignment: CrossAxisAlignment.center, // Center horizontally too
       children: [
         Icon(
           icon,
           color: AppColors.white,
-          size: isSmallScreen ? 16 : 18, // Adaptive icon size
+          size: isSmallScreen ? 14 : 16, // Further reduced icon size
         ),
-        const SizedBox(height: 2), // Reduced spacing
         Text(
           value,
           style: GoogleFonts.outfit(
-            fontSize: isSmallScreen ? 12 : 14, // Adaptive font size
+            fontSize: isSmallScreen ? 10 : 12, // Further reduced font size
             fontWeight: FontWeight.w600,
             color: AppColors.white,
+            height: 1.1, // Reduced line height slightly
           ),
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
@@ -304,8 +305,9 @@ class SpaceHeader extends StatelessWidget {
         Text(
           label,
           style: GoogleFonts.inter(
-            fontSize: isSmallScreen ? 10 : 11, // Adaptive font size
+            fontSize: isSmallScreen ? 9 : 10, // Kept this size, should be small enough
             color: AppColors.white.withOpacity(0.7),
+            height: 1.1, // Reduced line height slightly
           ),
           maxLines: 1,
           overflow: TextOverflow.ellipsis,

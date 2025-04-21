@@ -232,7 +232,7 @@ class _FeedPageState extends ConsumerState<FeedPage> with SingleTickerProviderSt
                 right: 16,
               ),
               decoration: BoxDecoration(
-                color: const Color(0xFF121212),
+                color: AppColors.dark,
                 borderRadius: const BorderRadius.only(
                   topLeft: Radius.circular(16),
                   topRight: Radius.circular(16),
@@ -474,13 +474,13 @@ class _FeedPageState extends ConsumerState<FeedPage> with SingleTickerProviderSt
     final feedStreamAsyncValue = ref.watch(feedStreamProvider);
 
     return Scaffold(
-      backgroundColor: AppColors.dark, // Primary surface color #121212 per brand aesthetic
+      backgroundColor: AppColors.dark, // Primary surface color #0d0d0d per brand aesthetic
       appBar: _buildAppBar(),
       body: Column(
         children: [
           // Add the FeedStrip at the top
           const Padding(
-            padding: EdgeInsets.only(top: 12, bottom: 16), // Updated spacing
+            padding: EdgeInsets.only(top: 12, bottom: 16), 
             child: FeedStrip(
               height: 125.0,
               maxCards: 5,
@@ -493,17 +493,23 @@ class _FeedPageState extends ConsumerState<FeedPage> with SingleTickerProviderSt
             child: RefreshIndicator(
               key: _refreshIndicatorKey,
               onRefresh: _refreshFeed,
-              backgroundColor: AppColors.surface,
-              color: AppColors.primary,
+              backgroundColor: AppColors.dark2,
+              color: AppColors.accent,
+              strokeWidth: 2.0,
               child: feedStreamAsyncValue.when(
                 data: (feedItems) {
                   // Data is loaded, display the StreamFeedList
                   if (feedItems.isEmpty) {
                     // Handle empty feed state
-                    return const Center(
+                    return Center(
                       child: Text(
                         'No events or reposts found.',
-                        style: TextStyle(color: AppColors.textSecondary),
+                        style: GoogleFonts.inter(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w400,
+                          color: AppColors.textDarkSecondary,
+                          height: 1.6,
+                        ),
                       ),
                     );
                   }
@@ -527,14 +533,33 @@ class _FeedPageState extends ConsumerState<FeedPage> with SingleTickerProviderSt
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        const Text(
+                        Text(
                           'Error loading feed',
-                          style: TextStyle(color: AppColors.textSecondary),
+                          style: GoogleFonts.inter(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w400,
+                            color: AppColors.textDarkSecondary,
+                            height: 1.6,
+                          ),
                         ),
-                        const SizedBox(height: 16),
+                        const SizedBox(height: 16), // 16px spacing (spacing-md)
                         ElevatedButton(
                           onPressed: () => _refreshFeed(),
-                          child: const Text('Try Again'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.buttonPrimary,
+                            foregroundColor: AppColors.buttonText,
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(24), // Pill shape
+                            ),
+                          ),
+                          child: Text(
+                            'Try Again',
+                            style: GoogleFonts.inter(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
                         ),
                       ],
                     ),
@@ -548,52 +573,67 @@ class _FeedPageState extends ConsumerState<FeedPage> with SingleTickerProviderSt
     );
   }
   
-  // AppBar remains mostly the same, just removed TabBar for now
   AppBar _buildAppBar() {
     return AppBar(
-      // Using the AppBarTheme from ThemeData instead of manually setting
-      // backgroundColor: AppColors.dark, -- Now provided by theme
-      // elevation: 0, -- Now provided by theme
+      backgroundColor: AppColors.dark, // Primary dark background (#0d0d0d)
+      elevation: 0,
       centerTitle: true,
       title: Text(
         'HIVE', // Or use an Image/SvgPicture for the logo
-        style: GoogleFonts.orbitron(
-          fontWeight: FontWeight.bold,
-          fontSize: 24,
-          color: AppColors.gold, // Use consistent gold accent
-          letterSpacing: 1.5,
+        style: GoogleFonts.inter(
+          fontWeight: FontWeight.w600,
+          fontSize: 20, // H3 size
+          color: AppColors.textDark,
+          letterSpacing: 1.0,
         ),
       ),
       actions: [
-        // Add Filter button back if needed, but point to the updated/removed method
-              IconButton(
-          icon: const Icon(Icons.tune_rounded, color: AppColors.white),
-                onPressed: () {
-                  HapticFeedback.selectionClick();
-            _showFilterBottomSheet(context); // This will now show the TODO message
-                },
-              ),
-        // Example action: Notifications icon
-              IconButton(
+        // Filter button
+        IconButton(
           icon: Icon(
-            _hasUnreadNotifications ? Icons.notifications_active : Icons.notifications_none,
-            color: AppColors.white, // White for standard icons
+            Icons.tune_rounded,
+            color: AppColors.textDark,
+            size: 20,
           ),
           onPressed: () {
+            HapticFeedback.selectionClick();
+            _showFilterBottomSheet(context); // This will now show the TODO message
+          },
+          splashRadius: 20,
+          tooltip: 'Filter',
+        ),
+        // Notifications icon
+        IconButton(
+          icon: Icon(
+            _hasUnreadNotifications ? Icons.notifications_active : Icons.notifications_none,
+            color: AppColors.textDark,
+            size: 20,
+          ),
+          onPressed: () {
+            HapticFeedback.selectionClick();
             // TODO: Navigate to notifications screen
             debugPrint('Notifications icon pressed');
           },
+          splashRadius: 20,
+          tooltip: 'Notifications',
         ),
-        // Example action: Search icon
+        // Search icon
         IconButton(
-          icon: const Icon(Icons.search, color: AppColors.white), // White for standard icons
+          icon: Icon(
+            Icons.search,
+            color: AppColors.textDark,
+            size: 20,
+          ),
           onPressed: () {
+            HapticFeedback.selectionClick();
             // TODO: Navigate to search screen or show search bar
             debugPrint('Search icon pressed');
           },
+          splashRadius: 20,
+          tooltip: 'Search',
         ),
+        const SizedBox(width: 8), // 8px spacing (spacing-xs)
       ],
-      // Removed bottom TabBar for simplification in this step
     );
   }
 } 

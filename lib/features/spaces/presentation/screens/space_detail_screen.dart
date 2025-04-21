@@ -20,8 +20,14 @@ import 'package:hive_ui/features/spaces/presentation/widgets/leadership_claim_st
 import 'package:hive_ui/features/spaces/presentation/widgets/space_visibility_control.dart';
 import 'package:hive_ui/features/spaces/presentation/widgets/space_archive_control.dart';
 import 'package:hive_ui/features/spaces/presentation/widgets/space_content_modules.dart';
+import 'package:hive_ui/features/spaces/presentation/widgets/spaces_loading_state.dart';
+import 'package:hive_ui/features/spaces/presentation/widgets/spaces_error_state.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:ui';
+import 'package:hive_ui/theme/glassmorphism_guide.dart';
+import 'package:hive_ui/models/event.dart';
 
-/// A screen that displays detailed information about a space
+/// A screen that displays detailed information about a space using the enhanced UX concept.
 class SpaceDetailScreen extends ConsumerStatefulWidget {
   /// The ID of the space to display
   final String spaceId;
@@ -36,29 +42,55 @@ class SpaceDetailScreen extends ConsumerStatefulWidget {
   ConsumerState<SpaceDetailScreen> createState() => _SpaceDetailScreenState();
 }
 
+// Added AutomaticKeepAliveClientMixin for preserving tab state
 class _SpaceDetailScreenState extends ConsumerState<SpaceDetailScreen>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin, AutomaticKeepAliveClientMixin {
   late TabController _tabController;
-  bool _isManager = false;
+  final ScrollController _scrollController = ScrollController();
+  bool _isHeaderCollapsed = false;
+  bool _showWelcomeCard = false; // Default to false until checked
+  bool _isManager = false; // Keep manager status
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
-    
-    // Refresh space data and check space status
+    _setupScrollListener();
+    // Refresh space data and check space/manager status on initial load
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         _refreshSpaceData();
         _checkSpaceStatus();
+        _checkFirstTimeVisit(); // Check for welcome card
       }
     });
   }
 
   @override
   void dispose() {
+    _scrollController.removeListener(_scrollListener); // Remove listener
+    _scrollController.dispose();
     _tabController.dispose();
     super.dispose();
+  }
+
+  // Keep state alive when switching tabs/pages
+  @override
+  bool get wantKeepAlive => true;
+
+  void _scrollListener() {
+    // Check if header should be considered collapsed (adjust offset as needed)
+    final isCollapsed = _scrollController.hasClients &&
+                          _scrollController.offset > (200 - kToolbarHeight); // Example threshold
+    if (isCollapsed != _isHeaderCollapsed) {
+      setState(() {
+        _isHeaderCollapsed = isCollapsed;
+      });
+    }
+  }
+
+  void _setupScrollListener() {
+    _scrollController.addListener(_scrollListener);
   }
 
   void _refreshSpaceData() {
@@ -95,6 +127,45 @@ class _SpaceDetailScreenState extends ConsumerState<SpaceDetailScreen>
       }
     } catch (e) {
       debugPrint('Error checking space status: $e');
+    }
+  }
+
+  /// Checks SharedPreferences to see if this is the user's first visit.
+  Future<void> _checkFirstTimeVisit() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      // Check if the key for this space visit exists
+      final hasVisited = prefs.containsKey('visited_space_${widget.spaceId}');
+      if (mounted) {
+        setState(() {
+          _showWelcomeCard = !hasVisited;
+        });
+      }
+    } catch (e) {
+      debugPrint("Error checking SharedPreferences for first visit: $e");
+      // Default to not showing the card if there's an error
+      if (mounted) {
+        setState(() {
+          _showWelcomeCard = false;
+        });
+      }
+    }
+  }
+
+  /// Hides the welcome card and saves the visit status in SharedPreferences.
+  Future<void> _dismissWelcomeCard() async {
+    HapticFeedback.selectionClick();
+    if (mounted) {
+      setState(() {
+        _showWelcomeCard = false;
+      });
+    }
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      // Set the flag indicating the user has visited this space
+      await prefs.setBool('visited_space_${widget.spaceId}', true);
+    } catch (e) {
+      debugPrint("Error saving visit status to SharedPreferences: $e");
     }
   }
 
@@ -178,9 +249,9 @@ class _SpaceDetailScreenState extends ConsumerState<SpaceDetailScreen>
   void _handleShareSpace(SpaceEntity space) {
     showModalBottomSheet(
       context: context,
-      backgroundColor: Colors.grey[900],
+      backgroundColor: AppColors.bottomSheetBackground,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(GlassmorphismGuide.kModalRadius)),
       ),
       builder: (context) {
         return SafeArea(
@@ -210,20 +281,19 @@ class _SpaceDetailScreenState extends ConsumerState<SpaceDetailScreen>
                   mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                   children: [
                     _buildShareOption(Icons.link, 'Copy Link', () {
-                      // Copy space link
+                      Clipboard.setData(ClipboardData(text: 'TODO: Add space link'));
                       Navigator.pop(context);
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(
                           content: Text('Link copied to clipboard'),
+                          backgroundColor: AppColors.dark2,
                         ),
                       );
                     }),
                     _buildShareOption(Icons.message, 'Message', () {
-                      // Share via message
                       Navigator.pop(context);
                     }),
                     _buildShareOption(Icons.people, 'Invite', () {
-                      // Open invite dialog
                       Navigator.pop(context);
                       _showInviteMembersDialog(space);
                     }),
@@ -248,25 +318,17 @@ class _SpaceDetailScreenState extends ConsumerState<SpaceDetailScreen>
           mainAxisSize: MainAxisSize.min,
           children: [
             Container(
-              width: 56,
-              height: 56,
+              padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: AppColors.gold.withOpacity(0.2),
+                color: AppColors.dark2,
                 shape: BoxShape.circle,
               ),
-              child: Icon(
-                icon,
-                color: AppColors.gold,
-                size: 24,
-              ),
+              child: Icon(icon, color: Colors.white, size: 24),
             ),
             const SizedBox(height: 8),
             Text(
               label,
-              style: GoogleFonts.inter(
-                color: Colors.white,
-                fontSize: 12,
-              ),
+              style: GoogleFonts.inter(color: Colors.white, fontSize: 12),
             ),
           ],
         ),
@@ -278,42 +340,21 @@ class _SpaceDetailScreenState extends ConsumerState<SpaceDetailScreen>
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: Colors.grey[900],
-        title: Text(
-          'Invite to ${space.name}',
-          style: GoogleFonts.outfit(
-            color: Colors.white,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        content: const Text(
-          'Coming soon: You\'ll be able to invite friends and contacts to join this space.',
-          style: TextStyle(color: Colors.white),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text(
-              'Close',
-              style: GoogleFonts.inter(color: AppColors.gold),
-            ),
-          ),
-        ],
+        title: Text('Invite Members (Not Implemented)'),
+        content: Text('This feature needs to be built.'),
+        actions: [TextButton(onPressed: () => Navigator.pop(context), child: Text('OK'))],
       ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    super.build(context); // Important for AutomaticKeepAliveClientMixin
+
     final spaceAsync = ref.watch(spaceProvider(widget.spaceId));
-    final eventsModel = ref.watch(spaceEventsModelProvider(widget.spaceId));
-    
-    // Get join state for the build method
-    final joinState = ref.watch(spaceJoinProvider(widget.spaceId));
-    final isJoined = joinState.isJoined;
-    
+
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: AppColors.black,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
@@ -366,73 +407,15 @@ class _SpaceDetailScreenState extends ConsumerState<SpaceDetailScreen>
             );
           }
           
-          return Column(
-            children: [
-              _buildSpaceHeader(space),
-              _buildTabBar(),
-              Expanded(
-                child: TabBarView(
-                  controller: _tabController,
-                  children: [
-                    _buildAboutTab(space),
-                    SpaceEventsTab(
-                      onEventTap: (event) {
-                        context.push('/events/${event.id}');
-                      },
-                      onCreateEvent: _isManager ? () {
-                        context.push('/spaces/${widget.spaceId}/create-event');
-                      } : null,
-                      isManager: _isManager,
-                      events: const [],
-                    ),
-                    SpaceMembersTab(
-                      spaceId: widget.spaceId,
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          );
+          return _buildSpaceContent(space);
         },
-        loading: () => const Center(
-          child: CircularProgressIndicator(
-            valueColor: AlwaysStoppedAnimation<Color>(AppColors.gold),
-          ),
-        ),
-        error: (error, stack) => Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(
-                Icons.error_outline,
-                color: Colors.red,
-                size: 48,
-              ),
-              const SizedBox(height: 16),
-              Text(
-                'Error loading space',
-                style: GoogleFonts.inter(
-                  fontSize: 16,
-                  color: Colors.white,
-                ),
-              ),
-              const SizedBox(height: 8),
-              ElevatedButton(
-                onPressed: () {
-                  ref.invalidate(spaceProvider(widget.spaceId));
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.gold,
-                  foregroundColor: Colors.black,
-                ),
-                child: Text(
-                  'Retry',
-                  style: GoogleFonts.inter(fontWeight: FontWeight.w600),
-                ),
-              ),
-            ],
-          ),
-        ),
+        loading: () => const SpacesLoadingState(),
+        error: (error, stackTrace) {
+          debugPrint('Error loading space ${widget.spaceId}: $error\n$stackTrace');
+          // Use custom error view
+          // TODO: Pass a real retry callback to SpaceErrorState
+          return SpacesErrorState(error: 'Could not load space details.');
+        },
       ),
       floatingActionButton: _buildFloatingActionButton(),
     );
@@ -462,425 +445,221 @@ class _SpaceDetailScreenState extends ConsumerState<SpaceDetailScreen>
     return null;
   }
 
-  Widget _buildSpaceHeader(SpaceEntity space) {
-    if (space == null) {
-      return const SizedBox.shrink();
-    }
-    
-    return Padding(
-      padding: const EdgeInsets.all(16.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              CircleAvatar(
-                backgroundColor: AppColors.gold.withOpacity(0.2),
-                radius: 24,
-                backgroundImage: space.imageUrl != null ? NetworkImage(space.imageUrl!) : null,
-                child: space.imageUrl == null
-                    ? Icon(
-                        space.icon,
-                        color: AppColors.gold,
-                        size: 24,
-                      )
-                    : null,
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      space.name,
-                      style: GoogleFonts.outfit(
-                        fontSize: 22,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                      ),
-                    ),
-                    Row(
-                      children: [
-                        LifecycleStateIndicator(space: space),
-                        if (space.claimStatus == SpaceClaimStatus.unclaimed)
-                          Container(
-                            margin: const EdgeInsets.only(left: 8),
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: AppColors.gold.withOpacity(0.2),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: GestureDetector(
-                              onTap: _handleClaimLeadership,
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  const Icon(
-                                    Icons.add_moderator,
-                                    size: 14,
-                                    color: AppColors.gold,
-                                  ),
-                                  const SizedBox(width: 4),
-                                  Text(
-                                    'Claim Leadership',
-                                    style: GoogleFonts.inter(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w500,
-                                      color: AppColors.gold,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          Text(
-            space.description,
-            style: GoogleFonts.inter(
-              fontSize: 14,
-              color: Colors.white.withOpacity(0.9),
-            ),
-          ),
-          const SizedBox(height: 16),
-          _buildActionButtons(space),
-        ],
-      ),
-    );
-  }
+  Widget _buildSpaceContent(SpaceEntity space) {
+    // Fetch events data for the events tab
+    final eventsModelAsync = ref.watch(spaceEventsModelProvider(widget.spaceId));
 
-  Widget _buildActionButtons(SpaceEntity space) {
-    // Use the SpaceJoinProvider to get the current join state
-    final joinState = ref.watch(spaceJoinProvider(widget.spaceId));
-    final isJoined = joinState.isJoined;
-    final isLoading = joinState.isLoading;
-    
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        Expanded(
-          child: isLoading 
-              ? ElevatedButton(
-                  onPressed: null,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.grey.withOpacity(0.3),
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                  ),
-                  child: SizedBox(
-                    height: 20,
-                    width: 20,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      valueColor: AlwaysStoppedAnimation<Color>(
-                        isJoined ? Colors.white : AppColors.gold,
-                      ),
-                    ),
-                  ),
-                )
-              : isJoined
-                  ? OutlinedButton.icon(
-                      onPressed: _handleJoinToggle,
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: Colors.white,
-                        side: const BorderSide(color: Colors.white),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                      ),
-                      icon: const Icon(Icons.check_circle, size: 18),
-                      label: Text(
-                        'Joined',
-                        style: GoogleFonts.inter(
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    )
-                  : ElevatedButton.icon(
-                      onPressed: _handleJoinToggle,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.gold,
-                        foregroundColor: Colors.black,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                      ),
-                      icon: const Icon(Icons.add, size: 18),
-                      label: Text(
-                        'Join Space',
-                        style: GoogleFonts.inter(
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-        ),
-        const SizedBox(width: 12),
-        IconButton(
-          onPressed: () {
-            // Share space functionality
-            HapticFeedback.mediumImpact();
-            _handleShareSpace(space);
-          },
-          style: IconButton.styleFrom(
-            backgroundColor: Colors.white.withOpacity(0.1),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8),
-            ),
-          ),
-          icon: const Icon(
-            Icons.share,
-            color: Colors.white,
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildTabBar() {
-    return Container(
-      height: 60,
-      decoration: BoxDecoration(
-        color: Colors.black.withOpacity(0.3),
-        border: Border(
-          bottom: BorderSide(
-            color: Colors.white.withOpacity(0.1),
-            width: 1,
-          ),
-        ),
-      ),
-      child: TabBar(
+    // Main layout using NestedScrollView
+    return NestedScrollView(
+      controller: _scrollController,
+      headerSliverBuilder: (BuildContext context, bool innerBoxIsScrolled) {
+        // Return list of slivers placed in the header
+        return <Widget>[
+          _buildSliverAppBar(space),
+          _buildSliverTabBar(),
+        ];
+      },
+      body: TabBarView(
         controller: _tabController,
-        indicatorColor: AppColors.gold,
-        labelColor: AppColors.gold,
-        unselectedLabelColor: Colors.white.withOpacity(0.7),
-        labelStyle: GoogleFonts.outfit(
-          fontWeight: FontWeight.w600,
-        ),
-        tabs: const [
-          Tab(text: 'About'),
-          Tab(text: 'Events'),
-          Tab(text: 'Members'),
+        children: <Widget>[
+          _buildBoardTab(space),
+          // Provide required parameters to SpaceEventsTab
+          eventsModelAsync.when(
+             // Use the list directly, assuming provider returns List<Event>
+             data: (eventList) => SpaceEventsTab(
+                events: eventList, // Pass the fetched event list
+                onEventTap: (event) {
+                  // Navigate to event detail screen
+                  context.push('/events/${event.id}');
+                },
+                isManager: _isManager, // Pass manager status
+                onCreateEvent: _isManager
+                    ? () {
+                        // Navigate to create event screen
+                        context.push('/spaces/${widget.spaceId}/create-event');
+                      }
+                    : null, // Only allow creation if manager
+                 // TODO: Pass RSVP statuses if available from a provider
+                 // rsvpStatuses: ref.watch(rsvpStatusesProvider(widget.spaceId)),
+             ),
+             loading: () => const Center(child: CircularProgressIndicator(color: AppColors.gold)),
+             error: (error, _) => Center(child: Text('Error loading events', style: TextStyle(color: AppColors.textDarkSecondary))),
+          ),
+          SpaceMembersTab(spaceId: widget.spaceId),
         ],
       ),
     );
   }
 
-  Widget _buildAboutTab(SpaceEntity? space) {
-    if (space == null) return const SizedBox.shrink();
-    
-    // Get the current user
-    final currentUser = ref.watch(currentUserProvider);
-    
-    // Get join state from provider
-    final joinState = ref.watch(spaceJoinProvider(widget.spaceId));
-    final isJoined = joinState.isJoined;
-    final isLoading = joinState.isLoading;
-    
-    // Check if the user is an admin or creator of this space
-    final isAdmin = space.admins.contains(currentUser?.id);
-    final isModerator = space.moderators.contains(currentUser?.id);
-    final canModify = isAdmin || isModerator;
-    
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        // Description section
-        Text(
-          'About',
-          style: GoogleFonts.outfit(
-            fontSize: 20,
-            fontWeight: FontWeight.w600,
-            color: Colors.white,
-          ),
-        ),
-        const SizedBox(height: 8),
-        Text(
-          space.description,
-          style: GoogleFonts.inter(
-            fontSize: 16,
-            height: 1.5,
-          ),
-        ),
-        const SizedBox(height: 24),
-        
-        // Space Type and Status Section
-        Row(
+  Widget _buildSliverAppBar(SpaceEntity space) {
+    // TODO: Implement SliverAppBar based on Concept 1 or 2
+    // Needs banner, avatar, name, type, member count, join/share buttons
+    // Should react to _isHeaderCollapsed state
+    return SliverAppBar(
+      expandedHeight: 200.0, // Adjust as needed
+      floating: false,
+      pinned: true,
+      snap: false,
+      backgroundColor: _isHeaderCollapsed ? AppColors.black : Colors.transparent,
+      elevation: _isHeaderCollapsed ? 4.0 : 0.0,
+      flexibleSpace: FlexibleSpaceBar(
+        centerTitle: false, // Align title to start when collapsed
+        titlePadding: const EdgeInsetsDirectional.only(start: 16.0, bottom: 16.0),
+        title: _isHeaderCollapsed
+            ? Text(
+                space.name,
+                style: GoogleFonts.outfit(
+                  color: Colors.white,
+                  fontSize: 20,
+                  fontWeight: FontWeight.w600,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              )
+            : null, // Title only shown when collapsed
+        background: Stack(
+          fit: StackFit.expand,
           children: [
-            // Space Type Indicator
-            SpaceTypeIndicator(
-              space: space,
-              showDetails: true,
-            ),
-            const SizedBox(width: 8),
-            // Lifecycle State Indicator
-            LifecycleStateIndicator(
-              space: space,
-              showDetails: true,
-            ),
+            // TODO: Add Banner Image if available (space.bannerUrl)
+            Container(color: AppColors.dark2), // Placeholder background
+            // TODO: Add Gradient Overlay
+            // TODO: Add Header Content (Avatar, Name, etc.) visible when expanded
           ],
         ),
-        const SizedBox(height: 16),
-        
-        // Leadership Claim Status if applicable
-        if (space.requiresLeadershipClaim)
-          LeadershipClaimStatusWidget(
-            space: space,
-            showClaimButton: !isLoading && !_isManager,
-            onClaimPressed: _handleClaimLeadership,
-          ),
-        const SizedBox(height: 16),
-        
-        // Space Visibility Controls (only for admins/moderators)
-        if (canModify)
-          SpaceVisibilityControl(
-            space: space,
-            canModify: canModify,
-            onVisibilityChanged: (isPrivate) {
-              // Refresh space data after visibility change
-              _refreshSpaceData();
-            },
-          ),
-        if (canModify)
-          const SizedBox(height: 16),
-        
-        // Archive Controls
-        SpaceArchiveControl(
-          space: space,
-          canArchive: canModify,
-          onLifecycleChanged: (newState) {
-            // Refresh space data after lifecycle state change
-            _refreshSpaceData();
-          },
+      ),
+      // TODO: Add actions (Share, More/Admin)
+      actions: [
+        IconButton(
+          icon: const Icon(Icons.share_outlined, color: Colors.white),
+          tooltip: 'Share Space',
+          onPressed: () => _handleShareSpace(space),
         ),
-        const SizedBox(height: 24),
-        
-        // Tags section
-        if (space.tags.isNotEmpty) ...[
-          Text(
-            'Tags',
-            style: GoogleFonts.outfit(
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-            ),
+        // TODO: Add Admin Menu Button if _isManager is true
+        if (_isManager)
+          IconButton(
+            icon: const Icon(Icons.settings_outlined, color: Colors.white),
+            tooltip: 'Space Settings',
+            onPressed: () { /* TODO: Navigate to settings */ },
           ),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: space.tags.map((tag) {
-              return Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(0.3),
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(
-                    color: Colors.white.withOpacity(0.1),
-                    width: 0.5,
-                  ),
-                ),
-                child: Text(
-                  '#$tag',
-                  style: GoogleFonts.inter(
-                    fontSize: 14,
-                    color: Colors.white.withOpacity(0.8),
-                  ),
-                ),
-              );
-            }).toList(),
-          ),
-          const SizedBox(height: 24),
-        ],
-        
-        // Space Content Modules
-        SpaceContentModules(
-          space: space,
-          isManager: _isManager,
-          isJoined: isJoined,
-        ),
-        
-        const SizedBox(height: 24),
-        
-        // Space metadata
-        Text(
-          'Details',
-          style: GoogleFonts.outfit(
-            fontSize: 16,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        const SizedBox(height: 8),
-        _buildMetadataItem(
-          Icons.people, 
-          '${space.metrics.memberCount} members',
-        ),
-        _buildMetadataItem(
-          Icons.event, 
-          '${space.eventIds.length} events',
-        ),
-        _buildMetadataItem(
-          Icons.calendar_today, 
-          'Created ${_formatDate(space.createdAt)}',
-        ),
-        if (space.lastActivityAt != null)
-          _buildMetadataItem(
-            Icons.access_time, 
-            'Last activity ${_formatDate(space.lastActivityAt!)}',
-          ),
+        const SizedBox(width: 8),
       ],
     );
   }
 
-  Widget _buildMetadataItem(IconData icon, String text) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Row(
-        children: [
-          Icon(
-            icon,
-            size: 16,
-            color: Colors.white.withOpacity(0.7),
-          ),
-          const SizedBox(width: 8),
-          Text(
-            text,
-            style: GoogleFonts.inter(
-              fontSize: 14,
-              color: Colors.white.withOpacity(0.7),
-            ),
-          ),
-        ],
+  Widget _buildSliverTabBar() {
+    // Use SliverPersistentHeader for the sticky tab bar
+    return SliverPersistentHeader(
+      delegate: _SliverTabBarDelegate(
+        TabBar(
+          controller: _tabController,
+          indicatorColor: AppColors.gold,
+          labelColor: Colors.white,
+          unselectedLabelColor: AppColors.textDarkSecondary,
+          indicatorWeight: 2.0,
+          labelStyle: GoogleFonts.inter(fontWeight: FontWeight.w600, fontSize: 14),
+          unselectedLabelStyle: GoogleFonts.inter(fontWeight: FontWeight.w500, fontSize: 14),
+          tabs: const [
+            Tab(text: 'Board'),
+            Tab(text: 'Events'),
+            Tab(text: 'Members'),
+          ],
+        ),
       ),
+      pinned: true, // Make it stick
     );
   }
 
-  String _formatDate(DateTime date) {
-    final now = DateTime.now();
-    final difference = now.difference(date);
-    
-    if (difference.inDays > 365) {
-      return '${(difference.inDays / 365).floor()} ${(difference.inDays / 365).floor() == 1 ? 'year' : 'years'} ago';
-    } else if (difference.inDays > 30) {
-      return '${(difference.inDays / 30).floor()} ${(difference.inDays / 30).floor() == 1 ? 'month' : 'months'} ago';
-    } else if (difference.inDays > 0) {
-      return '${difference.inDays} ${difference.inDays == 1 ? 'day' : 'days'} ago';
-    } else if (difference.inHours > 0) {
-      return '${difference.inHours} ${difference.inHours == 1 ? 'hour' : 'hours'} ago';
-    } else if (difference.inMinutes > 0) {
-      return '${difference.inMinutes} ${difference.inMinutes == 1 ? 'minute' : 'minutes'} ago';
-    } else {
-      return 'Just now';
-    }
+  Widget _buildBoardTab(SpaceEntity space) {
+    // Use ListView or Column for scrollable content
+    return ListView(
+      padding: const EdgeInsets.all(16.0), // Add padding around tab content
+      children: [
+        // Conditionally display the welcome card
+        if (_showWelcomeCard) _buildWelcomeCard(space),
+        // Add existing SpaceMessageBoard or other content here
+        SpaceMessageBoard(spaceId: widget.spaceId),
+        // Add more widgets as needed for the board...
+      ],
+    );
+  }
+
+  Widget _buildWelcomeCard(SpaceEntity space) {
+    return AnimatedOpacity(
+      opacity: _showWelcomeCard ? 1.0 : 0.0,
+      duration: const Duration(milliseconds: 300),
+      child: Card(
+        margin: const EdgeInsets.only(bottom: 16.0),
+        color: Colors.transparent, // Make card transparent for backdrop filter
+        elevation: 0, // Use decoration for border/background
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(GlassmorphismGuide.kRadiusMd),
+        ),
+        clipBehavior: Clip.antiAlias, // Important for BackdropFilter
+        child: BackdropFilter(
+          filter: ImageFilter.blur(
+              sigmaX: GlassmorphismGuide.kCardBlur,
+              sigmaY: GlassmorphismGuide.kCardBlur),
+          child: Container(
+            padding: const EdgeInsets.all(16.0),
+            decoration: BoxDecoration(
+              color: AppColors.cardBackground.withOpacity(0.6), // Use HIVE card color
+              borderRadius: BorderRadius.circular(GlassmorphismGuide.kRadiusMd),
+              border: Border.all(
+                color: AppColors.cardBorder, // Use HIVE border color
+                width: GlassmorphismGuide.kBorderThin,
+              ),
+              gradient: LinearGradient( // Subtle gradient consistent with glass style
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  Colors.white.withOpacity(0.05),
+                  Colors.white.withOpacity(0.02),
+                ],
+                stops: const [0.1, 1.0],
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.info_outline, color: AppColors.gold, size: 20),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Welcome to ${space.name}',
+                        style: GoogleFonts.outfit(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.white),
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close, size: 20, color: AppColors.textDarkSecondary),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                      tooltip: 'Dismiss',
+                      onPressed: _dismissWelcomeCard,
+                    )
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  space.description.isNotEmpty
+                      ? space.description
+                      : 'Explore what this space has to offer.', // Fallback description
+                  style: GoogleFonts.inter(
+                      color: AppColors.textDarkSecondary, fontSize: 14, height: 1.5),
+                  maxLines: 3,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                // TODO: Add suggested action buttons (Join, Explore Events etc.)?
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   void _showContentCreationMenu() {
@@ -1041,5 +820,32 @@ class _SpaceDetailScreenState extends ConsumerState<SpaceDetailScreen>
         );
       },
     );
+  }
+}
+
+// Helper delegate class for the sticky TabBar using SliverPersistentHeader
+class _SliverTabBarDelegate extends SliverPersistentHeaderDelegate {
+  _SliverTabBarDelegate(this.tabBar);
+
+  final TabBar tabBar;
+
+  @override
+  double get minExtent => tabBar.preferredSize.height;
+  @override
+  double get maxExtent => tabBar.preferredSize.height;
+
+  @override
+  Widget build(
+      BuildContext context, double shrinkOffset, bool overlapsContent) {
+    // Use a background color that matches the HIVE aesthetic for the sticky bar
+    return Container(
+      color: AppColors.black, // Pure black for the tab bar container
+      child: tabBar,
+    );
+  }
+
+  @override
+  bool shouldRebuild(_SliverTabBarDelegate oldDelegate) {
+    return tabBar != oldDelegate.tabBar;
   }
 } 

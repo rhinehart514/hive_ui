@@ -9,6 +9,8 @@ import '../providers/club_providers.dart';
 import '../providers/event_providers.dart';
 import '../theme/app_colors.dart';
 import '../theme/glassmorphism_guide.dart';
+import 'package:hive_ui/features/spaces/domain/mappers/space_entity_mapper.dart';
+import 'package:hive_ui/features/spaces/presentation/pages/space_detail_page.dart';
 
 /// ClubsPage - Redesigned screen displaying all organizations
 class ClubsPage extends ConsumerStatefulWidget {
@@ -150,12 +152,21 @@ class _ClubsPageState extends ConsumerState<ClubsPage>
 
   // Navigate to club space
   void _navigateToClubSpace(Club club) {
+    if (club.id == null) {
+      debugPrint('Error: Club ID is null, cannot navigate to space.');
+      // Optionally show an error message to the user
+      return;
+    }
     debugPrint('Navigating to club space: ${club.name}');
     HapticFeedback.mediumImpact();
+    // Create a Space object from the Club object
+    final space = SpaceEntityMapper.fromClub(club);
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => SpaceDetailScreen(club: club),
+        builder: (context) => SpaceDetailScreen(
+          spaceId: club.id!,
+        ),
       ),
     );
   }

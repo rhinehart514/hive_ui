@@ -3,10 +3,10 @@ import 'package:flutter/services.dart'; // Add this import for HapticFeedback
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:auto_route/auto_route.dart';
-import 'package:hive_ui/features/spaces/presentation/providers/space_providers.dart' as space_providers;
+import 'package:hive_ui/features/spaces/presentation/providers/space_providers.dart' as presentation_space_providers;
 import 'package:hive_ui/features/spaces/presentation/providers/spaces_controller.dart';
 import 'package:hive_ui/features/spaces/presentation/providers/user_spaces_providers.dart' as user_providers;
-import 'package:hive_ui/features/spaces/presentation/providers/spaces_async_providers.dart';
+import 'package:hive_ui/features/spaces/application/providers.dart' as application_providers;
 import 'package:hive_ui/features/spaces/domain/entities/space_entity.dart' as entities;
 import 'package:hive_ui/models/space.dart';
 import 'package:hive_ui/models/space_type.dart' as model_space_type;
@@ -19,6 +19,7 @@ import 'package:go_router/go_router.dart';
 import 'package:hive_ui/providers/user_providers.dart';
 import 'dart:math';
 import 'dart:ui';
+import 'dart:async'; // Add this import for TimeoutException
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:hive_ui/core/navigation/routes.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -35,6 +36,26 @@ import 'package:hive_ui/features/profile/presentation/providers/profile_provider
 import 'package:hive_ui/features/spaces/presentation/widgets/discover_spaces_content.dart';
 import 'package:hive_ui/features/spaces/presentation/widgets/my_spaces_content.dart';
 import 'package:hive_ui/features/spaces/domain/entities/space_entity.dart';
+// Import Phosphor Icons
+import 'package:phosphor_flutter/phosphor_flutter.dart';
+// Import intl for date formatting if needed for "Just Created" logic refinement
+import 'package:intl/intl.dart';
+
+// --- NEW: Custom Scroll Behavior for Desktop Dragging ---
+class MyCustomScrollBehavior extends MaterialScrollBehavior {
+  // Override behavior methods and getters like dragDevices
+  @override
+  Set<PointerDeviceKind> get dragDevices => {
+        PointerDeviceKind.touch,
+        PointerDeviceKind.mouse,
+        // Add other device kinds as needed
+      };
+}
+// --- END NEW ---
+
+// Define constants for MySpaceCircleItem sizing outside the state class
+const double _mySpaceCircleRadius = 36.0;
+const double _mySpaceHorizontalPadding = 8.0;
 
 // Extension to convert SpaceEntity to Space
 extension SpaceEntityExt on entities.SpaceEntity {
@@ -88,3361 +109,369 @@ extension SpaceEntityExt on entities.SpaceEntity {
   }
 }
 
-// Custom FloatingActionButtonLocation that positions the FAB higher than the standard location
-class _CustomFloatingActionButtonLocation extends FloatingActionButtonLocation {
-  // Create a singleton instance
-  static final _CustomFloatingActionButtonLocation endFloat = _CustomFloatingActionButtonLocation();
-
-  @override
-  Offset getOffset(ScaffoldPrelayoutGeometry scaffoldGeometry) {
-    // Get the standard end float position
-    final standardOffset = FloatingActionButtonLocation.endFloat.getOffset(scaffoldGeometry);
-    
-    // Return a new offset with the same horizontal position but higher by 80dp to avoid navigation bar
-    // This provides better positioning that doesn't interfere with the bottom navigation bar
-    return Offset(standardOffset.dx, standardOffset.dy - 80);
-  }
-}
-
 @RoutePage()
 class SpacesPage extends ConsumerStatefulWidget {
   const SpacesPage({super.key});
+
+  // --- NEW: Create a static key for My Spaces that can be accessed from anywhere ---
+  static final GlobalKey mySpacesListKey = GlobalKey();
+  // --- END NEW ---
 
   @override
   ConsumerState<SpacesPage> createState() => _SpacesPageState();
 }
 
-class _SpacesPageState extends ConsumerState<SpacesPage> with SingleTickerProviderStateMixin {
-  final TextEditingController _searchController = TextEditingController();
-  final FocusNode _searchFocusNode = FocusNode();
-  final Set<String> _activeFilters = <String>{};
-  bool _isSearchExpanded = false;
-  bool _isSearching = false;
-  bool _isJoiningSpace = false;
-  int? _lastMySpacesRefreshTime;
-  String _activeCategory = 'All';
-  final bool _isRefreshing = false;
-  bool _isLoadingMore = false;
-  int _currentPage = 1;
-  final int _spacesPerPage = 20;
-  
-  // Define space categories - condensed to most important for students
-  final List<String> _categories = [
-    'All',
-    'Student Orgs',
-    'Greek Life',
-    'Campus Living',
-    'University',
-    'Hive Exclusive',
-    'Academics',  // New locked category
-    'Circles',    // New locked category
-  ];
-  
-  // Scroll controllers
-  final ScrollController _mainScrollController = ScrollController();
-  final ScrollController _categoriesScrollController = ScrollController();
+class _SpacesPageState extends ConsumerState<SpacesPage> with TickerProviderStateMixin {
+  // Animation Controller for pulsing the create button
+  late AnimationController _pulseController;
+  // Make the animation nullable to avoid LateInitializationError
+  Animation<double>? _pulseAnimation;
+
+  // --- Controller and Key for My Spaces List ---
   final ScrollController _mySpacesScrollController = ScrollController();
+  // Use the static key from SpacesPage
+  GlobalKey get _mySpacesListKey => SpacesPage.mySpacesListKey;
+  // --- END ---
 
-  // Tab controller for explore/my spaces
-  TabController? _tabController;
-
-  // New method to build the custom spaces app bar
-  PreferredSizeWidget _buildSpacesAppBar(BuildContext context) {
-    return PreferredSize(
-      preferredSize: Size.fromHeight(_isSearchExpanded ? 180 : 140), // Adjust height based on search state
-      child: ClipRRect(
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-          child: Container(
-            decoration: BoxDecoration(
-              color: AppColors.black.withOpacity(0.7),
-              border: const Border(
-                bottom: BorderSide(
-                  color: Colors.white10,
-                  width: 0.5,
-                ),
-              ),
-            ),
-            child: SafeArea(
-              child: Column(
-                children: [
-                  // Top section with title and actions
-                  SizedBox(
-                    height: 60,
-                    child: Row(
-                      children: [
-                        const SizedBox(width: 16),
-                        Text(
-                          'Spaces',
-                          style: GoogleFonts.outfit(
-                            color: AppColors.white,
-                            fontSize: 24,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: -0.5,
-                          ),
-                        ),
-                        const Spacer(),
-                        // Search icon
-                        _isSearchExpanded
-                            ? const SizedBox.shrink() // Don't show search button when expanded
-                            : IconButton(
-                                icon: const Icon(Icons.search, color: AppColors.white),
-                                onPressed: () {
-                                  HapticFeedback.selectionClick();
-                                  setState(() {
-                                    _toggleSearchExpanded(true);
-                                  });
-                                  Future.delayed(const Duration(milliseconds: 100), () {
-                                    _searchFocusNode.requestFocus();
-                              });
-                            },
-                          ),
-                        if (!_isSearchExpanded) ...[
-                          // Messaging button with custom icon
-                          GestureDetector(
-                            onTap: () {
-                              HapticFeedback.mediumImpact();
-                              // Use NavigationService for consistent navigation
-                              NavigationService.goToMessaging(context);
-                            },
-                            child: Container(
-                              width: 44,
-                              height: 44,
-                              margin: const EdgeInsets.only(right: 16),
-                              decoration: BoxDecoration(
-                                color: Colors.transparent,
-                                borderRadius: BorderRadius.circular(22),
-                              ),
-                              child: const Icon(
-                                HugeIcons.message,
-                                color: Colors.white,
-                                size: 28,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-
-                  // Search bar when expanded
-                  SpacesSearchBar(
-                    onSearch: (query) {
-                      setState(() {
-                        _toggleSearchExpanded(true);
-                        _searchController.text = query;
-                      });
-                      // Trigger search
-                      ref.read(spaceSearchProvider.notifier).search(query);
-                    },
-                    onClear: () {
-                      setState(() {
-                        _toggleSearchExpanded(false);
-                        _searchController.clear();
-                      });
-                      // Clear search results
-                      ref.read(spaceSearchProvider.notifier).clear();
-                    },
-                  ),
-
-                  // Tab bar
-                  Container(
-                    height: 48,
-                    decoration: const BoxDecoration(
-                      border: Border(
-                        bottom: BorderSide(
-                          color: Colors.white10,
-                          width: 0.5,
-                        ),
-                      ),
-                    ),
-                    child: TabBar(
-                      controller: _tabController,
-                      labelColor: AppColors.gold,
-                      unselectedLabelColor: AppColors.textTertiary,
-                      indicatorColor: AppColors.gold,
-                      indicatorWeight: 3,
-                      indicatorSize: TabBarIndicatorSize.label,
-                      labelStyle: GoogleFonts.outfit(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                      ),
-                      unselectedLabelStyle: GoogleFonts.outfit(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w500,
-                      ),
-                      tabs: const [
-                        Tab(text: 'Explore'),
-                        Tab(text: 'My Spaces'),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
+  // --- NEW: Track joined spaces for auto-scroll ---
+  List<String> _previousSpaceIds = [];
+  // --- END NEW ---
 
   @override
   void initState() {
     super.initState();
     
-    // Initialize search state in provider
-    Future.microtask(() {
-      ref.read(spaceSearchActiveProvider.notifier).state = _isSearchExpanded;
-    });
-    
-    // Refresh user data to ensure spaces are loaded
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref.read(userProvider.notifier).refreshUserData();
-      
-      // Force refresh of user spaces data
-      ref.invalidate(user_providers.userSpacesProvider);
-      
-      // Debug spaces loading
-      final userData = ref.read(userProvider);
-      if (userData != null) {
-        debugPrint('SpacesPage: User has ${userData.joinedClubs.length} joined spaces: ${userData.joinedClubs}');
-      } else {
-        debugPrint('SpacesPage: No user data available');
-      }
-    });
-    
-    // Set up tab controller
-    _tabController = TabController(
-      length: 2,
+    // Initialize pulse animation controller
+    _pulseController = AnimationController(
       vsync: this,
+      duration: const Duration(milliseconds: 1200),
+    )..repeat(reverse: true);
+
+    // Initialize the animation
+    _pulseAnimation = Tween<double>(begin: 1.0, end: 1.1).animate(
+      CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
     );
-    
-    // Add listener to handle tab changes
-    _tabController!.addListener(_handleTabChange);
 
-    // Setup scroll controllers for pagination
-    _mainScrollController.addListener(_scrollListener);
-    _mySpacesScrollController.addListener(_mySpacesScrollListener);
-
-    // Load user data directly from Firebase
-    _loadUserDataFromFirebase();
-
-    // Log screen view
-    AnalyticsService.logScreenView('spaces_page');
+    // Initialize previous space IDs list
+    _previousSpaceIds = [];
   }
   
-  // Handle tab changes - close search if expanded
-  void _handleTabChange() {
-    if (_tabController?.indexIsChanging ?? false) {
-      // Close search when switching tabs
-      if (_isSearchExpanded) {
-        _toggleSearchExpanded(false);
-        _searchController.clear();
-        
-        // Move provider state update to microtask
-        Future.microtask(() {
-          ref.read(spaceSearchQueryProvider.notifier).state = '';
-        });
-      }
-    }
-  }
-
-  // New method to load user data directly from Firebase
-  Future<void> _loadUserDataFromFirebase() async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) {
-      debugPrint('⚠️ Cannot load user data: No authenticated user');
-      return;
-    }
-
-    try {
-      debugPrint('🔄 Loading user data directly from Firebase for user ${user.uid}');
-      
-      // Get the user document from Firestore
-      final userDoc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(user.uid)
-          .get();
-      
-      if (!userDoc.exists) {
-        debugPrint('⚠️ User document does not exist in Firestore');
-        return;
-      }
-      
-      final data = userDoc.data();
-      if (data == null) {
-        debugPrint('⚠️ User document exists but has no data');
-        return;
-      }
-      
-      // Extract joined clubs and followed spaces
-      List<String> joinedClubs = [];
-      List<String> followedSpaces = [];
-      
-      if (data['joinedClubs'] is List) {
-        joinedClubs = List<String>.from(data['joinedClubs']);
-        debugPrint('📊 Found ${joinedClubs.length} joinedClubs in user document: $joinedClubs');
-      }
-      
-      if (data['followedSpaces'] is List) {
-        followedSpaces = List<String>.from(data['followedSpaces']);
-        debugPrint('📊 Found ${followedSpaces.length} followedSpaces in user document: $followedSpaces');
-      }
-      
-      // Combine both lists for maximum compatibility
-      final allSpaceIds = {...joinedClubs, ...followedSpaces}.toList();
-      
-      if (allSpaceIds.isEmpty) {
-        debugPrint('⚠️ User has no joined spaces in either joinedClubs or followedSpaces');
-        return;
-      }
-      
-      // Update the userProvider
-      final currentUserData = ref.read(userProvider);
-      if (currentUserData != null) {
-        // Create updated user data with the joined clubs
-        UserData updatedUserData = UserData(
-          id: user.uid,
-          name: user.displayName,
-          email: user.email,
-          joinedClubs: allSpaceIds,
-          attendedEvents: currentUserData.attendedEvents,
-          interests: currentUserData.interests,
-        );
-        
-        // Update the provider - Use updateUserData instead of refreshUserData
-        ref.read(userProvider.notifier).updateUserData(updatedUserData);
-        debugPrint('✅ Updated userProvider with ${updatedUserData.joinedClubs.length} joined clubs');
-        
-        // Refresh spaces providers
-        ref.invalidate(user_providers.userSpacesProvider);
-        
-        // Also sync from Firebase to local
-        final syncUserSpaces = ref.read(user_providers.syncUserSpacesProvider);
-        syncUserSpaces();
-      }
-    } catch (e) {
-      debugPrint('❌ Error loading user data from Firebase: $e');
-    }
-  }
-
-  void _scrollListener() {
-    if (!_isLoadingMore &&
-        _mainScrollController.position.pixels >=
-            _mainScrollController.position.maxScrollExtent * 0.8) {
-      _loadMoreSpaces();
-    }
-  }
-
-  // Scroll listener for My Spaces tab
-  void _mySpacesScrollListener() {
-    if (!_isLoadingMore &&
-        _mySpacesScrollController.position.pixels >=
-            _mySpacesScrollController.position.maxScrollExtent * 0.8) {
-      // If needed, implement pagination for mySpaces tab
-      // For now, we'll just log that scrolling is working
-      debugPrint('Scrolled to bottom of My Spaces tab');
-    }
-  }
-
-  Future<void> _loadMoreSpaces() async {
-    if (_isLoadingMore) return;
-
-    setState(() {
-      _isLoadingMore = true;
-    });
-
-    try {
-      // Load next page of spaces
-      _currentPage++;
-      await ref
-          .read(spacesControllerProvider.notifier)
-          .loadMoreSpaces(_currentPage, _spacesPerPage);
-
-      // Small delay to prevent rapid multiple loads if the user is scrolling fast
-      await Future.delayed(const Duration(milliseconds: 300));
-    } catch (e) {
-      debugPrint('Error loading more spaces: $e');
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isLoadingMore = false;
-        });
-      }
+  // Helper method to scroll to a specific space in the list
+  void _scrollToNewSpace(String spaceId, List<entities.SpaceEntity> spaces) {
+    // Find the index of the new space in the list
+    // +1 because first item is "Create Space"
+    final int indexOfSpace = spaces.indexWhere((space) => space.id == spaceId);
+    if (indexOfSpace == -1) return; // Space not found
+    
+    final int targetIndex = indexOfSpace + 1; // +1 for "Create Space" at index 0
+    
+    // Calculate approximate position (each item is roughly 2*_mySpaceCircleRadius + padding)
+    final double itemWidth = (_mySpaceCircleRadius * 2) + (_mySpaceHorizontalPadding * 2);
+    final double targetPosition = targetIndex * itemWidth;
+    
+    // Animate to position
+    if (_mySpacesScrollController.hasClients) {
+      print('Scrolling My Spaces list to show newly joined space at index $targetIndex');
+      _mySpacesScrollController.animateTo(
+        targetPosition, 
+        duration: const Duration(milliseconds: 500),
+        curve: Curves.easeInOut,
+      );
     }
   }
 
   @override
   void dispose() {
-    _searchController.dispose();
-    _searchFocusNode.dispose();
-    _mainScrollController.dispose();
-    _categoriesScrollController.dispose();
-    _mySpacesScrollController.dispose();
-    // Safely dispose tab controller
-    if (_tabController != null) {
-      _tabController!.dispose();
-    }
+    _pulseController.dispose(); // Dispose pulse controller
+    _mySpacesScrollController.dispose(); // Dispose scroll controller
     super.dispose();
   }
 
-  // Handle pull-to-refresh gesture
-  Future<void> _refreshSpaces() async {
-    try {
-      debugPrint('Refreshing spaces data');
-      
-      // First call our new sync provider to ensure consistency between Firebase and local data
-      final syncUserSpaces = ref.read(user_providers.syncUserSpacesProvider);
-      await syncUserSpaces();
-      debugPrint('User spaces data synchronized');
-      
-      // Refresh user data through the StateNotifier method
-      await ref.read(userProvider.notifier).refreshUserData();
-      debugPrint('User data refreshed');
-      
-      // Then refresh the spaces providers
-      await ref.refresh(user_providers.userSpacesProvider.future);
-      await ref.refresh(space_providers.hierarchicalSpacesProvider.future);
-      await ref.refresh(trendingSpacesProvider.future);
-      
-      // For debugging: check what spaces we have after refresh
-      final userData = ref.read(userProvider);
-      debugPrint('After refresh: User has ${userData?.joinedClubs.length ?? 0} joined clubs: ${userData?.joinedClubs}');
-      
-      // Try to wait for the user spaces to be loaded and print what we got
-      Future.delayed(const Duration(seconds: 1), () {
-        final spacesAsync = ref.read(user_providers.userSpacesProvider);
-        if (spacesAsync is AsyncData<List<entities.SpaceEntity>>) {
-          final spaces = spacesAsync.value;
-          debugPrint('UserSpacesProvider loaded ${spaces.length} spaces after refresh: ${spaces.map((s) => s.id).toList()}');
-        }
-      });
-      
-      setState(() {
-        // Reset tab controller to ensure proper refresh
-        if (_tabController != null && _tabController!.index == 1) {
-          // When on My Spaces tab, store the current timestamp
-          _lastMySpacesRefreshTime = DateTime.now().millisecondsSinceEpoch;
-        }
-      });
-    } catch (e) {
-      debugPrint('Error refreshing spaces: $e');
-    }
-  }
-
-  // Handle space joining - REFACORTED to use Controller
-  Future<void> _handleJoinSpace(Space space) async {
-    if (_isJoiningSpace) return; // Prevent multiple simultaneous joins
-
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('You need to sign in to join spaces'),
-            duration: Duration(seconds: 2),
-          ),
-        );
-      }
-      return;
-    }
-
-    setState(() {
-      _isJoiningSpace = true;
-    });
-
-    try {
-      // Delegate joining logic to the controller
-      await ref.read(spacesControllerProvider.notifier).joinSpace(space);
-
-      // OPTIONAL: Optimistic UI update (already happens in previous code, keep it)
-      final userData = ref.read(userProvider);
-      if (userData != null) {
-          ref.read(userProvider.notifier).state = userData.joinClub(space.id);
-          debugPrint('UI: Updated local user provider state for join');
-      }
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('You\'ve joined ${space.name}'),
-            duration: const Duration(seconds: 2),
-          ),
-        );
-      }
-       // Let the controller handle provider invalidation/refresh if possible.
-       // If not, uncomment the line below:
-       // ref.invalidate(userSpacesProvider); 
-
-    } catch (e) {
-      debugPrint('Error joining space via controller: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to join ${space.name}: ${e.toString()}'),
-            backgroundColor: Colors.red,
-            duration: const Duration(seconds: 3),
-          ),
-        );
-      }
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isJoiningSpace = false;
-        });
-      }
-    }
-  }
-
-  // Show dialog to join or create a space
-  void _showJoinSpaceDialog(BuildContext context) {
-    HapticFeedback.mediumImpact();
-
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          backgroundColor: Colors.grey[900],
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-          title: Text(
-            'Join or Create a Space',
-            style: GoogleFonts.outfit(
-              color: Colors.white,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                'Would you like to join an existing space or create a new one?',
-                style: GoogleFonts.inter(
-                  color: Colors.white70,
-                  fontSize: 14,
-                ),
-              ),
-              const SizedBox(height: 24),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed: () {
-                        Navigator.of(context).pop();
-                        // Navigate to join space view
-                      },
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: AppColors.gold,
-                        side: const BorderSide(color: AppColors.gold),
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                      ),
-                      child: Text(
-                        'Join',
-                        style: GoogleFonts.outfit(fontWeight: FontWeight.w500),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: ElevatedButton(
-                      onPressed: () {
-                        Navigator.of(context).pop();
-                        // Navigate to create space page
-                        GoRouter.of(context).push(AppRoutes.getCreateSpacePath());
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.gold,
-                        foregroundColor: Colors.black,
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                      ),
-                      child: Text(
-                        'Create',
-                        style: GoogleFonts.outfit(fontWeight: FontWeight.w600),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  // Note: The old space creation dialog has been completely replaced with a dedicated page
-  // approach that provides a better user experience with more validation and features.
-
-  // Helper to build dropdown items with icons for space types
-  DropdownMenuItem<model_space_type.SpaceType> _buildSpaceTypeDropdownItem(
-      model_space_type.SpaceType type, String text, IconData icon) {
-    return DropdownMenuItem<model_space_type.SpaceType>(
-      value: type,
-      child: Row(
-        children: [
-          Icon(
-            icon,
-            color: AppColors.gold.withOpacity(0.7),
-            size: 18,
-          ),
-          const SizedBox(width: 12),
-          Text(
-            text,
-            style: GoogleFonts.inter(color: Colors.white),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // Create a new space - removed in favor of the dedicated create space page
-
-  // Handle space tapping
-  void _handleTapSpace(Space space) {
-    final navigator = ref.read(spaceNavigationProvider);
-    navigator.navigateToSpace(
-      context,
-      spaceId: space.id,
-      spaceType: _getSpaceTypeString(space.spaceType),
-      space: space,
-    );
-  }
-
-  String _getSpaceTypeString(model_space_type.SpaceType type) {
-    switch (type) {
-      case model_space_type.SpaceType.studentOrg:
-        return 'student_organizations';
-      case model_space_type.SpaceType.universityOrg:
-        return 'university_organizations';
-      case model_space_type.SpaceType.campusLiving:
-        return 'campus_living';
-      case model_space_type.SpaceType.fraternityAndSorority:
-        return 'fraternity_and_sorority';
-      case model_space_type.SpaceType.hiveExclusive:
-        return 'hive_exclusive';
-      case model_space_type.SpaceType.other:
-      default:
-        return 'other';
-    }
-  }
-
-  // Add a wrapper to fix the async data issue in the tab controller
-  void _performTabNavigation(int tab) {
-    if (_tabController != null) {
-      // Check that _tabController is initialized
-      _tabController!.animateTo(tab);
-    }
-  }
-
-  Widget _buildContent() {
-    if (_isSearching && _searchController.text.trim().isNotEmpty) {
-      return _buildSearchResults();
-    }
-    
-    if (_tabController?.index == 0) {
-      return const MySpacesContent();
-    } else {
-      return const DiscoverSpacesContent();
-    }
-  }
-  
-  // Simple search results builder
-  Widget _buildSearchResults() {
-    return Center(
-      child: Text(
-        'Search results for: ${_searchController.text}',
-        style: const TextStyle(color: Colors.white),
-      ),
-    );
-  }
-  
   @override
   Widget build(BuildContext context) {
-    final userProfileAsync = ref.watch(profileSyncProvider);
+    // Track space changes when build runs
+    final userSpacesAsync = ref.watch(user_providers.userSpacesProvider);
+    
+    // Handle space changes and scrolling within build method
+    userSpacesAsync.whenData((userSpacesEntities) {
+      // Extract current space IDs
+      final currentSpaceIds = userSpacesEntities.map((entity) => entity.id).toList();
+      
+      // Compare with previous IDs to find new ones
+      if (_previousSpaceIds.isNotEmpty) {
+        final newSpaceIds = currentSpaceIds.where((id) => !_previousSpaceIds.contains(id)).toList();
+        
+        // If we have new spaces, scroll to them
+        if (newSpaceIds.isNotEmpty) {
+          // Use post frame callback to ensure the UI is built before scrolling
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            _scrollToNewSpace(newSpaceIds.first, userSpacesEntities);
+          });
+        }
+      }
+      
+      // Update previous IDs for next comparison
+      _previousSpaceIds = currentSpaceIds;
+    });
     
     return Scaffold(
       backgroundColor: AppColors.dark,
-      body: Column(
-        children: [
-          _buildAppBar(),
-          _buildTabBar(),
-          SpacesSearchBar(
-            onSearch: (query) {
-              setState(() {
-                _searchController.text = query;
-                _isSearching = query.trim().isNotEmpty;
-              });
-            },
-            onClear: () {
-              setState(() {
-                _searchController.clear();
-                _isSearching = false;
-              });
-            },
+      appBar: AppBar(
+        backgroundColor: AppColors.dark,
+        elevation: 0,
+          title: Text(
+          'SPACES',
+          style: GoogleFonts.inter(
+            fontSize: 28, // H2 Style
+              fontWeight: FontWeight.w600,
+            color: AppColors.white,
           ),
-          Expanded(
-            child: _buildContent(),
-          ),
-        ],
+        ),
       ),
-      floatingActionButton: _buildCreateSpaceButton(userProfileAsync),
-    );
-  }
-
-  void _refreshData() {
-    // Refresh all the providers we're using
-    ref.refresh(space_providers.spacesProvider);
-    ref.refresh(space_providers.hierarchicalSpacesProvider);
-    ref.refresh(searchedSpacesProvider);
-  }
-
-  // Update state provider synchronization for search status
-  void _updateSearchStateProvider() {
-    final currentState = ref.read(spaceSearchActiveProvider);
-    if (currentState != _isSearchExpanded) {
-      // Use Future.microtask to update the provider state outside build cycle
-      Future.microtask(() {
-        ref.read(spaceSearchActiveProvider.notifier).state = _isSearchExpanded;
-      });
-    }
-  }
-  
-  // Override didUpdateWidget to update provider when local state changes
-  @override
-  void didUpdateWidget(SpacesPage oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    // Update search state provider directly
-    Future.microtask(() {
-      if (mounted) {
-        ref.read(spaceSearchActiveProvider.notifier).state = _isSearchExpanded;
-      }
-    });
-  }
-  
-  // Also update in setState where _isSearchExpanded is modified
-  void _toggleSearchExpanded(bool expanded) {
-    if (_isSearchExpanded != expanded) {
-                                      setState(() {
-        _isSearchExpanded = expanded;
-      });
-      
-      // Use Future.microtask to update provider outside build cycle
-      Future.microtask(() {
-        ref.read(spaceSearchActiveProvider.notifier).state = expanded;
-        if (!expanded) {
-          ref.read(spaceSearchQueryProvider.notifier).state = '';
-                                            }
-                                          });
-                                        }
-  }
-
-  // Explore tab view
-  Widget _buildExploreTab(AsyncValue<Map<String, List<Space>>> allSpaces) {
-    return CustomScrollView(
-      controller: _mainScrollController,
-      physics: const AlwaysScrollableScrollPhysics(),
+      // --- WRAP with ScrollConfiguration ---
+      body: ScrollConfiguration(
+        behavior: MyCustomScrollBehavior(),
+        child: CustomScrollView( // Use CustomScrollView for mixed content
       slivers: [
-        // Remove category selector from here as it will be moved to the All Spaces header
-
-        // Trending spaces section
+          // Sliver for the "My Spaces" horizontal list
         SliverToBoxAdapter(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-            child: _buildTrendingSpaces(ref.watch(trendingSpacesProvider)),
+            child: _buildMySpacesSection(),
           ),
-        ),
-
-        // Recommended spaces section
+          // Sliver for the "Discover" header
         SliverToBoxAdapter(
-          child: _buildRecommendedSpaces(allSpaces),
-        ),
-
-        // Main spaces grid
-        _buildSpacesGrid(allSpaces),
-      ],
-    );
-  }
-
-  // My Spaces tab view
-  Widget _buildMySpacesTab(AsyncValue<List<Space>> userSpaces) {
-    // Store a reference to the WidgetRef instead of capturing it in the closure
-    final weakRef = ref;
-    
-    // Force a refresh of the userSpacesProvider when this tab is visible
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      // Only refresh if it's been more than 5 minutes since the last refresh
-      final now = DateTime.now().millisecondsSinceEpoch;
-      if (_lastMySpacesRefreshTime == null ||
-          now - _lastMySpacesRefreshTime! > 5 * 60 * 1000) {
-        // We're in the context of a widget that may be unmounted, so use a WeakReference
-        final weakRef = ref;
-        Future.microtask(() {
-          if (mounted) {
-            weakRef.invalidate(user_providers.userSpacesProvider);
-            _lastMySpacesRefreshTime = now;
-          }
-        });
-      }
-    });
-    
-    // Get current user data to check for spaces
-    final userData = ref.watch(userProvider);
-    final joinedSpaceIds = userData?.joinedClubs ?? [];
-    
-    // If user has no spaces in userData but userSpaces is loading, show loading
-    if (joinedSpaceIds.isEmpty && userSpaces is AsyncLoading) {
-      return const Center(
-        child: CircularProgressIndicator(color: AppColors.gold),
-      );
-    }
-    
-    // If user has spaces in userData but userSpaces provider failed, show direct from userData
-    if (joinedSpaceIds.isNotEmpty && userSpaces is AsyncError) {
-      debugPrint('UserSpacesProvider error, falling back to direct space lookup for ${joinedSpaceIds.length} spaces');
-      // We'll try to load spaces directly from spacesProvider
-      final allSpacesAsync = ref.watch(spacesAsyncProvider);
-      
-      return allSpacesAsync.when(
-        data: (allSpaces) {
-          // Filter to only show user's joined spaces
-          final mySpaces = allSpaces.values
-              .where((space) => joinedSpaceIds.contains(space.id))
-              .map((entity) => entity.toSpace())
-              .toList();
-          debugPrint('Fallback method found ${mySpaces.length} spaces from user joinedClubs');
-          
-          if (mySpaces.isEmpty) {
-            return _buildEmptyMySpaces();
-          }
-          
-          // Use SingleChildScrollView with AlwaysScrollableScrollPhysics as a wrapper
-          return _buildMySpacesContent(mySpaces);
-        },
-        loading: () => const Center(
-          child: CircularProgressIndicator(color: AppColors.gold),
-        ),
-        error: (error, stack) => Center(
-          child: SingleChildScrollView(
-            physics: const AlwaysScrollableScrollPhysics(),
             child: Padding(
-              padding: const EdgeInsets.all(24.0),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    Icons.error_outline,
-                    color: Colors.red[300],
-                    size: 48,
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    'Unable to load your spaces',
-                    style: GoogleFonts.outfit(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.white,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Pull down to try again',
-                    style: GoogleFonts.inter(
-                      fontSize: 14,
-                      color: Colors.white70,
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                  OutlinedButton(
-                    onPressed: _refreshSpaces,
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: AppColors.gold,
-                      side: const BorderSide(color: AppColors.gold),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      padding:
-                          const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                    ),
+              padding: const EdgeInsets.only(left: 16.0, top: 24.0, bottom: 12.0, right: 16.0), // spacing-lg top, spacing-sm bottom
                     child: Text(
-                      'Retry',
-                      style: GoogleFonts.inter(fontWeight: FontWeight.w500),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      );
-    }
-    
-    // Normal flow - use userSpaces provider
-    return userSpaces.when(
-      data: (spaces) {
-        debugPrint('My Spaces tab displaying ${spaces.length} spaces: ${spaces.map((s) => s.id).toList()}');
-        if (spaces.isEmpty) {
-          return _buildEmptyMySpaces();
-        }
-
-        return _buildMySpacesContent(spaces);
-      },
-      loading: () => const Center(
-        child: CircularProgressIndicator(color: AppColors.gold),
-      ),
-      error: (error, stackTrace) {
-        debugPrint('Error displaying spaces: $error\n$stackTrace');
-        return Center(
-          child: SingleChildScrollView(
-            physics: const AlwaysScrollableScrollPhysics(),
-            child: Padding(
-              padding: const EdgeInsets.all(24.0),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    Icons.error_outline,
-                    color: Colors.red[300],
-                    size: 48,
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    'Unable to load your spaces',
-                    style: GoogleFonts.outfit(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.white,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Pull down to try again',
+                'Discover',
                     style: GoogleFonts.inter(
-                      fontSize: 14,
-                      color: Colors.white70,
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                  OutlinedButton(
-                    onPressed: _refreshSpaces,
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: AppColors.gold,
-                      side: const BorderSide(color: AppColors.gold),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      padding:
-                          const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                    ),
-                    child: Text(
-                      'Retry',
-                      style: GoogleFonts.inter(fontWeight: FontWeight.w500),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
-  
-  // Common builder for My Spaces content
-  Widget _buildMySpacesContent(List<Space> spaces) {
-    // Get current user ID
-    final currentUserId = FirebaseAuth.instance.currentUser?.uid;
-    
-    // Fetch all spaces to find those where user is an admin but hasn't joined
-    if (currentUserId != null) {
-      // Using a direct reference to read all spaces instead of Consumer
-      final allSpacesAsync = ref.watch(spacesAsyncProvider);
-      
-      return allSpacesAsync.when(
-        data: (allSpaces) {
-          // Find spaces where the user is an admin (leader)
-          final adminSpaces = allSpaces.values
-              .where((space) => space.admins.contains(currentUserId) && !spaces.any((s) => s.id == space.id))
-              .map((entity) => entity.toSpace())
-              .toList();
-          
-          // Combine user's joined spaces with spaces they lead
-          final combinedSpaces = [...spaces, ...adminSpaces];
-          debugPrint('Showing ${spaces.length} joined spaces and ${adminSpaces.length} admin spaces');
-          
-          return CustomScrollView(
-            controller: _mySpacesScrollController,
-            physics: const AlwaysScrollableScrollPhysics(),
-            slivers: [
-              SliverPadding(
-                padding: const EdgeInsets.all(16),
-                sliver: SliverList(
-                  delegate: SliverChildBuilderDelegate(
-                    (context, index) {
-                      if (index < combinedSpaces.length) {
-                        final space = combinedSpaces[index];
-                        final isAdminOnly = !spaces.any((s) => s.id == space.id);
-                        final isAdmin = isAdminOnly || space.admins.contains(currentUserId);
-                        
-                        return AnimationConfiguration.staggeredList(
-                          position: index,
-                          duration: const Duration(milliseconds: 375),
-                          child: SlideAnimation(
-                            verticalOffset: 50,
-                            child: FadeInAnimation(
-                              child: _buildSpaceListItem(
-                                space, 
-                                index,
-                                inMySpaces: true,
-                                isAdmin: isAdmin
-                              ),
-                            ),
-                          ),
-                        );
-                      }
-                      return null;
-                    },
-                    childCount: combinedSpaces.length,
-                  ),
+                  fontSize: 20, // H3 Style
+                    fontWeight: FontWeight.w600,
+                  color: AppColors.white,
                 ),
               ),
-              // Adding bottom padding to ensure FAB doesn't overlap with the last item
-              const SliverToBoxAdapter(
-                child: SizedBox(height: 80),
-              ),
-            ],
-          );
-        },
-        loading: () => const Center(
-          child: CircularProgressIndicator(color: AppColors.gold),
-        ),
-        error: (error, stack) => Center(
-          child: Text('Error loading spaces: $error'),
-        ),
-      );
-    } else {
-      // Fallback for when user isn't authenticated
-      return CustomScrollView(
-        controller: _mySpacesScrollController,
-        physics: const AlwaysScrollableScrollPhysics(),
-        slivers: [
-          SliverPadding(
-            padding: const EdgeInsets.all(16),
-            sliver: SliverList(
-              delegate: SliverChildBuilderDelegate(
-                (context, index) {
-                  if (index < spaces.length) {
-                    return AnimationConfiguration.staggeredList(
-                      position: index,
-                      duration: const Duration(milliseconds: 375),
-                      child: SlideAnimation(
-                        verticalOffset: 50,
-                        child: FadeInAnimation(
-                          child: _buildSpaceListItem(
-                              spaces[index], index,
-                              inMySpaces: true),
-                        ),
-                      ),
-                    );
-                  }
-                  return null;
-                },
-                childCount: spaces.length,
-              ),
             ),
           ),
-          // Adding bottom padding to ensure FAB doesn't overlap with the last item
-          const SliverToBoxAdapter(
-            child: SizedBox(height: 80),
-          ),
+          // Sliver for the "Discover" vertical list
+          _buildDiscoverSliverList(), // Use a separate method to build the sliver list
         ],
-      );
-    }
-  }
-
-  // Empty state for My Spaces tab with enhanced design
-  Widget _buildEmptyMySpaces() {
-    return SingleChildScrollView(
-      physics: const AlwaysScrollableScrollPhysics(),
-      child: ConstrainedBox(
-        constraints: BoxConstraints(
-          minHeight: MediaQuery.of(context).size.height - 180, // Subtract app bar height
-        ),
-        child: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(24.0),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              mainAxisSize: MainAxisSize.min, // Add this to prevent overflow
-              children: [
-                // Styled container with animation
-                TweenAnimationBuilder<double>(
-                  duration: const Duration(seconds: 2),
-                  tween: Tween<double>(begin: 0.5, end: 1.0),
-                  curve: Curves.easeInOut,
-                  builder: (context, value, child) {
-                    return Container(
-                      width: 100,
-                      height: 100,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: Colors.black,
-                        border: Border.all(
-                          color: AppColors.gold.withOpacity(0.3 + (0.3 * value)),
-                          width: 2,
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: AppColors.gold.withOpacity(0.1 + (0.2 * value)),
-                            blurRadius: 15 * value,
-                            spreadRadius: 2 * value,
-                          ),
-                        ],
-                      ),
-                      child: Center(
-                        child: HugeIcon(
-                          icon: HugeIcons.strokeRoundedUserGroup03,
-                          size: 40,
-                          color: AppColors.gold.withOpacity(0.7 + (0.3 * value)),
-                        ),
-                      ),
-                    );
-                  },
-                ),
-                const SizedBox(height: 28),
-                Text(
-                  'No Spaces Yet',
-                  style: GoogleFonts.outfit(
-                    fontSize: 22,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.white,
-                    letterSpacing: 0.3,
-                  ),
-                ),
-                const SizedBox(height: 16),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 24),
-                  child: Text(
-                    'Create your own space to connect with other students or join existing ones to discover events and communities.',
-                    textAlign: TextAlign.center,
-                    style: GoogleFonts.inter(
-                      fontSize: 15,
-                      color: Colors.white70,
-                      height: 1.4,
-                    ),
-                  ),
-                ),
-                // "Create a Space" button removed since we now have the FAB
-              ],
-            ),
-          ),
-        ),
       ),
+      ),
+      // --- END WRAP ---
     );
   }
 
-  // Build category selector with improved design
-  Widget _buildCategorySelector() {
-    return ListView.builder(
-        controller: _categoriesScrollController,
-        scrollDirection: Axis.horizontal,
-      padding: const EdgeInsets.only(left: 16, right: 16),
-      physics: const BouncingScrollPhysics(),
-        itemCount: _categories.length,
-        itemBuilder: (context, index) {
-          final category = _categories[index];
-          final isActive = _activeCategory == category;
+  // Updated My Spaces Section with Data Integration & BouncingScrollPhysics
+  Widget _buildMySpacesSection() {
+    final userSpacesAsync = ref.watch(user_providers.userSpacesProvider);
 
-        // Assign appropriate HugeIcon based on category
-        IconData categoryIcon;
-          switch (category) {
-            case 'All':
-            categoryIcon = HugeIcons.home;
-              break;
-            case 'Student Orgs':
-            categoryIcon = HugeIcons.strokeRoundedUserGroup03;
-              break;
-            case 'Greek Life':
-            categoryIcon = HugeIcons.strokeRoundedAlphabetGreek;
-              break;
-            case 'Campus Living':
-            categoryIcon = HugeIcons.strokeRoundedHouse03;
-              break;
-            case 'University':
-            categoryIcon = HugeIcons.strokeRoundedMortarboard02;
-            break;
-            case 'Hive Exclusive':
-              categoryIcon = Icons.workspace_premium;
-              break;
-          default:
-            categoryIcon = HugeIcons.tag;
-              break;
-          }
+    return userSpacesAsync.when(
+      data: (userSpacesEntities) {
+        final bool isEmptyState = userSpacesEntities.isEmpty;
 
-        return GestureDetector(
-                  onTap: () {
-            HapticFeedback.selectionClick();
-                    setState(() {
-                      _activeCategory = category;
-                    });
-            
-            // Optional: scroll to make selected category visible in center
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (_categoriesScrollController.hasClients) {
-                // Calculate the item's approximate position
-                final screenWidth = MediaQuery.of(context).size.width;
-                const itemWidth = 100; // Approximate average width 
-                final offset = index * itemWidth - (screenWidth / 2) + (itemWidth / 2);
-                
-                // Ensure the offset is within bounds
-                final maxScrollExtent = _categoriesScrollController.position.maxScrollExtent;
-                final scrollOffset = offset.clamp(0.0, maxScrollExtent);
-                
-                _categoriesScrollController.animateTo(
-                  scrollOffset,
-                  duration: const Duration(milliseconds: 300),
-                  curve: Curves.easeInOut,
-                );
-              }
-            });
-
-                    // Animate scroll to top when changing categories
-                    if (_mainScrollController.hasClients) {
-                      _mainScrollController.animateTo(
-                        0,
-                        duration: const Duration(milliseconds: 300),
-                        curve: Curves.easeInOut,
-                      );
-                    }
-                  },
-                  child: Container(
-            margin: const EdgeInsets.only(right: 8),
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(20),
-                      border: Border.all(
-                color: isActive
-                    ? AppColors.gold
-                    : Colors.white.withOpacity(0.15),
-                width: isActive ? 1.5 : 1,
-              ),
-              gradient: isActive
-                  ? LinearGradient(
-                      colors: [
-                        Colors.black,
-                        AppColors.gold.withOpacity(0.15),
-                      ],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    )
-                  : null,
-              color: isActive ? null : Colors.black.withOpacity(0.3),
-                      boxShadow: isActive
-                          ? [
-                              BoxShadow(
-                        color: AppColors.gold.withOpacity(0.15),
-                        blurRadius: 8,
-                                spreadRadius: 0,
-                              ),
-                            ]
-                          : null,
-                    ),
-                    child: Row(
-              mainAxisSize: MainAxisSize.min,
-                      children: [
-                HugeIcon(
-                  icon: categoryIcon,
-                  size: 14,
-                          color: isActive ? AppColors.gold : Colors.white70,
-                        ),
-                        const SizedBox(width: 6),
-                        Text(
-                          category,
-                          style: GoogleFonts.outfit(
-                            color: isActive ? AppColors.gold : Colors.white,
-                    fontWeight: isActive ? FontWeight.w600 : FontWeight.w400,
-                    fontSize: 13,
-                          ),
-                        ),
-                      ],
-              ),
-            ),
-          );
-        },
-    );
-  }
-
-  // Build trending spaces section with new adapter to handle SpaceEntity
-  Widget _buildTrendingSpaces(AsyncValue<List<SpaceEntity>> trendingSpacesAsync) {
-    return trendingSpacesAsync.when(
-      data: (trendingEntities) {
-        // Convert SpaceEntity to Space objects
-        final List<Space> trendingSpaces = trendingEntities
-            .map((entity) => entity.toSpace())
-            .toList();
-            
-        if (trendingSpaces.isEmpty) {
-          return const SizedBox.shrink();
-        }
-
-        // Filter to only include certain types
-        final filteredSpaces = trendingSpaces.where((space) {
-          // Only allow StudentOrg and Fraternity/Sorority space types to appear in trending
-          return space.spaceType == model_space_type.SpaceType.studentOrg ||
-              space.spaceType == model_space_type.SpaceType.fraternityAndSorority;
-        }).toList();
-
-        if (filteredSpaces.isEmpty) {
-          return const SizedBox.shrink();
-        }
-
-        // Sort by engagement score (higher scores first)
-        filteredSpaces.sort((a, b) {
-          // Use the dedicated engagementScore field
-          final aEngagement = a.metrics.engagementScore;
-          final bEngagement = b.metrics.engagementScore;
-          return bEngagement.compareTo(aEngagement);
-        });
-
-        return Container(
-          margin: const EdgeInsets.only(top: 8),
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [
-                Colors.black,
-                Colors.grey[900]!.withOpacity(0.3),
-              ],
-            ),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
-                child: Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(6),
-                      decoration: BoxDecoration(
-                        color: AppColors.gold.withOpacity(0.2),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: const Icon(
-                        Icons.trending_up,
-                        size: 16,
-                        color: AppColors.gold,
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Text(
-                      'Trending Spaces',
-                      style: GoogleFonts.outfit(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.white,
-                        letterSpacing: 0.2,
-                      ),
-                    ),
-                    const Spacer(),
-                    TextButton(
-                      onPressed: () {
-                        // View all trending spaces
-                        HapticFeedback.selectionClick();
-                        // Navigate to full trending view or use filter
-                      },
-                      style: TextButton.styleFrom(
-                        foregroundColor: AppColors.gold,
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 6),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            'See All',
-                            style: GoogleFonts.inter(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                          const SizedBox(width: 4),
-                          const Icon(
-                            Icons.arrow_forward_ios,
-                            size: 10,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              SizedBox(
-                height: 140,
-                child: ListView.builder(
-                  scrollDirection: Axis.horizontal,
-                  padding: const EdgeInsets.only(left: 20, right: 8),
-                  itemCount: filteredSpaces.length,
-                  itemBuilder: (context, index) {
-                    final space = filteredSpaces[index];
-                    // Pass the trending rank (1-based) to show "#X trending"
-                    final trendingRank = index < 10 ? index + 1 : null;
-
-                    // Assign different labels based on position and randomness
-                    String? specialLabel;
-                    Color? labelColor;
-                    if (trendingRank == 1) {
-                      specialLabel = "#1 Trending";
-                      labelColor = AppColors.gold;
-                    } else if (trendingRank != null && trendingRank < 4) {
-                      specialLabel = "Rising Fast";
-                      labelColor = Colors.orange[300];
-                    } else if (trendingRank != null &&
-                        Random().nextInt(5) == 0) {
-                      specialLabel = "Popular";
-                      labelColor = Colors.blue[300];
-                    }
-
-                    return Padding(
-                      padding: const EdgeInsets.only(right: 16),
-                      child: SizedBox(
-                        width: 180,
-                        child: AnimationConfiguration.staggeredList(
-                          position: index,
-                          duration: const Duration(milliseconds: 375),
-                          child: SlideAnimation(
-                            horizontalOffset: 50,
-                            child: FadeInAnimation(
-                              child: _buildMySpaceCard(
-                                space,
-                                trendingRank: trendingRank,
-                                specialLabel: specialLabel,
-                                labelColor: labelColor,
-                                hasGlowEffect:
-                                    index < 3, // Add glow effect to top 3
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    );
-                  },
-                ),
-              ),
-              const SizedBox(height: 16),
-            ],
-          ),
-        );
-      },
-      loading: () => const SizedBox(
-        height: 0,
-      ),
-      error: (_, __) => const SizedBox(
-        height: 0,
-      ),
-    );
-  }
-
-  // Build recommended spaces section
-  Widget _buildRecommendedSpaces(
-      AsyncValue<Map<String, List<Space>>> allSpaces) {
-    return allSpaces.when(
-      data: (spacesData) {
-        // Combine all spaces from different categories
-        List<Space> allSpacesList = [];
-        spacesData.forEach((key, value) {
-          allSpacesList.addAll(value);
-        });
-
-        if (allSpacesList.isEmpty) {
-          return const SizedBox.shrink();
-        }
-
-        // Sort by engagement score (higher scores first)
-        allSpacesList.sort((a, b) {
-          final aEngagement = a.metrics.engagementScore;
-          final bEngagement = b.metrics.engagementScore;
-          return bEngagement.compareTo(aEngagement);
-        });
-
-        // Get top 10 spaces by engagement score
-        final recommendedSpaces =
-            allSpacesList.take(min(10, allSpacesList.length)).toList();
-
-        if (recommendedSpaces.isEmpty) {
-          return const SizedBox.shrink();
-        }
-
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-              child: Row(
-                children: [
-                  const Icon(
-                    Icons.recommend,
-                    size: 18,
-                    color: AppColors.gold,
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    'Recommended for You',
-                    style: GoogleFonts.outfit(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.white,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            SizedBox(
-              height: 120,
-              child: ListView.builder(
-                scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.only(left: 16, right: 8),
-                itemCount: recommendedSpaces.length,
-                itemBuilder: (context, index) {
-                  final space = recommendedSpaces[index];
-
-                  // Determine special label for this space
-                  String? specialLabel;
-                  Color? labelColor;
-
-                  if (index == 0) {
-                    specialLabel = "Best Match";
-                    labelColor = Colors.purple[300];
-                  } else if (index < 3 && Random().nextBool()) {
-                    specialLabel = "High Match";
-                    labelColor = Colors.blue[400];
-                  } else if (Random().nextInt(3) == 0) {
-                    specialLabel = "Major Match";
-                    labelColor = Colors.blue[300];
-                  } else {
-                    specialLabel = "#${index + 1} Recommended";
-                    labelColor = Colors.purple[300];
-                  }
-
-                  return Padding(
-                    padding: const EdgeInsets.only(right: 12),
-                    child: SizedBox(
-                      width: 160,
-                      child: AnimationConfiguration.staggeredList(
-                        position: index,
-                        duration: const Duration(milliseconds: 375),
-                        child: SlideAnimation(
-                          horizontalOffset: 50,
-                          child: FadeInAnimation(
-                            child: _buildRecommendedSpaceCard(
-                              space,
-                              specialLabel: specialLabel,
-                              labelColor: labelColor,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  );
-                },
-              ),
-            ),
-            const SizedBox(height: 16),
-          ],
-        );
-      },
-      loading: () => const SizedBox(
-        height: 0,
-      ),
-      error: (_, __) => const SizedBox(
-        height: 0,
-      ),
-    );
-  }
-
-  // Build recommended space card with subtle difference from trending card
-  Widget _buildRecommendedSpaceCard(
-    Space space, {
-    String? specialLabel,
-    Color? labelColor,
-  }) {
-    final hasImage = space.imageUrl != null && space.imageUrl!.isNotEmpty;
-    final isGreekLife =
-        space.spaceType.toString().toLowerCase().contains('greek');
-
-    return Container(
-      clipBehavior: Clip.antiAlias,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(12),
-        gradient: LinearGradient(
-          colors: [
-            Colors.grey[900]!.withOpacity(0.8),
-            Colors.black.withOpacity(0.7),
-          ],
-          begin: Alignment.topRight,
-          end: Alignment.bottomLeft,
-        ),
-        border: Border.all(
-          color: AppColors.gold.withOpacity(0.2),
-          width: 1,
-        ),
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: () => _handleTapSpace(space),
-          splashColor: AppColors.gold.withOpacity(0.1),
-          highlightColor: AppColors.gold.withOpacity(0.05),
-          child: Stack(
-            children: [
-              // Background image with overlay
-              if (hasImage)
-                Positioned.fill(
-                  child: Opacity(
-                    opacity: 0.3,
-                    child: CachedNetworkImage(
-                      imageUrl: space.imageUrl!,
-                      fit: BoxFit.cover,
-                      errorWidget: (_, __, ___) => Center(
-                        child: isGreekLife
-                            ? const Icon(
-                                Icons.groups,
-                                color: Colors.white30,
-                                size: 36,
-                              )
-                            : const Icon(
-                                Icons.person,
-                                color: Colors.white30,
-                                size: 36,
-                              ),
-                      ),
-                    ),
-                  ),
-                )
-              // If no image, show icon as background
-              else
-                Positioned.fill(
-                  child: Center(
-                    child: isGreekLife
-                        ? const Icon(
-                            Icons.groups,
-                            color: Colors.white24,
-                            size: 36,
-                          )
-                        : const Icon(
-                            Icons.person,
-                            color: Colors.white24,
-                            size: 36,
-                          ),
-                  ),
-                ),
-
-              // Content - space name only (no label)
-              Padding(
-                padding: const EdgeInsets.all(8),
-                child: Center(
-                  child: Text(
-                    space.name,
-                    style: GoogleFonts.outfit(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.white,
-                    ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    textAlign: TextAlign.center,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  // Redesigned space card with visual enhancements for trending spaces
-  Widget _buildMySpaceCard(
-    Space space, {
-    int? trendingRank,
-    String? specialLabel,
-    Color? labelColor,
-    bool hasGlowEffect = false,
-  }) {
-    final hasImage = space.imageUrl != null && space.imageUrl!.isNotEmpty;
-    final isGreekLife =
-        space.spaceType.toString().toLowerCase().contains('greek');
-
-    // Create the label text
-    String? labelText;
-    if (specialLabel != null) {
-      labelText = specialLabel;
-    } else if (trendingRank != null) {
-      labelText = "#$trendingRank Trending";
-    }
-
-    // Create a key unique to this space for the animation controller
-    final key = ValueKey('trending_${space.id}');
-
-    return Container(
-      clipBehavior: Clip.antiAlias,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(16),
-        gradient: LinearGradient(
-          colors: [
-            Colors.grey[900]!.withOpacity(0.5),
-            Colors.black,
-          ],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        border: Border.all(
-          color: hasGlowEffect
-              ? AppColors.gold.withOpacity(0.5)
-              : Colors.white.withOpacity(0.1),
-          width: 1,
-        ),
-        boxShadow: hasGlowEffect
-            ? [
-                BoxShadow(
-                  color: AppColors.gold.withOpacity(0.2),
-                  blurRadius: 8,
-                  spreadRadius: 1,
-                )
-              ]
-            : null,
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: () => _handleTapSpace(space),
-          splashColor: AppColors.gold.withOpacity(0.1),
-          highlightColor: AppColors.gold.withOpacity(0.05),
-          child: Stack(
-            children: [
-              // Background image with overlay
-              if (hasImage)
-                Positioned.fill(
-                  child: CachedNetworkImage(
-                    imageUrl: space.imageUrl!,
-                    fit: BoxFit.cover,
-                    errorWidget: (_, __, ___) => Center(
-                      child: isGreekLife
-                          ? const Icon(
-                              Icons.diversity_3,
-                              color: Colors.white30,
-                              size: 36,
-                            )
-                          : const Icon(
-                              Icons.groups,
-                              color: Colors.white30,
-                              size: 36,
-                            ),
-                    ),
-                  ),
-                ),
-
-              // Gradient overlay for better text readability
-              Positioned.fill(
-                child: Container(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [
-                        Colors.black.withOpacity(0.4),
-                        Colors.black.withOpacity(0.8),
-                      ],
-                      stops: const [0.0, 0.8],
-                    ),
-                  ),
-                ),
-              ),
-
-              // Content with improved layout
-              Padding(
-                padding: const EdgeInsets.all(12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Add top badge if trending
-                    if (trendingRank != null && trendingRank <= 3)
-                      Align(
-                        alignment: Alignment.topRight,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: trendingRank == 1
-                                ? AppColors.gold.withOpacity(0.8)
-                                : Colors.orange.withOpacity(0.8),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Icon(
-                                Icons.trending_up,
-                                color: Colors.black,
-                                size: 10,
-                              ),
-                              const SizedBox(width: 2),
-                              Text(
-                                trendingRank == 1 ? "HOT" : "#$trendingRank",
-                                style: GoogleFonts.inter(
-                                  fontSize: 9,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.black,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-
-                    const Spacer(),
-
-                    // Space name with improved styling
-                    Text(
-                      space.name,
-                      style: GoogleFonts.outfit(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.white,
-                        letterSpacing: 0.2,
-                        shadows: [
-                          Shadow(
-                            blurRadius: 3,
-                            color: Colors.black.withOpacity(0.5),
-                            offset: const Offset(0, 1),
-                          ),
-                        ],
-                      ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-
-                    const SizedBox(height: 6),
-
-                    // Member count
-                    Row(
-                      children: [
-                        const Icon(
-                          Icons.people_outlined,
-                          size: 12,
-                          color: Colors.white70,
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          "${space.metrics.memberCount} members",
-                          style: GoogleFonts.inter(
-                            fontSize: 11,
-                            color: Colors.white70,
-                          ),
-                        ),
-                      ],
-                    ),
-
-                    // Label with animation
-                    if (labelText != null &&
-                        labelText.toLowerCase() != "popular")
-                      Container(
-                        margin: const EdgeInsets.only(top: 8),
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 4),
-                        decoration: BoxDecoration(
-                          color:
-                              (labelColor ?? AppColors.gold).withOpacity(0.2),
-                          borderRadius: BorderRadius.circular(4),
-                          border: Border.all(
-                            color:
-                                (labelColor ?? AppColors.gold).withOpacity(0.3),
-                            width: 1,
-                          ),
-                        ),
-                        child: TweenAnimationBuilder<double>(
-                          key: key,
-                          tween: Tween<double>(begin: 0.0, end: 1.0),
-                          duration: const Duration(milliseconds: 500),
-                          builder: (context, value, child) {
-                            return Opacity(
-                              opacity: value,
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(
-                                    labelText!.contains("Rising")
-                                        ? Icons.rocket_launch
-                                        : Icons.local_fire_department,
-                                    size: 10,
-                                    color: labelColor ?? AppColors.gold,
-                                  ),
-                                  const SizedBox(width: 4),
-                                  Text(
-                                    labelText,
-                                    style: GoogleFonts.inter(
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.w500,
-                                      color: labelColor ?? AppColors.gold,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            );
-                          },
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  // New list-style space item, optimized for mobile viewing
-  Widget _buildSpaceListItem(Space space, int index,
-      {bool inMySpaces = false, bool isAdmin = false}) {
-    final hasImage = space.imageUrl != null && space.imageUrl!.isNotEmpty;
-    final isGreekLife =
-        space.spaceType.toString().toLowerCase().contains('greek');
-
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 6, 16, 6),
-      child: Container(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(12),
-          color: Colors.grey[900]!.withOpacity(0.3),
-          border: isAdmin ? Border.all(
-            color: AppColors.gold.withOpacity(0.5),
-            width: 1.5,
-          ) : Border.all(
-            color: Colors.white.withOpacity(0.08),
-            width: 1,
-          ),
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: Material(
-          color: Colors.transparent,
-          child: InkWell(
-            onTap: () => _handleTapSpace(space),
-            splashColor: AppColors.gold.withOpacity(0.1),
-            highlightColor: AppColors.gold.withOpacity(0.05),
-            child: Stack(
-              children: [
-                Padding(
-                  padding:
-                      const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Space image or placeholder
-                      Hero(
-                        tag: 'space_image_${space.id}',
-                        child: Container(
-                          width: 48,
-                          height: 48,
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(8),
-                            color: Colors.black,
-                            border: Border.all(
-                              color: AppColors.gold.withOpacity(0.3),
-                              width: 1,
-                            ),
-                          ),
-                          clipBehavior: Clip.antiAlias,
-                          child: hasImage
-                              ? Image.network(
-                                  space.imageUrl!,
-                                  fit: BoxFit.cover,
-                                  errorBuilder: (_, __, ___) => Center(
-                                    child: isGreekLife
-                                        ? const Icon(
-                                            Icons.groups,
-                                            color: Colors.white54,
-                                            size: 24,
-                                          )
-                                        : const Icon(
-                                            Icons.person,
-                                            color: Colors.white54,
-                                            size: 24,
-                                          ),
-                                  ),
-                                )
-                              : Center(
-                                  child: isGreekLife
-                                      ? const Icon(
-                                          Icons.groups,
-                                          color: Colors.white54,
-                                          size: 24,
-                                        )
-                                      : const Icon(
-                                          Icons.person,
-                                          color: Colors.white54,
-                                          size: 24,
-                                        ),
-                                ),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-
-                      // Space name only - with padding to avoid plus button overlap
-                      Expanded(
-                        child: Padding(
-                          padding: EdgeInsets.only(
-                              right: !inMySpaces ? 32 : 0, top: 2),
-                          child: Text(
-                            space.name,
-                            style: GoogleFonts.outfit(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.white,
-                              height: 1.3,
-                            ),
-                            maxLines: 3,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      ),
-
-                      // Arrow button for My Spaces
-                      if (inMySpaces)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 2),
-                          child: IconButton(
-                            icon: const Icon(
-                              Icons.arrow_forward_ios_rounded,
-                              size: 16,
-                            ),
-                            onPressed: () => _handleTapSpace(space),
-                            color: AppColors.gold,
-                            splashRadius: 20,
-                            padding: EdgeInsets.zero,
-                            constraints: const BoxConstraints(
-                              minWidth: 28,
-                              minHeight: 28,
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-
-                // Quick-add button as a plus icon (only show in explore, not in My Spaces)
-                if (!inMySpaces)
-                  Positioned(
-                    top: 0,
-                    right: 0,
-                    child: Material(
-                      color: Colors.transparent,
-                      child: InkWell(
-                        onTap: () => _handleJoinSpace(space),
-                        borderRadius: const BorderRadius.only(
-                          bottomLeft: Radius.circular(16),
-                          topRight: Radius.circular(12),
-                        ),
-                        child: Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            color: Colors.black.withOpacity(0.6),
-                            borderRadius: const BorderRadius.only(
-                              bottomLeft: Radius.circular(16),
-                              topRight: Radius.circular(12),
-                            ),
-                          ),
-                          child: const Tooltip(
-                            message: "Add to My Spaces",
-                            child: Icon(
-                              HugeIcons.strokeRoundedPlusSignCircle,
-                              color: AppColors.gold,
-                              size: 16,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  // Main spaces grid with filtered content - redesigned for better mobile experience
-  Widget _buildSpacesGrid(AsyncValue<Map<String, List<Space>>> spacesMap) {
-    return spacesMap.when(
-      data: (spacesData) {
-        // Get the recommended spaces IDs to filter them out from the main grid
-        final recommendedSpaceIds = _getRecommendedSpaceIds(spacesData);
-
-        // Filter spaces based on selected category
-        List<Space> spaces = [];
-
-        if (_activeCategory == 'All') {
-          // Combine all spaces from different categories
-          spacesData.forEach((key, value) {
-            spaces.addAll(value);
-          });
-        } else {
-          // Map the UI category to the data category
-          String dataCategory;
-          switch (_activeCategory) {
-            case 'Student Orgs':
-              dataCategory = 'Student Organizations';
-              break;
-            case 'University':
-              dataCategory = 'University Groups';
-              break;
-            case 'Campus Living':
-              dataCategory = 'Campus Living';
-              break;
-            case 'Greek Life':
-              dataCategory = 'Greek Life';
-              break;
-            case 'Hive Exclusive':
-              // For Hive Exclusive, gather all spaces
-              List<Space> hiveExclusiveSpaces = [];
-              // Log all spaces to see what we're working with
-              spacesData.forEach((key, value) {
-                debugPrint('📂 Collection: $key, Spaces count: ${value.length}');
-                
-                // Check each space's hiveExclusive property
-                for (var space in value) {
-                  debugPrint('🔍 Space: ${space.name}, hiveExclusive: ${space.hiveExclusive}');
-                }
-                
-                // Only add spaces that have the hiveExclusive flag set to true
-                final filteredSpaces = value.where((space) => space.hiveExclusive == true).toList();
-                debugPrint('✅ Found ${filteredSpaces.length} hiveExclusive spaces in $key');
-                hiveExclusiveSpaces.addAll(filteredSpaces);
-              });
-              
-              // Log the final count of Hive Exclusive spaces
-              debugPrint('🏆 Total Hive Exclusive spaces found: ${hiveExclusiveSpaces.length}');
-              
-              // If there are no Hive Exclusive spaces, show a more helpful message
-              if (hiveExclusiveSpaces.isEmpty) {
-                // Keep spaces empty to show our custom message
-                spaces = [];
-              } else {
-                // We have Hive Exclusive spaces, so use them
-                spaces = hiveExclusiveSpaces;
-              }
-              dataCategory = ''; // Empty since we've already added the spaces
-              break;
-            default:
-              dataCategory = 'Other Spaces';
-          }
-
-          // Get spaces from the selected category if not already filtered
-          if (_activeCategory != 'Hive Exclusive') {
-            spaces = spacesData[dataCategory] ?? [];
-          }
-        }
-
-        // Apply search filter if needed
-        final searchQuery = _searchController.text.toLowerCase();
-        if (searchQuery.isNotEmpty) {
-          spaces = spaces
-              .where((space) =>
-                  space.name.toLowerCase().contains(searchQuery) ||
-                  space.description.toLowerCase().contains(searchQuery) ||
-                  (space.tags
-                      .any((tag) => tag.toLowerCase().contains(searchQuery))) ||
-                  (space.spaceType
-                      .toString()
-                      .toLowerCase()
-                      .contains(searchQuery)))
-              .toList();
-        }
-
-        // Apply tag filters if any are active
-        if (_activeFilters.isNotEmpty) {
-          spaces = spaces
-              .where((space) => (space.tags.any((tag) => _activeFilters.any(
-                      (filter) =>
-                          tag.toLowerCase().contains(filter.toLowerCase()))) ||
-                  _activeFilters.any((filter) => space.spaceType
-                      .toString()
-                      .toLowerCase()
-                      .contains(filter.toLowerCase()))))
-              .toList();
-        }
-
-        // Filter out spaces that are in the recommended list
-        spaces = spaces
-            .where((space) => !recommendedSpaceIds.contains(space.id))
-            .toList();
-
-        // Sort spaces by engagement score
-        spaces.sort((a, b) {
-          // First prioritize spaces with higher engagement
-          final aEngagement = a.metrics.engagementScore;
-          final bEngagement = b.metrics.engagementScore;
-
-          if (bEngagement != aEngagement) {
-            return bEngagement.compareTo(aEngagement);
-          }
-
-          // Then alphabetically
-          return a.name.compareTo(b.name);
-        });
-
-        if (spaces.isEmpty) {
-          return SliverToBoxAdapter(
-            child: Center(
-              child: Padding(
-                padding: const EdgeInsets.all(32.0),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      _activeCategory == 'Hive Exclusive' ? Icons.workspace_premium : Icons.search,
-                      size: 48,
-                      color: _activeCategory == 'Hive Exclusive' ? AppColors.gold.withOpacity(0.3) : Colors.white24,
-                    ),
-                    const SizedBox(height: 16),
-                    Text(
-                      _activeCategory == 'Hive Exclusive' 
-                        ? 'No Hive Exclusive Spaces' 
-                        : 'No spaces found',
-                      style: GoogleFonts.outfit(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.white70,
-                      ),
-                    ),
-                    if (_activeCategory == 'Hive Exclusive')
-                      Padding(
-                        padding: const EdgeInsets.only(top: 8),
-                        child: Text(
-                          'Exclusive spaces will be added soon. Check back later!',
-                          textAlign: TextAlign.center,
-                          style: GoogleFonts.inter(
-                            fontSize: 14,
-                            color: Colors.white38,
-                          ),
-                        ),
-                      )
-                    else if (searchQuery.isNotEmpty || _activeFilters.isNotEmpty)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 8),
-                        child: Text(
-                          'Try adjusting your filters',
-                          style: GoogleFonts.inter(
-                            fontSize: 14,
-                            color: Colors.white38,
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-            ),
-          );
-        }
-
-        // Build grid of spaces
-        return SliverPadding(
-          padding: const EdgeInsets.fromLTRB(
-              0, 8, 0, 120), // Add bottom padding for FAB
-          sliver: SliverList(
-            delegate: SliverChildBuilderDelegate(
-              (context, index) {
-                // Determine if we should add a section header
-                if (index == 0) {
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-                        child: Row(
-                          children: [
-                            Text(
-                              'All Spaces',
-                              style: GoogleFonts.outfit(
-                                fontSize: 18,
-                                fontWeight: FontWeight.w600,
-                                color: Colors.white,
-                              ),
-                            ),
-                            const Spacer(),
-                            // Filter icon to replace horizontal category selector
-                            Container(
-                              decoration: BoxDecoration(
-                                color: Colors.grey[850]?.withOpacity(0.5),
-                                borderRadius: BorderRadius.circular(8),
-                                border: Border.all(
-                                  color: _activeCategory != 'All' 
-                                    ? AppColors.gold.withOpacity(0.5) 
-                                    : Colors.transparent,
-                                  width: 1,
-                                ),
-                              ),
-                              child: InkWell(
-                                onTap: () => _showCategoryFilterDialog(context),
-                                borderRadius: BorderRadius.circular(8),
-                                child: Padding(
-                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Icon(
-                                        HugeIcons.tag,
-                                        size: 16,
-                                        color: _activeCategory != 'All' 
-                                          ? AppColors.gold 
-                                          : Colors.white70,
-                                      ),
-                                      const SizedBox(width: 6),
-                                      Text(
-                                        _activeCategory != 'All' ? _activeCategory : 'Filter',
-                                        style: GoogleFonts.inter(
-                                          fontSize: 13,
-                                          fontWeight: _activeCategory != 'All' 
-                                            ? FontWeight.w600 
-                                            : FontWeight.w400,
-                                          color: _activeCategory != 'All' 
-                                            ? AppColors.gold 
-                                            : Colors.white70,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ),
-                            // Add tag filter button - always visible
-                            if (_activeCategory == 'Hive Exclusive')
-                              Padding(
-                                padding: const EdgeInsets.only(left: 8.0),
-                                child: Container(
-                                  decoration: BoxDecoration(
-                                    color: Colors.grey[850]?.withOpacity(0.5),
-                                    borderRadius: BorderRadius.circular(8),
-                                    border: Border.all(
-                                      color: _activeFilters.isNotEmpty
-                                        ? AppColors.gold.withOpacity(0.5)
-                                        : Colors.transparent,
-                                      width: 1,
-                                    ),
-                                  ),
-                                  child: InkWell(
-                                    onTap: () => _showTagsFilterBottomSheet(context),
-                                    borderRadius: BorderRadius.circular(8),
-                                    child: Padding(
-                                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                                      child: Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          Icon(
-                                            Icons.local_offer,
-                                            size: 16,
-                                            color: _activeFilters.isNotEmpty
-                                              ? AppColors.gold
-                                              : Colors.white70,
-                                          ),
-                                          const SizedBox(width: 6),
-                                          Text(
-                                            _activeFilters.isNotEmpty ? 'Tags (${_activeFilters.length})' : 'Tags',
-                                            style: GoogleFonts.inter(
-                                              fontSize: 13,
-                                              fontWeight: _activeFilters.isNotEmpty
-                                                ? FontWeight.w600
-                                                : FontWeight.w400,
-                                              color: _activeFilters.isNotEmpty
-                                                ? AppColors.gold
-                                                : Colors.white70,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      // Add a subtle divider
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        child: Divider(
-                          color: Colors.white.withOpacity(0.1),
-                          height: 1,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                    ],
-                  );
-                }
-
-                final spaceIndex = index - 1;
-                if (spaceIndex < spaces.length) {
-                  return AnimationConfiguration.staggeredList(
-                    position: spaceIndex,
-                    duration: const Duration(milliseconds: 375),
-                    child: SlideAnimation(
-                      verticalOffset: 50,
-                      child: FadeInAnimation(
-                        child:
-                            _buildSpaceListItem(spaces[spaceIndex], spaceIndex),
-                      ),
-                    ),
-                  );
-                }
-
-                // Show loading indicator at the end if loading more
-                if (spaceIndex == spaces.length && _isLoadingMore) {
-                  return const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 16),
-                    child: Center(
-                      child: SizedBox(
-                        width: 24,
-                        height: 24,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: AppColors.gold,
-                        ),
-                      ),
-                    ),
-                  );
-                }
-
-                return null;
-              },
-              // +1 for the header, +1 for possible loading indicator
-              childCount: spaces.length + 1 + (_isLoadingMore ? 1 : 0),
-            ),
-          ),
-        );
-      },
-      loading: () => const SliverFillRemaining(
-        child: Center(
-          child: CircularProgressIndicator(color: AppColors.gold),
-        ),
-      ),
-      error: (_, __) => SliverToBoxAdapter(
-        child: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(32.0),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  Icons.error_outline,
-                  size: 48,
-                  color: Colors.red[300],
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  'Error loading spaces',
-                  style: GoogleFonts.outfit(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.white,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Please try again later',
-                  style: GoogleFonts.inter(
-                    fontSize: 14,
-                    color: Colors.white70,
-                  ),
-                ),
-                const SizedBox(height: 24),
-                OutlinedButton(
-                  onPressed: _refreshSpaces,
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: AppColors.gold,
-                    side: const BorderSide(color: AppColors.gold),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  ),
-                  child: Text(
-                    'Retry',
-                    style: GoogleFonts.inter(fontWeight: FontWeight.w500),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  // Add a method to show the category filter dialog
-  void _showCategoryFilterDialog(BuildContext context) {
-    // Use a full-screen dialog approach that completely covers the navigation bar
-    showDialog(
-      context: context,
-      barrierDismissible: true,
-      barrierColor: Colors.black.withOpacity(0.6),
-      builder: (context) => Dialog(
-      backgroundColor: Colors.transparent,
-        insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
-        child: Container(
-          width: double.infinity,
-          constraints: BoxConstraints(
-            maxHeight: MediaQuery.of(context).size.height * 0.7,
-          ),
-        decoration: BoxDecoration(
-          // Only round the top corners
-          borderRadius: const BorderRadius.only(
-            topLeft: Radius.circular(24),
-            topRight: Radius.circular(24),
-          ),
-          // Add a solid color at the bottom to ensure nav bar is fully covered
-          color: AppColors.black.withOpacity(0.95),
-          border: Border.all(
-            color: Colors.white.withOpacity(0.05),
-            width: 0.5,
-          ),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Padding(
-                padding: const EdgeInsets.all(20),
-                child: Text(
-                    'Filter Spaces',
-                    style: GoogleFonts.outfit(
-                    fontSize: 20,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.white,
-                    ),
-              ),
-            ),
-            const Divider(color: Colors.white12),
-            Expanded(
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      ListView.builder(
-                shrinkWrap: true,
-                        physics: const NeverScrollableScrollPhysics(),
-                        padding: EdgeInsets.zero,
-                itemCount: _categories.length,
-                itemBuilder: (context, index) {
-                  final category = _categories[index];
-                  final isActive = _activeCategory == category;
-                  
-                  // Assign appropriate icon based on category
-                  IconData categoryIcon = Icons.category;
-                  switch (category) {
-                    case 'All':
-                      categoryIcon = HugeIcons.home;
-                      break;
-                    case 'Student Orgs':
-                      categoryIcon = HugeIcons.strokeRoundedUserGroup03;
-                      break;
-                    case 'Greek Life':
-                      categoryIcon = HugeIcons.strokeRoundedAlphabetGreek;
-                      break;
-                    case 'Campus Living':
-                      categoryIcon = HugeIcons.strokeRoundedHouse03;
-                      break;
-                    case 'University':
-                      categoryIcon = HugeIcons.strokeRoundedMortarboard02;
-                      break;
-                    case 'Hive Exclusive':
-                      categoryIcon = Icons.workspace_premium;
-                      break;
-                  }
-                  
-                  return InkWell(
-                    onTap: () {
-                      // Disable tap for locked categories
-                      if (category == 'Academics' || category == 'Circles') {
-                        HapticFeedback.heavyImpact();
-                        return;
-                      }
-                      
-                      HapticFeedback.selectionClick();
-                      setState(() {
-                        _activeCategory = category;
-                      });
-                      Navigator.pop(context);
-                      
-                      // Animate scroll to top when changing categories
-                      if (_mainScrollController.hasClients) {
-                        _mainScrollController.animateTo(
-                          0,
-                          duration: const Duration(milliseconds: 300),
-                          curve: Curves.easeInOut,
-                        );
-                      }
-                    },
-                    child: Padding(
-                              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 0),
-                      child: Row(
-                        children: [
-                          // Show different icons based on category
-                          if (category == 'Hive Exclusive')
-                            Image.asset(
-                              'assets/images/hivelogo.png',
-                              width: 20,
-                              height: 20,
-                              color: isActive ? AppColors.gold : Colors.white70,
-                            )
-                          else if (category == 'Academics')
-                            const Icon(
-                              HugeIcons.strokeRoundedBook02,
-                              color: Colors.white30,
-                              size: 20,
-                            )
-                          else if (category == 'Circles')
-                            const Icon(
-                              HugeIcons.strokeRoundedUserGroup03,
-                              color: Colors.white30,
-                              size: 20,
-                            )
-                          else
-                            Icon(
-                              categoryIcon,
-                              color: isActive ? AppColors.gold : Colors.white70,
-                              size: 20,
-                            ),
-                          const SizedBox(width: 16),
-                          Text(
-                            category,
-                            style: GoogleFonts.outfit(
-                              fontSize: 16,
-                              color: (category == 'Academics' || category == 'Circles')
-                                  ? Colors.white38
-                                  : (isActive ? AppColors.gold : Colors.white),
-                              fontWeight: isActive ? FontWeight.w600 : FontWeight.w400,
-                            ),
-                          ),
-                          const Spacer(),
-                          if (isActive)
-                            const Icon(
-                              Icons.check_circle,
-                              color: AppColors.gold,
-                              size: 20,
-                            )
-                          else if (category == 'Academics' || category == 'Circles')
-                            const Icon(
-                              Icons.lock,
-                              color: Colors.white30,
-                              size: 16,
-                            ),
-                        ],
-                      ),
-                    ),
-                  );
-                },
-                      ),
-                    ],
-                  ),
-              ),
-            ),
-          ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  // This is the single correct implementation of the tags filter
-  void _showTagsFilterBottomSheet(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) {
-        return Container(
-          decoration: BoxDecoration(
-            color: AppColors.black.withOpacity(0.95),
-            borderRadius: const BorderRadius.only(
-              topLeft: Radius.circular(16),
-              topRight: Radius.circular(16),
-            ),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  'Filter Spaces',
-                  style: GoogleFonts.outfit(
-                    color: AppColors.white,
-                    fontSize: 20,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: 16),
-                // Add filter options here
-                Text(
-                  'Coming soon: Filter by tags',
-                  style: GoogleFonts.inter(
-                    color: AppColors.textSecondary,
-                    fontSize: 16,
-                  ),
-                ),
-                const SizedBox(height: 16),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  // Show dialog to create a new space
-  void _showCreateSpaceDialog(BuildContext context) {
-    HapticFeedback.mediumImpact();
-    
-    // Navigate to the CreateSpaceSplashPage instead of showing a dialog
-    GoRouter.of(context).push('/spaces/create');
-  }
-
-  // Show dialog with options to create space or event
-  void _showCreateOptionsDialog(BuildContext context) {
-    showDialog(
-      context: context,
-      barrierDismissible: true,
-      barrierColor: Colors.black.withOpacity(0.75),
-      builder: (context) {
-        return Dialog(
-          backgroundColor: Colors.transparent,
-          insetPadding: EdgeInsets.zero,
-          child: Container(
-            width: double.infinity,
-            height: double.infinity,
-            color: Colors.transparent,
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                // Tappable area to dismiss dialog
-                Expanded(
-                  child: GestureDetector(
-                    onTap: () => Navigator.pop(context),
-                    child: Container(
-                      color: Colors.transparent,
-                    ),
-                  ),
-                ),
-                
-                // Main content container
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.fromLTRB(24, 24, 24, 40),
-                  margin: EdgeInsets.only(
-                    bottom: MediaQuery.of(context).padding.bottom
-                  ),
-                  decoration: BoxDecoration(
-                    borderRadius: const BorderRadius.only(
-                      topLeft: Radius.circular(24),
-                      topRight: Radius.circular(24),
-                    ),
-                    border: Border.all(
-                      color: Colors.white.withOpacity(0.1),
-                      width: 0.5,
-                    ),
-                  ),
-                  child: ClipRRect(
-                    borderRadius: const BorderRadius.only(
-                      topLeft: Radius.circular(24),
-                      topRight: Radius.circular(24),
-                    ),
-                    child: BackdropFilter(
-                      filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
-                      child: Container(
-                        color: AppColors.black.withOpacity(0.2),
-                        child: Stack(
-                          children: [
-                            // Close button at top right
-                            Positioned(
-                              top: 4,
-                              right: 4,
-                              child: Container(
-                                decoration: BoxDecoration(
-                                  color: AppColors.black.withOpacity(0.3),
-                                  borderRadius: BorderRadius.circular(20),
-                                ),
-                                child: IconButton(
-                                  icon: const Icon(Icons.close, color: AppColors.white, size: 20),
-                                  padding: const EdgeInsets.all(8),
-                                  constraints: const BoxConstraints(),
-                                  splashRadius: 24,
-                                  onPressed: () => Navigator.pop(context),
-                                ),
-                              ),
-                            ),
-                            
-                            // Content
-                            Column(
-                              mainAxisSize: MainAxisSize.min,
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                // Add padding at the top to accommodate close button
-                                const SizedBox(height: 8),
-                                
-                                // Adjust the title to avoid overlapping with close button
-                                Padding(
-                                  padding: const EdgeInsets.only(right: 48.0), // Add right padding to avoid X button
-                                  child: Text(
-                                    'Take Back Your School',
-                                    style: GoogleFonts.outfit(
-                                      fontSize: 24,
-                                      fontWeight: FontWeight.bold,
-                                      color: AppColors.white,
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(height: 24),
-                                
-                                // Create Space button
-                                InkWell(
-                                  onTap: () {
-                                    HapticFeedback.mediumImpact();
-                                    Navigator.pop(context);
-                                    // Navigate to the CreateSpaceSplashPage 
-                                    GoRouter.of(context).push('/spaces/create');
-                                  },
-                                  borderRadius: BorderRadius.circular(16),
-                                  child: Container(
-                                    padding: const EdgeInsets.all(20),
-                                    decoration: BoxDecoration(
-                                      color: AppColors.cardBackground,
-                                      borderRadius: BorderRadius.circular(16),
-                                      border: Border.all(
-                                        color: Colors.white.withOpacity(0.1),
-                                        width: 0.5,
-                                      ),
-                                    ),
-                                    child: Row(
-                                      children: [
-                                        const Icon(
-                                          HugeIcons.strokeRoundedUserGroup03, 
-                                          color: AppColors.gold,
-                                          size: 24,
-                                        ),
-                                        const SizedBox(width: 16),
-                                        Expanded(
-                                          child: Column(
-                                            crossAxisAlignment: CrossAxisAlignment.start,
-                                            children: [
-                                              Text(
-                                                'Create Space',
-                                                style: GoogleFonts.outfit(
-                                                  fontSize: 18,
-                                                  fontWeight: FontWeight.w600,
-                                                  color: AppColors.white,
-                                                ),
-                                              ),
-                                              const SizedBox(height: 4),
-                                              Text(
-                                                'Create a new community for your school',
-                                                style: GoogleFonts.inter(
-                                                  fontSize: 14,
-                                                  color: AppColors.textSecondary,
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                        const Icon(
-                                          Icons.arrow_forward_ios,
-                                          color: AppColors.textSecondary,
-                                          size: 16,
-                                        ),
-                                      ],
-                                    ),
-                                  ).addGlassmorphism(
-                                    borderRadius: 16,
-                                    blur: 15.0,
-                                    opacity: 0.1,
-                                    addGoldAccent: true,
-                                  ),
-                                ),
-                                
-                                const SizedBox(height: 16),
-                                
-                                // Create Event button
-                                InkWell(
-                                  onTap: () {
-                                    HapticFeedback.mediumImpact();
-                                    Navigator.pop(context);
-                                    _showCreateEventDialog(context);
-                                  },
-                                  borderRadius: BorderRadius.circular(16),
-                                  child: Container(
-                                    padding: const EdgeInsets.all(20),
-                                    decoration: BoxDecoration(
-                                      color: AppColors.cardBackground,
-                                      borderRadius: BorderRadius.circular(16),
-                                      border: Border.all(
-                                        color: Colors.white.withOpacity(0.1),
-                                        width: 0.5,
-                                      ),
-                                    ),
-                                    child: Row(
-                                      children: [
-                                        const Icon(
-                                          HugeIcons.calendar, 
-                                          color: AppColors.gold,
-                                          size: 24,
-                                        ),
-                                        const SizedBox(width: 16),
-                                        Expanded(
-                                          child: Column(
-                                            crossAxisAlignment: CrossAxisAlignment.start,
-                                            children: [
-                                              Text(
-                                                'Create Event',
-                                                style: GoogleFonts.outfit(
-                                                  fontSize: 18,
-                                                  fontWeight: FontWeight.w600,
-                                                  color: AppColors.white,
-                                                ),
-                                              ),
-                                              const SizedBox(height: 4),
-                                              Text(
-                                                'Schedule an event in spaces you admin',
-                                                style: GoogleFonts.inter(
-                                                  fontSize: 14,
-                                                  color: AppColors.textSecondary,
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                        const Icon(
-                                          Icons.arrow_forward_ios,
-                                          color: AppColors.textSecondary,
-                                          size: 16,
-                                        ),
-                                      ],
-                                    ),
-                                  ).addGlassmorphism(
-                                    borderRadius: 16,
-                                    blur: 15.0,
-                                    opacity: 0.1,
-                                    addGoldAccent: true,
-                                  ),
-                                ),
-                                
-                                // Add extra bottom space to ensure it's above the nav bar
-                                const SizedBox(height: 8),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-  
-  // Method to show event creation dialog
-  void _showCreateEventDialog(BuildContext context) {
-    // Check if the user has any spaces to create events in
-    final userSpacesAsync = ref.read(user_providers.userSpacesProvider);
-    final currentUserId = FirebaseAuth.instance.currentUser?.uid;
-    
-    if (currentUserId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('You must be signed in to create an event'),
-          backgroundColor: Colors.black.withOpacity(0.8),
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10),
-          ),
-        ),
-      );
-      return;
-    }
-    
-    userSpacesAsync.when(
-      data: (userSpaces) {
-        // Filter spaces where the user is an admin
-        final adminSpaces = userSpaces.where((space) => 
-          space.admins.contains(currentUserId)).toList();
+        // --- NEW: Determine if any spaces are newly joined ---
+        final currentSpaceIds = userSpacesEntities.map((entity) => entity.id).toList();
+        final Set<String> newlyJoinedSpaceIds = {};
         
-        if (adminSpaces.isEmpty) {
-          // Show a message that user needs to be an admin of a space
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: const Text('You must be an admin of a space to create events'),
-              backgroundColor: Colors.black.withOpacity(0.8),
-              behavior: SnackBarBehavior.floating,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
-              ),
-              action: SnackBarAction(
-                label: 'Create Space',
-                textColor: AppColors.gold,
-                onPressed: () => _showCreateSpaceDialog(context),
-              ),
-            ),
-          );
-          return;
+        if (_previousSpaceIds.isNotEmpty) {
+          // Find spaces that are in the current list but weren't in the previous list
+          for (final id in currentSpaceIds) {
+            if (!_previousSpaceIds.contains(id)) {
+              newlyJoinedSpaceIds.add(id);
+            }
+          }
         }
+        // --- END NEW ---
 
-        // If there are spaces where user is admin, show the space selection dialog
-        showDialog(
-          context: context,
-          barrierDismissible: true,
-          barrierColor: Colors.black.withOpacity(0.75),
-          builder: (context) {
-            return Dialog(
-              backgroundColor: Colors.transparent,
-              insetPadding: EdgeInsets.zero,
-              child: Container(
-                width: double.infinity,
-                height: double.infinity,
-                color: Colors.transparent,
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    // Tappable area to dismiss dialog
-                    Expanded(
-                      child: GestureDetector(
-                        onTap: () => Navigator.pop(context),
-                        child: Container(
-                          color: Colors.transparent,
-                        ),
-                      ),
-                    ),
-                    
-                    // Main content container
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.fromLTRB(24, 24, 24, 40),
-                      margin: EdgeInsets.only(
-                        bottom: MediaQuery.of(context).padding.bottom
-                      ),
-                      decoration: BoxDecoration(
-                        borderRadius: const BorderRadius.only(
-                          topLeft: Radius.circular(24),
-                          topRight: Radius.circular(24),
-                        ),
-                        border: Border.all(
-                          color: Colors.white.withOpacity(0.1),
-                          width: 0.5,
-                        ),
-                      ),
-                      child: ClipRRect(
-                        borderRadius: const BorderRadius.only(
-                          topLeft: Radius.circular(24),
-                          topRight: Radius.circular(24),
-                        ),
-                        child: BackdropFilter(
-                          filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
-                          child: Container(
-                            color: AppColors.black.withOpacity(0.2),
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    Text(
-                                      'Select a Space',
-                                      style: GoogleFonts.outfit(
-                                        fontSize: 24,
-                                        fontWeight: FontWeight.bold,
-                                        color: AppColors.white,
-                                      ),
-                                    ),
-                                    IconButton(
-                                      icon: const Icon(Icons.close, color: AppColors.white),
-                                      onPressed: () => Navigator.pop(context),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 8),
-                                Text(
-                                  'Choose a space you admin to create your event in:',
-                                  style: GoogleFonts.inter(
-                                    fontSize: 16,
-                                    color: AppColors.textSecondary,
-                                  ),
-                                ),
-                                const SizedBox(height: 16),
-                                
-                                // List of spaces where user is admin
-                                ConstrainedBox(
-                                  constraints: BoxConstraints(
-                                    maxHeight: MediaQuery.of(context).size.height * 0.4,
-                                  ),
-                                  child: ListView.builder(
-                                    shrinkWrap: true,
-                                    itemCount: adminSpaces.length,
-                                    itemBuilder: (context, index) {
-                                      final space = adminSpaces[index];
-                                      return Padding(
-                                        padding: const EdgeInsets.only(bottom: 12),
-                                        child: InkWell(
-                                          onTap: () {
-                                            HapticFeedback.mediumImpact();
-                                            Navigator.pop(context);
-                                            
-                                            // Navigate to create event page
-                                            Navigator.of(context).push(
-                                              MaterialPageRoute(
-                                                builder: (context) => CreateEventPage(
-                                                  selectedSpace: space.toSpace(),
-                                                ),
-                                              ),
-                                            );
-                                          },
-                                          child: Container(
-                                            padding: const EdgeInsets.all(16),
-                                            decoration: BoxDecoration(
-                                              color: AppColors.cardBackground,
-                                              borderRadius: BorderRadius.circular(12),
-                                              border: Border.all(
-                                                color: Colors.white.withOpacity(0.1),
-                                                width: 0.5,
-                                              ),
-                                            ),
-                                            child: Row(
-                                              children: [
-                                                ClipRRect(
-                                                  borderRadius: BorderRadius.circular(8),
-                                                  child: space.imageUrl?.isNotEmpty == true
-                                                    ? Image.network(
-                                                        space.imageUrl!,
-                                                        width: 48,
-                                                        height: 48,
-                                                        fit: BoxFit.cover,
-                                                      )
-                                                    : Container(
-                                                        width: 48,
-                                                        height: 48,
-                                                        color: AppColors.gold.withOpacity(0.2),
-                                                        child: const Icon(
-                                                          Icons.groups,
-                                                          color: AppColors.gold,
-                                                        ),
-                                                      ),
-                                                ),
-                                                const SizedBox(width: 16),
-                                                Expanded(
-                                                  child: Column(
-                                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                                    children: [
-                                                      Text(
-                                                        space.name,
-                                                        style: GoogleFonts.outfit(
-                                                          fontSize: 16,
-                                                          fontWeight: FontWeight.w600,
-                                                          color: AppColors.white,
-                                                        ),
-                                                      ),
-                                                      if (space.description.isNotEmpty) ...[
-                                                        const SizedBox(height: 4),
-                                                        Text(
-                                                          space.description,
-                                                          maxLines: 1,
-                                                          overflow: TextOverflow.ellipsis,
-                                                          style: GoogleFonts.inter(
-                                                            fontSize: 14,
-                                                            color: AppColors.textSecondary,
-                                                          ),
-                                                        ),
-                                                      ],
-                                                    ],
-                                                  ),
-                                                ),
-                                                const Icon(
-                                                  Icons.arrow_forward_ios,
-                                                  color: AppColors.textSecondary,
-                                                  size: 16,
-                                                ),
-                                              ],
-                                            ),
-                                          ).addGlassmorphism(
-                                            borderRadius: 12,
-                                            blur: GlassmorphismGuide.kCardBlur,
-                                            opacity: GlassmorphismGuide.kCardGlassOpacity,
-                                          ),
-                                        ),
-                                      );
-                                    },
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
+        final List<Map<String, dynamic>> mySpacesData = [
+          {'type': 'create', 'label': 'Create Space', 'entity': null},
+          ...userSpacesEntities.map((entity) => {
+             'type': 'space',
+             'label': entity.name,
+             'details': null,
+             'imageUrl': entity.imageUrl,
+             'selected': false,
+             'entity': entity,
+             'isNewlyJoined': newlyJoinedSpaceIds.contains(entity.id), // NEW: Pass the newly joined flag
+          }),
+        ];
+
+        // --- Refined Height Calculation --- 
+        // Height needed for one horizontal list item (Circle + Spacing + Label)
+        final double circleDiameter = _mySpaceCircleRadius * 2; // 72.0
+        final double spacingBelowCircle = 6.0;
+        final double labelHeightEstimate = 30.0; // Approx height for max 2 lines of text
+        final double itemVerticalPadding = 8.0; // Extra buffer within the list item height
+        final double listHeight = circleDiameter + spacingBelowCircle + labelHeightEstimate + itemVerticalPadding; // Height for the SizedBox containing the ListView
+
+        // Height needed for the separate "You're not in any Spaces..." text widget
+        final double emptyStateTextTopPadding = 12.0;
+        final double emptyStateTextHeightEstimate = 20.0; 
+        final double emptyStateWidgetHeight = isEmptyState ? (emptyStateTextTopPadding + emptyStateTextHeightEstimate) : 0.0;
+
+        // Total container height
+        final double containerVerticalPadding = 16.0; // Top/Bottom padding for the outer Container
+        final double containerHeight = listHeight + emptyStateWidgetHeight + (containerVerticalPadding * 2);
+        // --- End Refined Height Calculation ---
+
+        return Container(
+          height: containerHeight, // Use new calculated height
+          padding: EdgeInsets.symmetric(vertical: containerVerticalPadding), // Use correct padding var
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SizedBox(
+                key: _mySpacesListKey, // --- NEW: Assign key to the container ---
+                height: listHeight, // Use height calculated specifically for the list view
+                child: ListView.builder(
+                  controller: _mySpacesScrollController, // --- NEW: Assign controller ---
+                  scrollDirection: Axis.horizontal,
+                  physics: const BouncingScrollPhysics(), // Changed from ClampingScrollPhysics
+                  padding: const EdgeInsets.symmetric(horizontal: _mySpaceHorizontalPadding),
+                  itemCount: mySpacesData.length,
+                  itemBuilder: (context, index) {
+                    final itemData = mySpacesData[index];
+                    final bool isCreateItem = itemData['type'] == 'create';
+                    return MySpaceCircleItem(
+                      key: ValueKey(itemData['entity']?.id ?? itemData['label']),
+                      type: itemData['type'],
+                      label: itemData['label'],
+                      details: itemData['details'],
+                      imageUrl: itemData['imageUrl'],
+                      selected: itemData['selected'] ?? false,
+                      showCreateHighlight: isCreateItem && isEmptyState,
+                      spaceEntity: itemData['entity'],
+                      isNewlyJoined: itemData['isNewlyJoined'] ?? false, // NEW: Pass the newly joined flag
+                    );
+                  },
                 ),
               ),
-            );
-          },
+              if (isEmptyState)
+                Padding(
+                  // Use the calculated top padding
+                  padding: EdgeInsets.only(top: emptyStateTextTopPadding),
+                  child: AnimatedOpacity(
+                    duration: const Duration(milliseconds: 500),
+                    opacity: 1.0,
+                    child: Text(
+                      'You\'re not in any Spaces yet',
+                      style: GoogleFonts.inter(
+                        color: AppColors.textSecondary,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
         );
       },
       loading: () {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('Loading your spaces...'),
-            backgroundColor: Colors.black.withOpacity(0.8),
-            behavior: SnackBarBehavior.floating,
-          ),
+        // Calculate loading height based on non-empty state height for consistency
+        final double loadingListHeight = (_mySpaceCircleRadius * 2) + 6.0 + 30.0 + 8.0;
+        final double loadingContainerHeight = loadingListHeight + (16.0 * 2);
+        return Container(
+          height: loadingContainerHeight,
+          alignment: Alignment.center,
+          child: const CircularProgressIndicator(color: AppColors.gold),
         );
       },
       error: (error, stackTrace) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error loading spaces: ${error.toString()}'),
-            backgroundColor: Colors.red.withOpacity(0.8),
-            behavior: SnackBarBehavior.floating,
-          ),
+        print("Error loading user spaces: $error\n$stackTrace");
+        // Calculate error height based on non-empty state height for consistency
+        final double errorListHeight = (_mySpaceCircleRadius * 2) + 6.0 + 30.0 + 8.0;
+        final double errorContainerHeight = errorListHeight + (16.0 * 2);
+        return Container(
+           height: errorContainerHeight,
+           alignment: Alignment.center,
+           padding: const EdgeInsets.symmetric(horizontal: 16.0),
+           child: Text(
+            'Error loading your spaces.',
+            style: GoogleFonts.inter(color: AppColors.error),
+            textAlign: TextAlign.center,
+           ),
         );
       },
     );
   }
 
-  Widget _buildMySpacesGrid(List<Space> spaces) {
-    // Implementation replaced
-    if (spaces.isEmpty) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(32.0),
-          child: Text(
-            'You haven\'t joined any spaces yet!\nExplore and find your communities.',
-            style: GoogleFonts.outfit(
-              color: AppColors.textSecondary,
-              fontSize: 16,
-            ),
-            textAlign: TextAlign.center,
-          ),
-        ),
-      );
-    }
+  // Updated Discover Sliver List with Data Integration using allSpacesProvider
+  Widget _buildDiscoverSliverList() {
+    // Watch the application-level allSpacesProvider
+    final discoverSpacesAsync = ref.watch(application_providers.allSpacesProvider);
 
-    return AnimationLimiter(
-      child: GridView.builder(
-        controller: _mySpacesScrollController,
-        padding: const EdgeInsets.all(16.0),
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 3,
-          crossAxisSpacing: 12.0,
-          mainAxisSpacing: 12.0,
-          childAspectRatio: 0.85, // Might need adjustment after removing separate text row
-        ),
-        itemCount: spaces.length,
-        itemBuilder: (context, index) {
-          final space = spaces[index];
-          return AnimationConfiguration.staggeredGrid(
-            position: index,
-            duration: const Duration(milliseconds: 375),
-            columnCount: 3,
-            child: ScaleAnimation(
-              child: FadeInAnimation(
-                child: SpaceGridItem(
-                  space: space,
-                  onTap: () => _handleTapSpace(space),
+    return discoverSpacesAsync.when(
+      data: (discoverSpacesEntities) { // Directly receive the list
+        // --- DEBUG LOG ---
+        debugPrint('Discover Spaces Provider Data: Received ${discoverSpacesEntities.length} space entities directly.');
+
+        if (discoverSpacesEntities.isEmpty) {
+          return const SliverFillRemaining(
+            hasScrollBody: false, // Prevent unnecessary scrolling
+            child: Center(
+              child: Padding(
+                padding: EdgeInsets.all(16.0), // Add padding
+                child: Text(
+                  'No spaces to discover right now.\\nTry creating one!', // Updated empty state text
+                  style: TextStyle(color: AppColors.textSecondary, height: 1.5), // Added line height
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            ),
+          );
+        }
+
+        return SliverPadding(
+          padding: const EdgeInsets.only(left: 16.0, right: 16.0, bottom: 16.0), // Add bottom padding
+          sliver: SliverList(
+            delegate: SliverChildBuilderDelegate(
+              (context, index) { // Pass index here
+                final entity = discoverSpacesEntities[index];
+                // Use the DiscoverSpaceCard StatefulWidget, passing the index
+                return DiscoverSpaceCard(
+                  key: ValueKey(entity.id), // Use entity ID for key
+                  index: index, // Pass index for alternating background
+                  spaceEntity: entity,
+                );
+              },
+              childCount: discoverSpacesEntities.length,
+            ),
+          ),
+        );
+      },
+      loading: () {
+        // Return a sliver loading state (e.g., shimmer list)
+        return SliverPadding(
+          padding: const EdgeInsets.symmetric(horizontal: 16.0),
+          sliver: SliverList(
+             delegate: SliverChildBuilderDelegate(
+               // Pass index to shimmer card if needed for alternating shimmer styles
+               (context, index) => ShimmerDiscoverCard(index: index),
+               childCount: 5, // Show a few shimmers
+            ),
+          ),
+        );
+      },
+      error: (error, stackTrace) {
+         print("Error loading discover spaces: $error\\n$stackTrace");
+         return SliverFillRemaining(
+            hasScrollBody: false,
+            child: Center(
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Text(
+                  'Error loading spaces to discover.\\nPlease try again later.', // Updated error message
+                  style: GoogleFonts.inter(color: AppColors.error),
+                  textAlign: TextAlign.center,
                 ),
               ),
             ),
           );
         },
-      ),
     );
   }
 
-  // Builds the app bar for the spaces page
-  Widget _buildAppBar() {
-    return AppBar(
-      backgroundColor: Colors.transparent,
-      elevation: 0,
-      title: Text(
-        'Spaces',
-        style: GoogleFonts.inter(
-          color: Colors.white,
-          fontWeight: FontWeight.bold,
-        ),
-      ),
-      actions: [
-        IconButton(
-          icon: const Icon(Icons.notifications_outlined, color: Colors.white),
-          onPressed: () {
-            // Navigate to notifications
-            HapticFeedback.mediumImpact();
-          },
-        ),
-      ],
-    );
-  }
-
-  // Builds the tab bar for the spaces page
-  Widget _buildTabBar() {
-    return TabBar(
-      controller: _tabController,
-      indicatorColor: AppColors.gold,
-      labelColor: AppColors.gold,
-      unselectedLabelColor: Colors.white,
-      tabs: const [
-        Tab(text: 'My Spaces'),
-        Tab(text: 'Discover'),
-      ],
-    );
-  }
-
-  // Builds the floating action button for creating spaces
-  Widget _buildCreateSpaceButton(ProfileSyncState profileAsync) {
-    return FloatingActionButton(
-      backgroundColor: AppColors.gold,
-      foregroundColor: Colors.black,
-      onPressed: () {
-        // Show create space dialog or navigate to create space page
-        HapticFeedback.mediumImpact();
-        _showCreateSpaceDialog(context);
-      },
-      child: const Icon(Icons.add),
-    );
-  }
-
-  void _performSearch(String query) {
-    setState(() {
-      _isSearching = true;
-    });
-    // Use the provider directly
-    ref.read(spaceSearchProvider.notifier).search(query);
-  }
-
-  void _clearSearch() {
-    _searchController.clear();
-    setState(() {
-      _isSearching = false;
-      _isSearchExpanded = false;
-    });
-    // Use the provider directly
-    ref.read(spaceSearchProvider.notifier).clear();
-  }
+  // ... Keep any other relevant methods (e.g., for data fetching/handling if they can be adapted)
+  // ... Remove methods specific to the old UI (like _buildSpaceCard, _buildLoadingIndicator, etc. if they are replaced)
 }
 
 // Keeping _SliverCategorySelectorDelegate for category selector
@@ -3662,6 +691,1358 @@ class SpaceGridItem extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+// NEW: Convert to ConsumerStatefulWidget for provider access
+class DiscoverSpaceCard extends ConsumerStatefulWidget {
+  final int index; // Index for alternating background
+  final entities.SpaceEntity spaceEntity;
+
+  const DiscoverSpaceCard({
+    super.key,
+    required this.index,
+    required this.spaceEntity,
+  });
+
+  @override
+  ConsumerState<DiscoverSpaceCard> createState() => _DiscoverSpaceCardState(); // Update state type
+}
+
+// Update state class to extend ConsumerState
+class _DiscoverSpaceCardState extends ConsumerState<DiscoverSpaceCard> with TickerProviderStateMixin { // Use TickerProviderStateMixin for multiple controllers
+  // --- NEW: Key for this Card ---
+  final GlobalKey _cardKey = GlobalKey();
+  // --- END NEW ---
+
+  // --- Nullable Animation Controllers & Animations ---
+  AnimationController? _animationController;
+  Animation<double>? _scaleAnimation;
+  AnimationController? _glowController;
+  Animation<double>? _glowAnimation;
+  // --- End Nullable ---
+
+  // Flag to prevent multiple highlights of the My Spaces section
+  bool _isFlashingMySpaces = false;
+
+  // Define "Just Created" threshold (e.g., 48 hours)
+  final Duration justCreatedThreshold = const Duration(hours: 48);
+
+  // --- NEW: State for handling join button ---
+  bool _isJoining = false;
+  // Track successful join locally for checkmark display after loading
+  bool _justJoined = false; 
+  // --- END NEW ---
+
+  @override
+  void initState() {
+    super.initState();
+    
+    // --- Initialize Tap Animation ---
+    _animationController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 100),
+      reverseDuration: const Duration(milliseconds: 400),
+    );
+    _scaleAnimation = Tween<double>(begin: 1.0, end: 0.95).animate(
+      CurvedAnimation(
+        parent: _animationController!, // Safe to use ! here as it's initialized right above
+        curve: Curves.easeOut,
+        reverseCurve: Curves.elasticOut,
+      ),
+    );
+    // --- End Initialize Tap Animation ---
+
+    // --- Initialize Glow Animation ---
+    _glowController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 300), // Glow duration
+    );
+    _glowAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _glowController!, curve: Curves.easeOut), // Safe to use ! here
+    );
+    // --- END Initialize Glow Animation ---
+  }
+
+  @override
+  void dispose() {
+    _animationController?.dispose(); // Use null-aware dispose
+    _glowController?.dispose(); // Use null-aware dispose
+    super.dispose();
+  }
+
+  // --- Tap Handlers (keep existing logic, add null checks) ---
+  void _handleTapDown(TapDownDetails details) { _animationController?.forward(); }
+  void _handleTapUp(TapUpDetails details) {
+    Future.delayed(const Duration(milliseconds: 50), () {
+       if (mounted) { _animationController?.reverse(); }
+    });
+    HapticFeedback.lightImpact();
+    print('Tapped on discover space: ${widget.spaceEntity.name} (ID: ${widget.spaceEntity.id})');
+    // --- NAVIGATION UPDATED --- 
+    // Use pushNamed with path parameters for both type and id
+    final spaceTypeString = _spaceTypeToString(widget.spaceEntity.spaceType);
+    context.pushNamed(
+      'space_detail', 
+      pathParameters: {
+        'type': spaceTypeString, 
+        'id': widget.spaceEntity.id
+      },
+      extra: widget.spaceEntity.toSpace() // Pass the Space object if needed by detail screen
+    );
+    // --- END NAVIGATION --- 
+  }
+  void _handleTapCancel() { if (mounted) { _animationController?.reverse(); } }
+  void _handleLongPress() {
+    HapticFeedback.mediumImpact();
+    print('Long pressed on discover: ${widget.spaceEntity.name}');
+    _showMiniMenu(context, widget.spaceEntity);
+  }
+  void _showMiniMenu(BuildContext context, entities.SpaceEntity spaceEntity) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.dark2.withOpacity(0.9), // Use secondary surface, slightly transparent
+      barrierColor: Colors.black.withOpacity(0.6), // Dim background
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.only(
+          topLeft: Radius.circular(16.0), // radius-lg
+          topRight: Radius.circular(16.0),
+        ),
+      ),
+      builder: (context) {
+        return Padding(
+          padding: const EdgeInsets.symmetric(vertical: 16.0, horizontal: 8.0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Optional: Handle bar indicator
+              Container(
+                width: 40,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: 16),
+                decoration: BoxDecoration(
+                  color: AppColors.grey700,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              ListTile(
+                leading: const Icon(Icons.group_add_outlined, color: AppColors.textSecondary),
+                title: Text('Join Space', style: GoogleFonts.inter(color: AppColors.textPrimary)),
+                onTap: () {
+                  Navigator.pop(context);
+                  print('Join Space action for ${spaceEntity.name}');
+                  // TODO: Implement join action using spaceEntity.id
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.visibility_outlined, color: AppColors.textSecondary),
+                title: Text('View Drops', style: GoogleFonts.inter(color: AppColors.textPrimary)),
+                onTap: () {
+                  Navigator.pop(context);
+                  print('View Drops action for ${spaceEntity.name}');
+                  // TODO: Implement view drops action using spaceEntity.id
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.bookmark_border, color: AppColors.textSecondary),
+                title: Text('Save for Later', style: GoogleFonts.inter(color: AppColors.textPrimary)),
+                onTap: () {
+                  Navigator.pop(context);
+                  print('Save for Later action for ${spaceEntity.name}');
+                  // TODO: Implement save action using spaceEntity.id
+                },
+              ),
+               // Add padding for safe area / navigation bar
+              SizedBox(height: MediaQuery.of(context).padding.bottom + 8),
+            ],
+          ),
+        );
+      },
+    );
+  }
+  // --- End Tap Handlers ---
+
+  // --- Helper to determine the icon ---
+  IconData _getSpaceIcon(entities.SpaceEntity entity) {
+    // 1. Try using the iconCodePoint from the entity if valid
+    if (entity.iconCodePoint > 0) {
+      // Ensure the font family matches where the codepoint is defined
+      // Assuming MaterialIcons for now, adjust if different
+      return IconData(entity.iconCodePoint, fontFamily: 'MaterialIcons');
+    }
+
+    // 2. Fallback based on SpaceType
+    switch (entity.spaceType) {
+      case entities.SpaceType.studentOrg:
+        return PhosphorIcons.users(); // Example icon
+      case entities.SpaceType.universityOrg:
+        return PhosphorIcons.buildings(); // Example icon
+      case entities.SpaceType.campusLiving:
+        return PhosphorIcons.house(); // Example icon
+      case entities.SpaceType.fraternityAndSorority:
+        return PhosphorIcons.usersThree(); // Example icon
+      case entities.SpaceType.hiveExclusive:
+        return PhosphorIcons.crownSimple(); // Example icon for exclusive
+      case entities.SpaceType.other:
+      default:
+        return PhosphorIcons.circlesFour(); // Default fallback
+    }
+    // TODO: Consider using tags for more specific icons if type is 'other'
+  }
+
+  // --- Helper to build subtitle ---
+  Widget _buildSubtitle(entities.SpaceEntity entity) {
+    final now = DateTime.now();
+    final timeSinceCreation = now.difference(entity.createdAt ?? now);
+    final bool isJustCreated = timeSinceCreation < justCreatedThreshold;
+    final bool isTrending = entity.metrics.isTrending ?? false;
+    final int memberCount = entity.metrics.memberCount;
+
+    String text;
+    Color color = AppColors.textSecondary;
+    FontWeight weight = FontWeight.w500;
+    String prefix = '';
+
+    if (isJustCreated) {
+      text = 'Just Created';
+      color = AppColors.gold; // Highlight new spaces
+      prefix = '✨ ';
+    } else if (isTrending) {
+      text = 'Trending';
+       color = AppColors.gold; // Highlight trending spaces
+       prefix = '🔥 ';
+       if (memberCount > 0) {
+         text += ' • $memberCount members'; // Add member count if trending and > 0
+       }
+    } else if (memberCount > 0) {
+      text = '$memberCount member${memberCount == 1 ? "" : "s"}';
+    } else {
+      // Case: Not just created, not trending, 0 members
+      text = 'New Space'; // Use "New Space" instead of "0 members"
+      color = AppColors.textSecondary;
+       prefix = '✨ '; // Use sparkle for new spaces too
+    }
+
+    return Text(
+      prefix + text,
+      style: GoogleFonts.inter(
+        fontSize: 12,
+        fontWeight: weight,
+        color: color,
+        letterSpacing: 0.1,
+      ),
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+    );
+  }
+
+  // Simple animation for successful space join
+  void _performSuccessAnimation(BuildContext context, IconData iconData) {
+    // 1. Show success snackbar
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            Icon(iconData, color: AppColors.dark, size: 18),
+            const SizedBox(width: 8),
+            Text('Space added to your collection!', 
+              style: GoogleFonts.inter(
+                color: AppColors.dark,
+                fontWeight: FontWeight.w600
+              )
+            ),
+          ],
+        ),
+        backgroundColor: AppColors.gold,
+        duration: const Duration(milliseconds: 1800),
+        behavior: SnackBarBehavior.floating,
+        margin: const EdgeInsets.all(8),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+        ),
+        action: SnackBarAction(
+          label: 'VIEW',
+          textColor: AppColors.dark,
+          onPressed: () {
+            // 2. Scroll to My Spaces section and highlight the new space
+            _scrollToMySpacesSection(context);
+          },
+        ),
+      ),
+    );
+  }
+  
+  // Scroll to the My Spaces section after joining
+  void _scrollToMySpacesSection(BuildContext context) {
+    try {
+      // Find the nearest scrollable ancestor
+      final scrollController = PrimaryScrollController.of(context);
+      if (scrollController != null && scrollController.hasClients) {
+        // Scroll to the top where My Spaces are located
+        scrollController.animateTo(
+          0, // Scroll to top
+          duration: const Duration(milliseconds: 500),
+          curve: Curves.easeOutQuad,
+        );
+        
+        // Wait a short time to ensure the scroll has happened
+        Future.delayed(const Duration(milliseconds: 150), () {
+          if (mounted) {
+            // Flash the My Spaces section to highlight it
+            _flashMySpacesSection();
+          }
+        });
+      }
+    } catch (e) {
+      debugPrint('Error scrolling to My Spaces: $e');
+      // Don't show error to user - non-critical UI enhancement
+    }
+  }
+  
+  // Make the My Spaces section flash briefly to draw attention
+  void _flashMySpacesSection() {
+    if (_isFlashingMySpaces) return;
+    _isFlashingMySpaces = true;
+    
+    try {
+      // My Spaces list is already available through the static key
+      final mySpacesList = SpacesPage.mySpacesListKey.currentContext?.findRenderObject();
+      if (mySpacesList == null) {
+        _isFlashingMySpaces = false;
+        return;
+      }
+      
+      // Find nearest ancestor that can showOverlay
+      final BuildContext? overlayContext = _cardKey.currentContext;
+      if (overlayContext == null) {
+        _isFlashingMySpaces = false;
+        return;
+      }
+      
+      final overlay = Overlay.of(overlayContext);
+      late OverlayEntry overlayEntry;
+      
+            overlayEntry = OverlayEntry(
+        builder: (context) {
+          try {
+            // Convert render object position to global position
+            final RenderBox box = mySpacesList as RenderBox;
+            final position = box.localToGlobal(Offset.zero);
+            
+            return Positioned(
+              left: position.dx,
+              top: position.dy,
+              width: box.size.width,
+              height: box.size.height,
+              child: TweenAnimationBuilder<double>(
+                tween: Tween<double>(begin: 0.0, end: 1.0),
+                duration: const Duration(milliseconds: 1000),
+                curve: Curves.easeInOut,
+                builder: (context, value, child) {
+                  // Create a fading gold highlight effect
+                  return Container(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(8.0),
+                      border: Border.all(
+                        color: AppColors.gold.withOpacity(0.7 * (1.0 - value)),
+                        width: 2.0,
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: AppColors.gold.withOpacity(0.4 * (1.0 - value)),
+                          blurRadius: 8,
+                          spreadRadius: 2,
+                        ),
+                      ],
+                    ),
+                  );
+                },
+                onEnd: () {
+                  // Remove the overlay when animation completes
+                  overlayEntry.remove();
+                  _isFlashingMySpaces = false;
+                },
+              ),
+            );
+          } catch (e) {
+            // Return an empty widget if there's an error
+            debugPrint('Error in flash overlay builder: $e');
+            Future.microtask(() {
+              overlayEntry.remove();
+              _isFlashingMySpaces = false;
+            });
+            return const SizedBox.shrink();
+          }
+        },
+      );
+      
+      // Add the highlight overlay
+      overlay.insert(overlayEntry);
+    } catch (e) {
+      debugPrint('Error flashing My Spaces section: $e');
+      _isFlashingMySpaces = false;
+    }
+  }
+
+  // REVISED: Direct Firestore update approach to avoid Firestore settings issues
+  Future<void> _handleJoinSpace() async {
+    // Skip if already joining, already joined, or just joined
+    if (_isJoining || widget.spaceEntity.isJoined || _justJoined) return;
+
+    try {
+      // 1. Start visual feedback
+      HapticFeedback.lightImpact();
+      setState(() {
+        _isJoining = true;
+      });
+      
+      if (_glowController != null) {
+        _glowController!.forward();
+      }
+
+      // 2. Get current user
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) {
+        throw Exception('User must be logged in to join a space');
+      }
+
+      final spaceId = widget.spaceEntity.id;
+      final userId = user.uid;
+      
+      // Track start time for optimistic UI updates
+      final startTime = DateTime.now();
+
+      // 3. Join the space directly with Firebase - avoid provider which causes settings issues
+      try {
+        // First, update user's followedSpaces (this is the key operation)
+        await FirebaseFirestore.instance.collection('users').doc(userId).update({
+          'followedSpaces': FieldValue.arrayUnion([spaceId]),
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+
+        // Success guaranteed at this point - update UI optimistically while background operations complete
+        if (mounted) {
+        setState(() {
+            _isJoining = false;
+            _justJoined = true;
+          });
+          
+          // Show success animation immediately
+          _performSuccessAnimation(context, _getSpaceIcon(widget.spaceEntity));
+          
+          // Fade out glow effect
+          if (_glowController != null) {
+            _glowController!.reverse();
+          }
+          
+          // Invalidate user spaces provider to refresh the data
+          ref.invalidate(user_providers.userSpacesProvider);
+        }
+
+        // Continue with background operations (not blocking the UI)
+        try {
+          // Update the space's member count
+          final spaceQuery = await FirebaseFirestore.instance
+              .collectionGroup('spaces')
+              .where('id', isEqualTo: spaceId)
+              .limit(1)
+              .get();
+
+          if (spaceQuery.docs.isNotEmpty) {
+            final spaceRef = spaceQuery.docs.first.reference;
+            await spaceRef.update({
+              'metrics.memberCount': FieldValue.increment(1),
+              'updatedAt': FieldValue.serverTimestamp(),
+            });
+          }
+        } catch (backgroundError) {
+          // Log background errors but don't affect the user experience
+          debugPrint('Background operation error (non-critical): $backgroundError');
+        }
+      } catch (e) {
+        // Only show error UI if we're still mounted
+      if (mounted) {
+        setState(() {
+          _isJoining = false;
+          _justJoined = false;
+        });
+          
+          if (_glowController != null) {
+            _glowController!.reverse();
+          }
+          
+          // Show error message with retry option
+          ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+                  const Icon(Icons.error_outline, color: Colors.white, size: 18),
+            const SizedBox(width: 8),
+                  Expanded(
+                    child: Text('Could not join ${widget.spaceEntity.name}'),
+            ),
+          ],
+        ),
+              backgroundColor: Colors.red.shade700,
+              duration: const Duration(seconds: 4),
+              action: SnackBarAction(
+                label: 'RETRY',
+                textColor: Colors.white,
+                onPressed: () {
+                  // Retry joining
+                  if (mounted) {
+                    _handleJoinSpace();
+                  }
+                },
+              ),
+            )
+          );
+        }
+        
+        // Re-throw to be caught by the outer try-catch
+        rethrow;
+      }
+    } catch (e) {
+      debugPrint('Error in join space flow: $e');
+      
+      // Recovery - make sure UI is in the correct state
+      if (mounted) {
+        setState(() {
+          _isJoining = false;
+          _justJoined = false;
+        });
+        
+        if (_glowController != null) {
+          _glowController!.reverse();
+        }
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // Watch the specific space's joined status from the provider if possible.
+    // For now, rely on initial widget state and local _justJoined flag.
+    // A more robust solution involves watching a provider for the specific space ID.
+    final bool isJoined = widget.spaceEntity.isJoined || _justJoined;
+
+    // --- Determine Background Color ---
+    final Color cardColor = widget.index % 2 == 0
+        ? AppColors.dark2 // #1E1E1E
+        : AppColors.dark3; // Use the new darker color #252525 (ensure defined in AppColors)
+
+    // --- Get Icon ---
+    final IconData iconData = _getSpaceIcon(widget.spaceEntity);
+
+    // --- Build Subtitle ---
+    final Widget subtitleWidget = _buildSubtitle(widget.spaceEntity);
+
+    return GestureDetector(
+      key: _cardKey, // --- Assign key to the GestureDetector ---
+      onTapDown: _handleTapDown,
+      onTapUp: _handleTapUp,
+      onTapCancel: _handleTapCancel,
+      onLongPress: _handleLongPress,
+      child: ScaleTransition(
+        // Use null-aware access with default value
+        scale: _scaleAnimation ?? kAlwaysCompleteAnimation,
+        // --- Add AnimatedBuilder for Glow ---
+        child: AnimatedBuilder(
+          // Use null-aware access with default value (a stopped animation)
+          animation: _glowAnimation ?? kAlwaysDismissedAnimation,
+          builder: (context, child) {
+            // Get value safely, defaulting to 0.0 if animation is null
+            final glowValue = _glowAnimation?.value ?? 0.0;
+            final glowColor = AppColors.gold.withOpacity(0.4 * glowValue); // Gold glow as requested
+            final glowRadius = 8.0 * glowValue;
+
+            return Container(
+              margin: const EdgeInsets.only(bottom: 12.0), // spacing-sm
+              decoration: BoxDecoration(
+                 borderRadius: BorderRadius.circular(8.0), // Match card radius
+                 boxShadow: glowValue > 0.01 ? // Avoid rendering tiny shadows
+                 [
+                   BoxShadow(
+                     color: glowColor,
+                     blurRadius: glowRadius,
+                     spreadRadius: 1.0 * glowValue,
+                   ),
+                 ] : null,
+              ),
+              child: child, // The Card goes here
+            );
+          },
+          // --- END NEW ---
+          child: Card(
+            color: cardColor, // Use alternating color
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8.0)), // radius-md
+            margin: EdgeInsets.zero,
+            clipBehavior: Clip.antiAlias,
+            elevation: 0, // Rely on color difference, not elevation
+            child: Padding(
+              padding: const EdgeInsets.all(16.0), // spacing-md
+              child: Row(
+                children: [
+                  // --- Icon Avatar ---
+                  CircleAvatar(
+                    radius: 24, // Standard size
+                    backgroundColor: cardColor == AppColors.dark2 ? AppColors.dark3 : AppColors.dark2, // Contrast background slightly
+                    child: Icon(iconData, color: AppColors.white, size: 22),
+                  ),
+                  const SizedBox(width: 16.0), // spacing-md
+                  // --- Text Content ---
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Title
+                        Text(
+                          widget.spaceEntity.name,
+                          style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w600, color: AppColors.white, letterSpacing: 0.2),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 4.0), // spacing-xxs
+                        // Subtitle (using helper)
+                        subtitleWidget,
+                      ],
+                    ),
+                  ),
+                  // --- NEW: Join Button / Indicator ---
+                  const SizedBox(width: 12.0), // spacing-sm between text and button
+                  _buildJoinButton(isJoined), // Pass calculated joined status
+                  // --- END NEW ---
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // --- NEW: Helper to build the join button/indicator ---
+  Widget _buildJoinButton(bool isJoined) {
+    const double buttonSize = 36.0; // Consistent size for the button area
+    final Color buttonBackgroundColor = AppColors.dark3; // Or determine based on card bg
+
+    // --- NEW: Use AnimatedSwitcher ---
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 200), // Fade duration for '+' -> loading / check
+      transitionBuilder: (Widget child, Animation<double> animation) {
+        return FadeTransition(opacity: animation, child: child);
+      },
+      child: _buildButtonContent(isJoined, buttonSize, buttonBackgroundColor), // Use helper for content
+    );
+    // --- END NEW ---
+  }
+
+  // --- NEW: Helper for AnimatedSwitcher content ---
+  Widget _buildButtonContent(bool isJoined, double buttonSize, Color buttonBackgroundColor) {
+     // Use ValueKey for proper AnimatedSwitcher transitions
+     if (_isJoining) {
+      return SizedBox(
+        key: const ValueKey('loading'), // Key for loading state
+        width: buttonSize,
+        height: buttonSize,
+        child: Center(
+          child: SizedBox(
+            width: 20,
+            height: 20,
+            child: CircularProgressIndicator(
+              strokeWidth: 2.0,
+              valueColor: AlwaysStoppedAnimation<Color>(AppColors.gold),
+            ),
+          ),
+        ),
+      );
+    } else if (isJoined) {
+      return SizedBox(
+        key: const ValueKey('check'), // Key for check state
+        width: buttonSize,
+        height: buttonSize,
+        child: Center(
+          child: Icon(
+            PhosphorIcons.check(),
+            color: AppColors.success, 
+            size: 20,
+          ),
+        ),
+      );
+    } else {
+      return Material(
+         key: const ValueKey('plus'), // Key for plus state
+         color: Colors.transparent, // Make background transparent, rely on InkWell splash
+         borderRadius: BorderRadius.circular(buttonSize / 2), 
+         child: InkWell(
+           onTap: _handleJoinSpace, 
+           borderRadius: BorderRadius.circular(buttonSize / 2),
+           splashColor: AppColors.gold.withOpacity(0.3),
+           highlightColor: AppColors.gold.withOpacity(0.1),
+           child: SizedBox(
+             width: buttonSize,
+             height: buttonSize,
+             child: Center(
+               child: Icon(
+                 PhosphorIcons.plus(),
+                 color: AppColors.white,
+                 size: 20,
+               ),
+             ),
+           ),
+         ),
+       );
+    }
+  }
+  // --- END NEW ---
+}
+
+// NEW StatefulWidget for My Spaces Circle Item
+class MySpaceCircleItem extends ConsumerStatefulWidget {
+  final String type;
+  final String label;
+  final String? details;
+  final String? imageUrl;
+  final bool selected;
+  final bool showCreateHighlight;
+  final entities.SpaceEntity? spaceEntity;
+  // --- NEW: Flag for newly joined space ---
+  final bool isNewlyJoined;
+
+  const MySpaceCircleItem({
+    super.key,
+    required this.type,
+    required this.label,
+    this.details,
+    this.imageUrl,
+    required this.selected,
+    required this.showCreateHighlight,
+    this.spaceEntity,
+    // --- NEW: Default to false ---
+    this.isNewlyJoined = false,
+  });
+
+  @override
+  ConsumerState<MySpaceCircleItem> createState() => _MySpaceCircleItemState();
+}
+
+// Changed to ConsumerState
+class _MySpaceCircleItemState extends ConsumerState<MySpaceCircleItem> with TickerProviderStateMixin {
+  late AnimationController _tapController;
+  late Animation<double> _scaleAnimation;
+  late Animation<double> _shadowAnimation;
+
+  // Controller and Animation for the highlight pulse - MAKE NULLABLE
+  AnimationController? _highlightController;
+  Animation<double>? _highlightOpacityAnimation;
+  
+  // --- NEW: Controller for newly joined effect ---
+  AnimationController? _newlyJoinedController;
+  Animation<double>? _newlyJoinedOpacityAnimation;
+  Animation<double>? _newlyJoinedScaleAnimation;
+  // --- END NEW ---
+
+  bool get isCreateButton => widget.type == 'create';
+  static const double circleRadius = 36.0;
+  static const double horizontalPadding = 8.0;
+
+  @override
+  void initState() {
+    super.initState();
+    // Tap Animation Controller
+    _tapController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 100),
+      reverseDuration: const Duration(milliseconds: 400),
+    );
+    _scaleAnimation = Tween<double>(begin: 1.0, end: 0.95).animate(
+      CurvedAnimation(parent: _tapController, curve: Curves.easeOut, reverseCurve: Curves.elasticOut),
+    );
+    _shadowAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _tapController, curve: Curves.easeOut, reverseCurve: Curves.easeIn),
+    );
+
+    // --- Initialize Highlight Animation Controller ONLY if needed ---
+    if (widget.showCreateHighlight) {
+      _highlightController = AnimationController(
+        vsync: this,
+        duration: const Duration(milliseconds: 800),
+      );
+      _highlightOpacityAnimation = Tween<double>(begin: 0.5, end: 1.0).animate(
+        CurvedAnimation(parent: _highlightController!, curve: Curves.easeInOut),
+      );
+      _highlightController!.repeat(reverse: true);
+    }
+    
+    // --- NEW: Initialize Newly Joined Animation ---
+    if (widget.isNewlyJoined) {
+      _newlyJoinedController = AnimationController(
+        vsync: this,
+        duration: const Duration(milliseconds: 1000), // Slightly shorter duration
+      );
+      
+      // Enhanced Opacity (fade in faster, hold, fade out slower)
+      _newlyJoinedOpacityAnimation = TweenSequence<double>([
+        TweenSequenceItem(tween: Tween<double>(begin: 0.0, end: 0.9).chain(CurveTween(curve: Curves.easeOut)), weight: 15),
+        TweenSequenceItem(tween: ConstantTween<double>(0.9), weight: 50), // Hold peak opacity
+        TweenSequenceItem(tween: Tween<double>(begin: 0.9, end: 0.0).chain(CurveTween(curve: Curves.easeIn)), weight: 35),
+      ]).animate(_newlyJoinedController!);
+      
+      // Enhanced Scale (Subtle pulse out then settle)
+      _newlyJoinedScaleAnimation = TweenSequence<double>([
+        TweenSequenceItem(tween: Tween<double>(begin: 1.0, end: 1.2).chain(CurveTween(curve: Curves.easeOutBack)), weight: 25),
+        TweenSequenceItem(tween: Tween<double>(begin: 1.2, end: 1.0).chain(CurveTween(curve: Curves.easeIn)), weight: 75),
+      ]).animate(_newlyJoinedController!);
+      
+      // Start the animation
+      _newlyJoinedController!.forward();
+    }
+    // --- END NEW ---
+  }
+
+  @override
+  void dispose() {
+    _tapController.dispose();
+    // Check for null before disposing controllers
+    _highlightController?.dispose();
+    _newlyJoinedController?.dispose(); // Dispose new controller
+    super.dispose();
+  }
+
+  void _handleTapDown(TapDownDetails details) { _tapController.forward(); }
+  void _handleTapUp(TapUpDetails details) {
+    Future.delayed(const Duration(milliseconds: 50), () {
+      if (mounted) { _tapController.reverse(); }
+    });
+    HapticFeedback.lightImpact();
+    if (widget.spaceEntity != null) {
+       print('Tapped on space: ${widget.spaceEntity!.name} (ID: ${widget.spaceEntity!.id})');
+       // --- NAVIGATION UPDATED --- 
+       // Use pushNamed with path parameters for both type and id
+       final spaceTypeString = _spaceTypeToString(widget.spaceEntity!.spaceType);
+       context.pushNamed(
+         'space_detail', 
+         pathParameters: {
+           'type': spaceTypeString, 
+           'id': widget.spaceEntity!.id
+          },
+         extra: widget.spaceEntity!.toSpace() // Pass the Space object if needed
+       );
+       // --- END NAVIGATION --- 
+    } else if (widget.type == 'create') {
+       print('Tapped on Create Space - Navigating');
+       // Navigate to create space page (uses absolute path or named route)
+       context.push(AppRoutes.createSpace); // Assuming this works or use context.pushNamed if needed
+    }
+  }
+  void _handleTapCancel() {
+    if (mounted) { _tapController.reverse(); }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // --- UPDATED: Use the helper method to get the icon --- 
+    IconData iconData = _getIcon();
+    // --- END UPDATED ---
+
+    double iconSize = isCreateButton ? 34 : 30;
+
+    // --- Build Base Circle --- 
+    Widget baseCircle = AnimatedBuilder(
+       animation: _tapController,
+       builder: (context, child) {
+         // Calculate shadow opacity safely
+         final double shadowAnimValue = _shadowAnimation.value;
+         final shadowOpacity = 0.3 + (shadowAnimValue * 0.2);
+         final shadowOffsetY = 3.0 + (shadowAnimValue * 1.0);
+
+         return Container(
+            width: circleRadius * 2,
+            height: circleRadius * 2,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: RadialGradient(
+                colors: [
+                  isCreateButton ? AppColors.grey800 : AppColors.grey700.withOpacity(0.8),
+                  isCreateButton ? AppColors.dark2 : AppColors.grey800,
+                ],
+                center: const Alignment(0.0, -0.2),
+                radius: 0.9,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(shadowOpacity),
+                  blurRadius: 10.0,
+                  spreadRadius: 0.0,
+                  offset: Offset(0, shadowOffsetY),
+                ),
+              ],
+            ),
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                Container(
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        Colors.white.withOpacity(0.08),
+                        Colors.transparent,
+                      ],
+                      stops: const [0.0, 0.6],
+                    ),
+                  ),
+                ),
+                Icon(
+                  iconData,
+                  color: isCreateButton ? AppColors.textSecondary : AppColors.white,
+                  size: iconSize,
+                ),
+              ],
+            ),
+          );
+       }
+    );
+
+    // Apply selection glow (if selected)
+    if (widget.selected) {
+      baseCircle = Container(
+        width: circleRadius * 2, height: circleRadius * 2,
+        decoration: BoxDecoration(
+           shape: BoxShape.circle,
+           gradient: RadialGradient(
+             colors: [AppColors.gold.withOpacity(0.15), AppColors.gold.withOpacity(0.0)],
+             stops: const [0.3, 1.0],
+           ),
+        ),
+        child: Container(
+          padding: const EdgeInsets.all(2),
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            border: Border.all(color: AppColors.gold, width: 2.0),
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.gold.withOpacity(0.4),
+                blurRadius: 10.0,
+                spreadRadius: 1.0,
+              ),
+            ],
+          ),
+          child: baseCircle,
+        ),
+      );
+    }
+
+    // Apply tap scale animation to the base circle
+    Widget finalCircleWidget = ScaleTransition(
+      scale: _scaleAnimation,
+      child: baseCircle, // Apply scale to the potentially selection-glowed circle
+    );
+
+    // --- Conditionally Apply Highlight Pulse Border --- 
+    // Check if highlight should be shown AND if the controller/animation are initialized
+    if (widget.showCreateHighlight && _highlightController != null && _highlightOpacityAnimation != null) {
+      // If highlight is active, wrap the scaled circle with the AnimatedBuilder
+      finalCircleWidget = AnimatedBuilder(
+        animation: _highlightOpacityAnimation!, // Safe to use ! here due to the check above
+        builder: (context, child) {
+          // Use the animation value directly
+          final highlightOpacity = _highlightOpacityAnimation!.value;
+          return Container(
+            padding: const EdgeInsets.all(2.0),
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              border: Border.all(
+                color: AppColors.gold.withOpacity(highlightOpacity),
+                width: 2.0,
+              ),
+              boxShadow: [
+                 BoxShadow(
+                   color: AppColors.gold.withOpacity(highlightOpacity * 0.3),
+                   blurRadius: 6.0,
+                   spreadRadius: 1.0,
+                 ),
+              ]
+            ),
+            // The child is the result from the previous step (ScaleTransition)
+            child: child, 
+          );
+        },
+        // Pass the potentially scaled circle as the child to the builder
+        child: finalCircleWidget, 
+      );
+    } 
+    // If not highlighting, finalCircleWidget remains the ScaleTransition widget
+    // --- END Conditional Highlight Pulse Border ---
+
+    // --- NEW: Apply Newly Joined Effect ---
+    if (widget.isNewlyJoined && _newlyJoinedController != null && _newlyJoinedOpacityAnimation != null) {
+      finalCircleWidget = AnimatedBuilder(
+        animation: _newlyJoinedController!,
+        builder: (context, child) {
+          return Container(
+            padding: const EdgeInsets.all(2.0),
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              border: Border.all(
+                color: AppColors.gold.withOpacity(_newlyJoinedOpacityAnimation!.value),
+                width: 2.0,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: AppColors.gold.withOpacity(_newlyJoinedOpacityAnimation!.value * 0.5),
+                  blurRadius: 8.0,
+                  spreadRadius: 2.0,
+                ),
+              ],
+            ),
+            child: Transform.scale(
+              // Apply the scale animation
+              scale: _newlyJoinedScaleAnimation?.value ?? 1.0,
+              child: child,
+            ),
+          );
+        },
+        child: finalCircleWidget,
+      );
+    }
+    // --- END NEW ---
+
+    String? displayDetails = widget.details?.toLowerCase();
+    // --- NEW: Add "Just joined" label for newly joined spaces ---
+    if (widget.isNewlyJoined && displayDetails == null) {
+      displayDetails = '● just joined';
+    }
+    // --- END NEW ---
+    
+    bool isBadge = false;
+    if (displayDetails != null) {
+        isBadge = displayDetails.contains('drop') ?? false;
+        if (isBadge) {
+          final match = RegExp(r'(\d+)').firstMatch(displayDetails);
+          if (match != null) { displayDetails = '● ${match.group(1)} new'; }
+          else { displayDetails = '● new'; }
+        }
+    }
+
+    return GestureDetector(
+      onTapDown: _handleTapDown,
+      onTapUp: _handleTapUp,
+      onTapCancel: _handleTapCancel,
+      child: Padding(
+        padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
+        child: SizedBox(
+          width: (circleRadius * 2) + (horizontalPadding * 2),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.start,
+            children: [
+              finalCircleWidget,
+              const SizedBox(height: 6.0),
+              Text(
+                widget.label,
+                style: GoogleFonts.inter(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: widget.selected ? AppColors.textPrimary : AppColors.textSecondary,
+                  letterSpacing: 0.2,
+                ),
+                textAlign: TextAlign.center,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+              if (displayDetails != null) ...[
+                Text(
+                  displayDetails,
+                  style: GoogleFonts.inter(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w500,
+                    color: AppColors.gold,
+                    letterSpacing: 0.1,
+                  ),
+                  textAlign: TextAlign.center,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // --- NEW: Helper to get the icon consistently ---
+  IconData _getIcon() {
+    // Special case for the "Create Space" button
+    if (isCreateButton) {
+      return PhosphorIcons.plus();
+    }
+    
+    // 1. Prioritize iconCodePoint from the entity if available and valid
+    if (widget.spaceEntity?.iconCodePoint != null && widget.spaceEntity!.iconCodePoint > 0) {
+      // Ensure the font family matches where the codepoint is defined
+      // Assuming MaterialIcons for now, adjust if different
+      return IconData(widget.spaceEntity!.iconCodePoint, fontFamily: 'MaterialIcons');
+    }
+    
+    // 2. Fallback based on SpaceType from the entity
+    if (widget.spaceEntity?.spaceType != null) {
+      switch (widget.spaceEntity!.spaceType) {
+        case entities.SpaceType.studentOrg:
+          return PhosphorIcons.users(); 
+        case entities.SpaceType.universityOrg:
+          return PhosphorIcons.buildings(); 
+        case entities.SpaceType.campusLiving:
+          return PhosphorIcons.house(); 
+        case entities.SpaceType.fraternityAndSorority:
+          return PhosphorIcons.usersThree(); 
+        case entities.SpaceType.hiveExclusive:
+          return PhosphorIcons.crownSimple(); 
+        case entities.SpaceType.other:
+        default:
+          return PhosphorIcons.circlesFour(); 
+      }
+    }
+    
+    // 3. Final fallback if no entity or type is available
+    return PhosphorIcons.circlesFour();
+  }
+  // --- END NEW ---
+}
+
+// Update ShimmerDiscoverCard to accept index for potential alternating shimmer
+class ShimmerDiscoverCard extends StatelessWidget {
+  final int index;
+  const ShimmerDiscoverCard({super.key, required this.index});
+
+  @override
+  Widget build(BuildContext context) {
+     // Use index to potentially alternate shimmer base color slightly
+     final Color baseColor = index % 2 == 0 ? AppColors.dark2 : AppColors.dark3;
+     final Color highlightColor = index % 2 == 0 ? AppColors.grey800 : AppColors.grey700;
+
+    // TODO: Wrap with actual Shimmer widget from shimmer package
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12.0),
+      child: Card(
+        color: baseColor, // Use alternating base color
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8.0)),
+        elevation: 0,
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Row(
+            children: [
+              CircleAvatar(radius: 24, backgroundColor: highlightColor), // Use highlight color
+              const SizedBox(width: 16.0),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(height: 16, width: 150, color: highlightColor), // Use highlight color
+                    const SizedBox(height: 8.0),
+                    Container(height: 12, width: 100, color: highlightColor), // Use highlight color
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ############################################################################
+// # Space Summoning Animation Widget
+// ############################################################################
+
+class SpaceSummonAnimation extends StatefulWidget {
+  final Offset startPosition;
+  final Offset endPosition;
+  final IconData iconData;
+  final VoidCallback onComplete;
+  // Add the initial small size of the circle in the My Spaces list
+  final double targetCircleRadius = _mySpaceCircleRadius; 
+
+  const SpaceSummonAnimation({
+    super.key,
+    required this.startPosition,
+    required this.endPosition,
+    required this.iconData,
+    required this.onComplete,
+  });
+
+  @override
+  State<SpaceSummonAnimation> createState() => _SpaceSummonAnimationState();
+}
+
+class _SpaceSummonAnimationState extends State<SpaceSummonAnimation> with SingleTickerProviderStateMixin {
+  // Make controller nullable
+  AnimationController? _controller;
+  Animation<Offset>? _positionAnimation;
+  Animation<double>? _scaleAnimation;
+  Animation<double>? _opacityAnimation; // For fade in/out
+
+  // Define animation timings based on spec
+  final Duration _travelDuration = const Duration(milliseconds: 400);
+  final Duration _scaleBounceDuration = const Duration(milliseconds: 150);
+  // Total duration needs to accommodate both phases
+  Duration get _totalDuration => Duration(milliseconds: _travelDuration.inMilliseconds + _scaleBounceDuration.inMilliseconds);
+
+  @override
+  void initState() {
+    super.initState();
+
+    try {
+      _controller = AnimationController(
+        vsync: this,
+        duration: _totalDuration,
+      );
+
+      // Calculate the actual target size based on the MySpaceCircleItem radius
+      final double targetSize = widget.targetCircleRadius * 2;
+
+      // --- Position Animation --- 
+      // Simple linear movement for now
+      _positionAnimation = Tween<Offset>(
+        begin: widget.startPosition,
+        end: widget.endPosition,
+      ).animate(CurvedAnimation(
+        parent: _controller!,
+        // Animate position primarily during the travel phase
+        curve: Interval(0.0, _travelDuration.inMilliseconds / _totalDuration.inMilliseconds, curve: Curves.easeInOut),
+      ));
+
+      // --- Scale Animation --- 
+      // Spec: 0.3x -> 1.1x (relative to final size) -> 1.0x
+      // We animate scale during the latter part of travel and the bounce phase
+      _scaleAnimation = TweenSequence<double>([
+         // Start small (0.3x of target size)
+         TweenSequenceItem(tween: Tween<double>(begin: 0.3, end: 0.3), weight: 0.1), 
+         // Scale up to 1.1x during travel
+         TweenSequenceItem(
+           tween: Tween<double>(begin: 0.3, end: 1.1),
+           weight: (_travelDuration.inMilliseconds / _totalDuration.inMilliseconds * 0.9), // Most of travel duration
+         ),
+         // Bounce back to 1.0x during the final phase
+         TweenSequenceItem(
+           tween: Tween<double>(begin: 1.1, end: 1.0),
+           weight: (_scaleBounceDuration.inMilliseconds / _totalDuration.inMilliseconds), // Bounce duration
+         ),
+      ]).animate(CurvedAnimation(
+        parent: _controller!,
+        curve: Curves.elasticOut, // Apply an elastic curve for the bounce feel overall
+      ));
+
+      // --- Opacity Animation --- 
+      // Fade in quickly, stay visible, could fade out if needed
+      _opacityAnimation = TweenSequence<double>([
+        TweenSequenceItem(tween: Tween<double>(begin: 0.0, end: 1.0), weight: 0.1), // Fade in
+        TweenSequenceItem(tween: Tween<double>(begin: 1.0, end: 1.0), weight: 0.9), // Stay visible
+      ]).animate(_controller!);
+
+      // Add listener to remove overlay when done
+      _controller!.addStatusListener((status) {
+        if (status == AnimationStatus.completed) {
+          widget.onComplete();
+        }
+      });
+
+      // Start the animation
+      _controller!.forward();
+    } catch (e) {
+      print('Error initializing SpaceSummonAnimation: $e');
+      // Make sure we still call onComplete even if animation setup fails
+      // This ensures the overlay gets removed
+      Future.microtask(() => widget.onComplete());
+    }
+  }
+
+  @override
+  void dispose() {
+    // Safely dispose
+    _controller?.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // If animation setup failed, show nothing but still allow onComplete to be called
+    if (_controller == null || 
+        _positionAnimation == null || 
+        _scaleAnimation == null || 
+        _opacityAnimation == null) {
+      return const SizedBox.shrink();
+    }
+    
+    return AnimatedBuilder(
+      animation: _controller!,
+      builder: (context, child) {
+        try {
+          // Calculate the current size based on scale animation
+          final double currentSize = (widget.targetCircleRadius * 2) * (_scaleAnimation?.value ?? 0.3);
+          // Adjust position based on current size to keep it centered
+          final Offset currentPosition = (_positionAnimation?.value ?? widget.startPosition) - 
+              Offset(currentSize / 2, currentSize / 2);
+          
+          return Positioned(
+            left: currentPosition.dx,
+            top: currentPosition.dy,
+            child: Opacity(
+              opacity: _opacityAnimation?.value ?? 0.0,
+              child: Container(
+                 width: currentSize,
+                 height: currentSize,
+                 decoration: BoxDecoration(
+                   shape: BoxShape.circle,
+                   color: AppColors.gold.withOpacity(0.8), // Gold glowing dot
+                   boxShadow: [
+                     BoxShadow(
+                       color: AppColors.gold.withOpacity(0.5 * (_opacityAnimation?.value ?? 0.0)),
+                       blurRadius: 8.0 * (_scaleAnimation?.value ?? 0.3),
+                       spreadRadius: 2.0 * (_scaleAnimation?.value ?? 0.3),
+                     ),
+                   ],
+                 ),
+                 child: Center(
+                   child: Icon(
+                     widget.iconData,
+                     // Scale icon slightly smaller than the container
+                     size: currentSize * 0.5,
+                     color: AppColors.dark.withOpacity(0.8), // Icon color on gold bg
+                   ),
+                 ),
+              ),
+            ),
+          );
+        } catch (e) {
+          print('Error in SpaceSummonAnimation build: $e');
+          // Return empty widget if there's an error during build
+          return const SizedBox.shrink();
+        }
+      },
+    );
+  }
+}
+
+// Helper function to convert SpaceType enum to the string used in routes/paths
+String _spaceTypeToString(entities.SpaceType type) {
+  switch (type) {
+    case entities.SpaceType.studentOrg:
+      return 'student_organizations'; // Match Firestore path
+    case entities.SpaceType.universityOrg:
+      return 'university_organizations'; // Match Firestore path
+    case entities.SpaceType.campusLiving:
+      return 'campus_living';
+    case entities.SpaceType.fraternityAndSorority:
+      return 'fraternity_and_sorority';
+    case entities.SpaceType.hiveExclusive:
+      return 'hive_exclusive';
+    case entities.SpaceType.other:
+    default:
+      return 'other';
   }
 }
 

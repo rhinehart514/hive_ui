@@ -93,7 +93,7 @@ class SignalStrip extends StatelessWidget {
     this.maxCards = 10,
     this.cardWidth = 180.0,
     this.cardHeight,
-    this.cardSpacing = 12.0,
+    this.cardSpacing = 8.0, // 8px spacing token (spacing-xs)
   }) : super(key: key);
 
   @override
@@ -119,26 +119,28 @@ class SignalStrip extends StatelessWidget {
   /// Builds the header section with title and optional description
   Widget _buildHeader() {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 12.0),
+      padding: const EdgeInsets.only(bottom: 12.0), // 12px spacing (spacing-sm)
       child: Row(
         children: [
           Text(
             headerTitle,
             style: GoogleFonts.inter(
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-              color: AppColors.gold,
+              fontSize: 14, // Body font size
+              fontWeight: FontWeight.w600, // Semibold weight
+              color: AppColors.accent, // HIVE Yellow accent (#EEB700)
               letterSpacing: 0.8,
+              height: 1.6, // Line height for Body
             ),
           ),
           if (headerDescription != null) ...[
-            const SizedBox(width: 8),
+            const SizedBox(width: 8), // 8px spacing (spacing-xs)
             Text(
               headerDescription!,
               style: GoogleFonts.inter(
-                fontSize: 12,
-                fontWeight: FontWeight.w400,
-                color: const Color(0xFFB0B0B0), // Text Secondary color
+                fontSize: 12, // Small/Labels font size
+                fontWeight: FontWeight.w500, // Small/Labels weight
+                color: AppColors.textDarkSecondary, // Secondary text color
+                height: 1.5, // Line height for Small/Labels
               ),
             ),
           ],
@@ -184,13 +186,14 @@ class SignalStrip extends StatelessWidget {
         height: cardH,
         margin: EdgeInsets.only(right: cardSpacing, bottom: 4),
         decoration: BoxDecoration(
-          color: content.backgroundColor ?? const Color(0xFF1E1E1E), // Secondary Surface color
-          borderRadius: BorderRadius.circular(8.0), // radius-md token
+          color: content.backgroundColor ?? AppColors.dark2, // Secondary Surface (#1E1E1E)
+          borderRadius: BorderRadius.circular(8.0), // 8px corner radius per guidelines
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.2),
-              blurRadius: 8,
-              offset: const Offset(0, 2),
+              color: Colors.black.withOpacity(0.1), // Minimal, diffused drop shadows
+              blurRadius: 12,
+              spreadRadius: 1,
+              offset: const Offset(0, 3),
             ),
           ],
         ),

@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:hive_ui/models/club.dart';
 import 'package:hive_ui/models/space.dart';
-import 'package:hive_ui/features/clubs/presentation/widgets/space_detail/space_detail_screen.dart';
+import 'package:hive_ui/features/spaces/presentation/screens/space_detail_screen.dart';
 import 'package:hive_ui/shared/widgets/error_view.dart';
 import 'package:go_router/go_router.dart';
+import 'package:hive_ui/features/spaces/domain/mappers/space_entity_mapper.dart';
 
 /// A transitional widget that redirects old club/space URLs to the new SpaceDetailScreen.
 /// This class preserves backward compatibility while the codebase transitions to the new
@@ -55,34 +56,41 @@ class ClubSpacePage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Validate that we have at least one valid identifier
-    if (clubId == null && club == null && space == null) {
+    // Determine the spaceId and potentially spaceType
+    String? resolvedSpaceId = clubId ?? club?.id;
+    String? resolvedSpaceType = spaceType; // May need logic to derive from club if null
+    
+    // TODO: If spaceType is null and club is provided, derive spaceType from club
+    if (resolvedSpaceType == null && club != null) {
+       // Use the primary category as the space type if not provided
+       resolvedSpaceType = club!.category; 
+    }
+
+    // If we don't have an ID, show error
+    if (resolvedSpaceId == null) {
       return const ErrorView(
-        message: 'No space information provided',
+        message: 'Missing Space identifier.',
         icon: Icons.error_outline,
       );
     }
-
-    // If we have a space object, use it directly
-    if (space != null) {
-      return SpaceDetailScreen(
-        space: space,
-        spaceType: spaceType,
+    
+    // If we don't have a type (and couldn't derive it), show error
+    // Note: The SpaceDetailScreen itself might handle fetching if type isn't needed directly
+    // Commenting out for now, assuming SpaceDetailScreen can fetch details with ID alone.
+    /*
+    if (resolvedSpaceType == null) {
+      return const ErrorView(
+        message: 'Missing Space type.',
+        icon: Icons.error_outline,
       );
     }
+    */
 
-    // If we have a club object, convert it to space format
-    if (club != null) {
-      return SpaceDetailScreen(
-        club: club,
-        spaceType: spaceType ?? 'student_organizations', // Default type for clubs
-      );
-    }
-
-    // Otherwise, use the ID to load the space
+    // If we have a club object, convert it to space format if needed by SpaceDetailScreen
+    // Or just pass the ID and let SpaceDetailScreen fetch
     return SpaceDetailScreen(
-      spaceId: clubId,
-      spaceType: spaceType ?? 'student_organizations', // Default type for clubs
+      key: ValueKey(resolvedSpaceId), // Add key for state preservation
+      spaceId: resolvedSpaceId,
     );
   }
 } 

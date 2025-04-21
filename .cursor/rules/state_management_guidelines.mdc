@@ -1,0 +1,54 @@
+---
+description:
+globs:
+alwaysApply: true
+---
+# State Management Guidelines
+
+These rules define how to structure and name state management files within the Hive UI codebase, following our feature-based architecture and Riverpod usage conventions.
+
+## Directory Structure
+- Place all state logic under each feature's directory:
+  ```
+  features/
+    <feature_name>/
+      data/
+      domain/
+      presentation/
+      state/        # new folder for providers and notifiers
+  ```
+  Reference: [features/<feature_name>/presentation](mdc:features/<feature_name>/presentation)
+
+## File Naming
+- Use `snake_case` for filenames.
+- State classes: `<feature>_state.dart`
+- StateNotifier classes: `<feature>_state_notifier.dart`
+- Provider definitions: `<feature>_providers.dart`
+
+## Riverpod Guidelines
+- Simple state: use `StateProvider<T>` in `<feature>_providers.dart`.
+- Complex state: implement `StateNotifier<T>` in `<feature>_state_notifier.dart` with its immutable `<feature>_state.dart`.
+- Async state: use `FutureProvider<T>` or `StreamProvider<T>` in `<feature>_providers.dart`.
+
+### Example
+```
+features/
+  task/
+    state/
+      task_state.dart
+      task_state_notifier.dart
+      task_providers.dart
+```
+See providers: [features/task/state/task_providers.dart](mdc:features/task/state/task_providers.dart)
+
+## Best Practices
+- Keep state objects immutable and use `copyWith`.
+- Explicitly type all providers.
+- Document public providers and notifiers with dartdoc.
+- Handle loading, error, and success states in UI.
+- Separate UI state from domain models.
+
+## Maintenance
+- Review state folder structure when adding new features.
+- Ensure no global providers; keep scope limited to each feature.
+- Remove unused providers via `flutter analyze`.

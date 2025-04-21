@@ -71,18 +71,15 @@ class ClubSpacePage extends StatelessWidget {
       );
     }
 
-    // If we have a club object, convert it to space format
-    if (club != null) {
-      return SpaceDetailScreen(
-        club: club,
-        spaceType: spaceType ?? 'student_organizations', // Default type for clubs
-      );
-    }
-
-    // Otherwise, use the ID to load the space
+    // If we have a club object, convert it to space format if needed by SpaceDetailScreen
+    // Or just pass the ID and let SpaceDetailScreen fetch
+    // Note: Assuming SpaceDetailScreen constructor only takes spaceId here
     return SpaceDetailScreen(
+      key: ValueKey(clubId), // Add key for state preservation
       spaceId: clubId,
-      spaceType: spaceType ?? 'student_organizations', // Default type for clubs
+      // Remove club and potentially spaceType based on the constructor of SpaceDetailScreen
+      // spaceType: spaceType, // Pass type if available/needed
+      // club: club, // Remove this invalid parameter
     );
   }
 } 

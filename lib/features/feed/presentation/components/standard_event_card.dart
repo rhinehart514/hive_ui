@@ -64,17 +64,14 @@ class StandardEventCard extends ConsumerWidget {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       decoration: BoxDecoration(
-        color: const Color(0xFF1C1C1E),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: Colors.white.withOpacity(0.1),
-          width: 0.5,
-        ),
+        color: AppColors.dark2, // #1E1E1E - Secondary Surface per brand guidelines
+        borderRadius: BorderRadius.circular(8), // 8px corner radius per guidelines
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.2),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
+            color: Colors.black.withOpacity(0.1), // Minimal, diffused drop shadows
+            blurRadius: 12,
+            spreadRadius: 1,
+            offset: const Offset(0, 3),
           ),
         ],
       ),
@@ -86,23 +83,25 @@ class StandardEventCard extends ConsumerWidget {
             HapticFeedback.selectionClick();
             onTap(event);
           },
+          splashColor: Colors.white.withOpacity(0.04), // Subtle splash
+          highlightColor: Colors.white.withOpacity(0.02), // Subtle highlight
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Event Image
+              // Event Image - Edge-to-edge media content per guidelines
               if (event.imageUrl.isNotEmpty)
                 SizedBox(
-                  height: 150,
+                  height: 160, // Slightly larger for better visibility
                   width: double.infinity,
                   child: Image.network(
                     event.imageUrl,
                     fit: BoxFit.cover,
                     errorBuilder: (context, error, stackTrace) {
                       return Container(
-                        color: Colors.black26,
+                        color: AppColors.dark3,
                         child: const Icon(
                           Icons.image_not_supported,
-                          color: Colors.white70,
+                          color: AppColors.textDarkSecondary,
                         ),
                       );
                     },
@@ -111,7 +110,7 @@ class StandardEventCard extends ConsumerWidget {
               
               // Event Details
               Padding(
-                padding: const EdgeInsets.all(16),
+                padding: const EdgeInsets.all(16), // 16px padding (spacing-md)
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -121,14 +120,16 @@ class StandardEventCard extends ConsumerWidget {
                         const Icon(
                           Icons.calendar_today,
                           size: 14,
-                          color: Colors.white70,
+                          color: AppColors.textDarkSecondary,
                         ),
-                        const SizedBox(width: 6),
+                        const SizedBox(width: 8), // 8px spacing (spacing-xs)
                         Text(
                           formattedDate,
                           style: GoogleFonts.inter(
-                            fontSize: 14,
-                            color: Colors.white70,
+                            fontSize: 12, // Small/Labels font size
+                            fontWeight: FontWeight.w500, // Small/Labels weight
+                            color: AppColors.textDarkSecondary,
+                            height: 1.5, // Line height for Small/Labels
                           ),
                         ),
                         const Spacer(),
@@ -138,24 +139,25 @@ class StandardEventCard extends ConsumerWidget {
                           contentPreview: event.title,
                           ownerId: event.createdBy,
                           size: 16,
-                          color: Colors.white54,
+                          color: AppColors.textDarkSecondary,
                         ),
                       ],
                     ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 12), // 12px spacing (spacing-sm)
                     
                     // Event title
                     Text(
                       event.title,
                       style: GoogleFonts.inter(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.white,
+                        fontSize: 20, // H3 size
+                        fontWeight: FontWeight.w600, // H3 weight
+                        color: AppColors.textDark,
+                        height: 1.5, // Line height for H3
                       ),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                     ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 8), // 8px spacing (spacing-xs)
                     
                     // Location
                     if (event.location.isNotEmpty)
@@ -164,15 +166,17 @@ class StandardEventCard extends ConsumerWidget {
                           const Icon(
                             Icons.location_on_outlined,
                             size: 14,
-                            color: Colors.white70,
+                            color: AppColors.textDarkSecondary,
                           ),
-                          const SizedBox(width: 6),
+                          const SizedBox(width: 8), // 8px spacing (spacing-xs)
                           Expanded(
                             child: Text(
                               event.location,
                               style: GoogleFonts.inter(
-                                fontSize: 14,
-                                color: Colors.white70,
+                                fontSize: 14, // Body font size
+                                fontWeight: FontWeight.w400, // Body weight
+                                color: AppColors.textDarkSecondary,
+                                height: 1.6, // Line height for Body
                               ),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
@@ -180,7 +184,7 @@ class StandardEventCard extends ConsumerWidget {
                           ),
                         ],
                       ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 16), // 16px spacing (spacing-md)
                     
                     // Action buttons
                     _buildActionButtons(context, ref, isRsvped),

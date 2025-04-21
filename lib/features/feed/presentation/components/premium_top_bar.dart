@@ -74,7 +74,7 @@ class PremiumTopBar extends StatelessWidget implements PreferredSizeWidget {
       child: BackdropFilter(
         filter: ImageFilter.blur(sigmaX: blurSigma, sigmaY: blurSigma),
         child: Container(
-          color: Color(0xFF121212).withOpacity(backgroundOpacity),
+          color: AppColors.dark.withOpacity(backgroundOpacity),
           child: SafeArea(
             bottom: false,
             child: Column(

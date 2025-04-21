@@ -1,358 +1,181 @@
-# HIVE Brand Aesthetic & UI/UX Architecture Guide (Version 1.2)
-
-## 1. Executive Summary
-
-HIVE's brand aesthetic is defined as **Sophisticated Dark Infrastructure**. This guide translates that vision into actionable, testable rules for the platform's presentation layer. It defines core principles, design tokens, layout structures, component styling, motion rules, and accessibility standards. Our design language embodies clarity, calmness, and power — supporting both the everyday browser and the power user while creating a premium, Apple-inspired user experience for students.
-
----
-
-## 2. Core Principles
-
-### 2.1 Sophisticated Dark Infrastructure
-- **Sophistication**: Clean lines, pixel-perfect execution, minimalism, and strict adherence to spacing and typographic rules. Design serves content, not vice versa.
-- **Dark Theme**: Default dark UI (#121212), with strict rules for #000000 (see Color section). Prioritize legibility, depth, and reduced eye strain.
-- **Infrastructure**: Defined by functional clarity, reliability, robust information architecture, predictable navigation, and seamless performance. *Visually, infrastructure is not heavy or brutalist, but organized, clear, and dependable.*
-- **Purposeful Motion**: Motion is used deliberately to provide feedback, guide transitions, and enhance usability. Avoid gratuitous or distracting animation. All motion must respect user accessibility settings (prefers-reduced-motion).
-- **Authenticity Focused**: No public vanity metrics (likes, follower counts). Feedback and engagement mechanisms must be authentic, meaningful, and non-comparative.
-- **Ambient/Calm**: Minimize unnecessary interruptions. Use subtle cues and calm technology principles.
-- **Constraint Adherence**: All design and development must strictly follow these rules and tokens.
-
-### 2.2 Focus & Cognitive Load
-- **One primary action per screen**
-- **Use progressive disclosure** to hide secondary actions
-- **Avoid alert fatigue**; use unobtrusive banners, not popups
-- **Focus on clarity**, not cleverness
-- **Reduce choices per screen** for better decision-making
-
----
-
-## 3. Color & Contrast
-
-### 3.1 Palette
-- **Primary Surface**: #121212 (Dark Grey) — default background for all main surfaces.
-- **Secondary Surface**: #1E1E1E — for cards, secondary surfaces, and subtle differentiation.
-- **Optional Deep Layer**: #000000 (Pure Black) — *only* for persistent navigation sidebars or overlays, never for main content backgrounds.
-- **Text Primary**: #FFFFFF (White) — for primary text content.
-- **Text Secondary**: #B0B0B0 — for secondary text content.
-- **Text Tertiary**: #757575 — for tertiary information and hints.
-- **Text Disabled**: #757575 — for disabled interface elements.
-- **Text Link**: #80B9F3 — for link elements.
-- **Accent**: #EEB700 (Hive Yellow) — for key interactive elements (CTAs, focus, highlights). Never for body text or backgrounds. Use sparingly for maximum impact.
-- **Interactive Primary Background**: #3A6BFF — alternative button background color.
-- **Interactive Primary Text**: #FFFFFF — text on primary interactive elements.
-- **Borders/Dividers**: #E0E0E0 at 10-20% opacity *only if purely decorative*. If used for essential structure, must meet 3:1 non-text contrast.
-
-### 3.2 Status Colors
-- **Success**: #4CAF50
-- **Warning**: #FFC107
-- **Error**: #FF5252
-- **Info**: #2196F3
-
-### 3.3 Contrast Requirements
-- **Text**: 4.5:1 minimum contrast ratio against backgrounds
-- **UI Elements**: 3:1 minimum contrast ratio for borders, indicators, and interactive elements
-- **Decorative elements**: No minimum contrast if purely decorative
-
----
-
-## 4. Typography
-
-### 4.1 Font Family
-- **Primary**: Inter (variable font)
-- **Fallback**: System sans-serif stack (e.g., -apple-system, BlinkMacSystemFont)
-- **OpenType Features**: Enable calt, liga, tnum
-  - tnum: tabular numbers for UI alignment
-  - liga, calt: ligatures and contextual alternates
-
-### 4.2 Type Scale
-- **H1**: 36px, Weight: 600, Line height: 1.3
-- **H2**: 28px, Weight: 600, Line height: 1.4
-- **H3**: 20px, Weight: 600, Line height: 1.5
-- **Body**: 14px, Weight: 400, Line height: 1.6
-- **Small/Labels**: 12px, Weight: 500, Line height: 1.5
-
-### 4.3 Typography Rules
-- **Use rem units** for all font sizes to ensure scalability
-- **Establish clear visual hierarchy** at a glance
-- **Use no more than 3 font weights** per screen
-- **Optimal reading width**: 45-75 characters
-- **Spacing between text blocks**: 2x line height
-- **Line Height**: Body text 1.5–1.6x font size
-
----
-
-## 5. Spacing, Grid, and Corner Radius
-
-### 5.1 Spacing Tokens (pt)
-- **spacing-xxs**: 4
-- **spacing-xs**: 8
-- **spacing-sm**: 12
-- **spacing-md**: 16
-- **spacing-lg**: 24
-- **spacing-xl**: 32
-
-### 5.2 Grid System
-- **Base Unit**: 8px (use multiples for all spacing, padding, margins)
-- **Grid**: 12-column, with specified gutter widths and max container widths per breakpoint (see Design System for details)
-
-### 5.3 Corner Radius
-- **Corner Radius**: 4px or 8px, applied consistently. No arbitrary rounding.
-
-### 5.4 Elevation & Layering
-- **z-index-base**: 0
-- **z-index-surface**: 10
-- **z-index-modal**: 100
-- **z-index-tooltip**: 300
-
-### 5.5 Surface Logic
-- Use background shifts or 3:1 border contrast to separate layers
-- Prefer minimal, diffused drop shadows for elevation. Shadows should use generous blur radii and low opacity for a soft lift; avoid sharp, dark edges.
-- Optionally, apply a very subtle, low-contrast inner shadow (inset) for pressed/active states of interactive elements (e.g., chips, buttons) to create a gentle 'pushed in' effect, ensuring contrast is maintained.
-- For large secondary surfaces (#1E1E1E), an extremely subtle dark-grey-to-darker-grey gradient may be used to reduce flatness and suggest curvature, provided contrast is preserved.
-- A low-opacity (2-5%), fine-grain noise texture may be consistently applied over base or secondary surfaces to add subtle materiality, as long as legibility and performance are not impacted.
-
----
-
-## 6. Layout & Information Architecture
-
-### 6.1 Layout Structure
-- **Desktop**: Three-column (Left Nav #000000, Center Content #121212, Right Contextual #121212)
-- **Mobile**: Single-column, bottom tab bar for 3–5 primary destinations (preferred over hamburger menu for discoverability)
-
-### 6.2 Navigation
-- **Active state** must use #EEB700 accent or distinct background
-- **Secondary navigation** (tabs) uses accent for active underline/background
-- **Breadcrumbs**: Required for deep hierarchies
-- **Focus**: Keyboard navigation always shows #EEB700 outline
-
-### 6.3 IA Principles
-- Structure based on user research (card sorting, usability testing)
-- Clear navigation paths
-- Progressive disclosure for complex workflows
-- Consistent placement of recurring elements
-
----
-
-## 7. Motion & Interaction
-
-### 7.1 Duration
-- **instant**: 0ms
-- **short**: 150-250ms (micro-interactions)
-- **standard**: 300-400ms (UI transitions)
-- **long**: 500ms (modals or overlays)
-
-### 7.2 Easing Curves
-- **standard**: cubic-bezier(0.4, 0, 0.2, 1)
-- **exit**: cubic-bezier(0.4, 0, 1, 1)
-- **entry**: cubic-bezier(0.0, 0, 0.2, 1)
-- **linear**: linear
-
-### 7.3 Motion Guidelines
-- **Animate opacity and transform** only for performance
-- **Never animate more than 2 elements** at once
-- **No looping/decorative animations**
-- **Respect prefers-reduced-motion**
-- **All motion must be purposeful**, not decorative
-
-### 7.4 Examples
-- **Modal open**: standard + entry
-- **Button press**: short + standard
-- **List loading**: standard + staggered fade/slide
-
----
-
-## 8. Haptic & Audio Feedback
-
-### 8.1 Haptic Feedback
-- **Tap**: light impact
-- **Toggle/Picker**: light tick
-- **Long Press**: medium impact
-- **Success**: notificationSuccess pattern
-- **Error**: notificationError pattern
-
-### 8.2 Platform APIs
-- **iOS**: UIFeedbackGenerator, UINotificationFeedbackGenerator
-- **Android**: Vibrator, HapticFeedbackConstants
-
-### 8.3 Audio Feedback (Optional)
-- **Tap**: light click
-- **Send/Receive**: soft whoosh
-- **Alert/Error**: chime
-
-### 8.4 Rules
-- Haptics always support or confirm user action
-- No vibration on every touch — be intentional
-- Never rely on sound alone
-- Respect system mute and preferences
-
----
-
-## 9. Core Components
-
-### 9.1 Buttons
-- **Primary**: Solid white background, black text, chip-sized.
-- **Secondary**: Off-white outline and text, chip-sized.
-- **Tertiary**: Off-white text only.
-- **Min touch area**: 44x44pt
-- **Focus State**: #EEB700 outline/ring, >=2px, high visibility on all backgrounds.
-- **Text must contrast 4.5:1** with background
-- **All states** must be specified (:hover, :active, :focus, :disabled)
-- **Size and Shape**: Chip-sized with horizontal padding that adapts to content, 36px height, 24px border radius.
-- **Buttons are chips**: All buttons use the chip style (36px height, 24px radius), with clear state changes for hover, active, and focus. For a soft UI feel, active states may combine a subtle scale down (to 98%) with a low-contrast inset shadow and smooth standard-easing animation (150ms).
-
-### 9.2 Input Fields
-- **Default**: Subtle background, low-opacity white border, text color.
-- **Focus**: #EEB700 border/outline.
-- **Error**: Distinct color with icon and text.
-- **Use labels**, never placeholders as primary identifier
-- **Background must contrast 3:1** from parent
-- **All states must be specified.**
-
-### 9.3 Cards
-- **Padding**: 16px internal, consistent spacing between elements.
-- **Background**: #1E1E1E or slightly lighter than the base #121212.
-- **Borders**: Only if decorative, or must meet 3:1 contrast.
-- **Elevation**: Subtle, no heavy shadows.
-- **Edge-to-edge** when media focused
-- **Interactive cards** have hover/focus/active states
-- **Cards are clean**: Cards use #1E1E1E, 16px padding, and subtle, diffused elevation. Consider using radius-md (8px) or radius-lg (16px) for a softer appearance. Content within rounded cards should be clipped to the card's shape.
-
-### 9.4 Icons
-- **Default**: #FFFFFF or #E0E0E0, 1.5–2px stroke.
-- **Active/Highlight**: #EEB700, used sparingly.
-- **Must be universally recognizable**
-
-### 9.5 Interactive Feedback
-- **Active States**: All tap targets respond visually (opacity, scale, color)
-  - Active: scale down to 97%, darken by 5%
-- **Focus**: Keyboard navigation always shows #EEB700 outline
-- **Load & Progress**:
-  - Streaming data preferred (e.g., typewriter effect)
-  - Use skeleton loaders or immediate visual feedback
-
-### 9.6 Affordance & Discoverability
-- **Tappable elements** styled distinctively (color, icon, underline)
-- **Custom gestures** must be introduced gently (onboarding, hints)
-
----
-
-## 10. Engagement & Feedback (No Vanity Metrics)
-- **No public likes, follower counts, or similar metrics.**
-- **Alternative feedback mechanisms**:
-  - Nuanced reaction systems (beyond simple likes)
-  - Private analytics dashboards for creators
-  - Qualitative feedback prompts
-  - Community-based curation signals (e.g., discussion depth, saves)
-- **User test all alternatives with target audience.**
-
----
-
-## 11. Accessibility (WCAG AA Mandate)
-- **Contrast**: All text and essential UI elements must meet WCAG AA (4.5:1 for text, 3:1 for UI elements).
-- **Focus Indicators**: #EEB700 outline/ring, >=2px, offset and style specified in Design System. Must be highly visible on all backgrounds.
-- **Keyboard Navigation**: All interactive elements must be fully keyboard accessible. Test all user flows.
-- **Semantic HTML/ARIA**: All custom components must use correct roles/attributes.
-- **Alt Text**: All non-decorative images must have meaningful alt text.
-- **Forms**: All inputs must have programmatically associated labels and accessible error validation.
-- **Motion**: Must implement prefers-reduced-motion and test.
-- **Testing**: Automated and manual accessibility testing is required for all releases. Include keyboard-only and screen reader testing.
-
----
-
-## 12. Behavioral Aesthetic Mapping
-
-| Pillar | Implementation Examples |
-|--------|--------------------------|
-| Sophistication | Inter font, strict spacing, minimalist elevation |
-| Dark Theme | #121212 base, #FFFFFF text, white chip buttons, #EEB700 focus indicator |
-| Infrastructure | Grid-based layout, tnum font feature, predictable component logic |
-| Purposeful Motion | Standard transitions, reduced-motion fallback, 1–2 concurrent animations |
-| Authenticity | No vanity metrics, precise feedback, clear data sources |
-| Calm | Minimal distractions, modal flow, subtle status cues |
-| Accessibility | WCAG AA compliance, keyboard navigation, screen reader tested |
-
----
-
-## 13. Implementation Checklist
-1. **Clarify Aesthetic**: Review all work for alignment with core pillars.
-2. **Apply Tokens**: Use only defined color, typography, spacing, and radius tokens.
-3. **Component States**: Implement all interactive states for every component.
-4. **Accessibility**: Test all flows for WCAG AA compliance, including focus, keyboard, and screen reader.
-5. **Engagement**: Use only approved feedback mechanisms. No public vanity metrics.
-6. **Visual Examples**: Reference canonical examples for all implementations.
-7. **Iterate**: Gather feedback, test, and refine continuously.
-
----
-
-## 14. Final UX Principles
-
-- Everything should feel intentional
-- Never animate without meaning
-- Color only used to guide or support behavior
-- The fewer choices per screen, the better
-- Feedback must be fast, gentle, and reliable
-- HIVE must always feel premium, personal, and precise
-
----
-
-## 15. Premium Clarity Principles for Designers
-
-To achieve HIVE's vision of a premium, cool, and crystal-clear user experience, all designers must adhere to the following actionable principles:
-
-### 1. Visual Hierarchy & Simplicity
-- **One clear focal point per screen**: Every layout must have a single, unmistakable visual anchor.
-- **Limit simultaneous emphasis**: Never use more than one accent color or bold element in a single visual group.
-- **Whitespace is luxury**: Use generous spacing to separate content and avoid crowding. If in doubt, add more space.
-- **Consistent alignment**: All elements must snap to the 8px grid. No arbitrary offsets.
-
-### 2. Color & Contrast
-- **Accent with intent**: Use #EEB700 only for the most important interactive elements. Never for decoration or backgrounds.
-- **Dark is not black**: Use #121212 for main backgrounds, #1E1E1E for surfaces, and #000000 only for persistent nav. Never mix these arbitrarily.
-- **Text must always pass contrast**: If a text color fails 4.5:1 contrast, it must not be used.
-
-### 3. Typography
-- **Hierarchy at a glance**: H1, H2, and body text must be visually distinct. Never use more than three font sizes per screen.
-- **No clever fonts**: Only use Inter (or system sans) at specified weights and sizes. No italics, no script, no display fonts.
-- **Labels above, not inside**: Form field labels must always be outside the input, never as placeholders.
-
-### 4. Motion & Feedback
-- **Motion is meaning**: Every animation must clarify state or spatial relationship. If it doesn't, remove it.
-- **Duration discipline**: Microinteractions (tap, hover) max 200ms. Transitions (modal, page) max 400ms. Never animate more than two elements at once.
-- **No bounce, no wobble**: Use only smooth, cubic-bezier curves. Avoid playful or springy effects.
-- **Immediate feedback**: All tap/click actions must provide visual and (if possible) haptic feedback within 50ms.
-
-### 5. Iconography & Imagery
-- **Universal icons**: Use only icons that are instantly recognizable. No metaphors that require explanation.
-- **Consistent stroke**: All icons must use 1.5–2px stroke, no filled or mixed styles.
-- **Imagery must serve clarity**: Only use images that add information or context. No decorative stock photos.
-
-### 6. Component Consistency
-- **Buttons are chips**: All buttons use the chip style (36px height, 24px radius), with clear state changes for hover, active, and focus.
-- **Cards are clean**: Cards use #1E1E1E, 16px padding, and subtle, diffused elevation. Consider using radius-md (8px) or radius-lg (16px) for a softer appearance. Content within rounded cards should be clipped to the card's shape.
-- **Inputs are obvious**: Inputs must always have a visible border and clear focus state (#EEB700 outline).
-
-### 7. Clarity in Interaction
-- **One primary action per screen**: Never present more than one main CTA at a time.
-- **Progressive disclosure**: Hide advanced or secondary actions until needed.
-- **No popups for alerts**: Use banners or inline messages to avoid disrupting flow.
-
-### 8. Premium Touches
-- **Glassmorphism for overlays**: Use subtle blur and translucency for modals and sheets, never for main content.
-- **Subtle gold accent**: Use #EEB700 for focus rings, active states, and key highlights—never as a fill or background.
-- **Minimalist elevation**: Use shadow only to indicate layering, not for decoration.
-
-### 9. Review & Test
-- **Design peer review**: All screens/components must be reviewed by another designer for clarity and premium feel before handoff.
-- **Test on dark and light backgrounds**: Ensure clarity and contrast in all supported modes.
-- **User test for instant comprehension**: If users hesitate or are confused, simplify further.
-
-### 10. Softness through refinement
-- **Softness through refinement**: Achieve a soft UI feel by prioritizing diffused shadows, subtle gradients, generous corner radii, and optional surface noise. All softness must maintain strict contrast and clarity standards.
-
----
-
-*These principles are non-negotiable. Every HIVE designer is responsible for upholding them in every deliverable. Premium clarity is not a style—it's a standard.*
-
----
-
-*For all detailed component specs, refer to the HIVE Design System documentation. This guide is the architectural blueprint; the Design System is the implementation law.*
+HIVE Brand Aesthetic & UI/UX Architecture Guide
+Version 1.3 – Behavioral Elegance Meets Premium Realism
+1. Vision Statement
+HIVE is not a "dark app." HIVE is a premium, living interface for real social energy. Every pixel should respond with calm clarity, subtle momentum, and system-level elegance. The platform doesn't show off — it implies energy through motion, restraint, and immersive tactility.
+
+2. Evolution of "Sophisticated Dark Infrastructure"
+Additions to 2.1 Core Pillars:
+
+Kinetic Sophistication: Visuals now respond to pressure, tempo, and presence — not just touch.
+
+Alive Surfaces: Cards expand, compress, glow, and fade based on social context and time. The UI is not static — it's living.
+
+Cultural Gravity: Design guides focus toward live energy (what's happening, what's gaining traction), without shouting.
+
+Invisible Depth: System layers are no longer flat — they're transparent, blurred, soft, and feel like an OS layer.
+
+Updated Motion Principle:
+
+"Every transition must serve as a cue — a narrative, not an effect. The system explains itself in how it moves."
+
+3. New Surface Logic & Depth
+3.1 Material Evolution
+Canvas: #0D0D0D (Deep Matte Black) with 3% transparent gold grain texture overlay.
+
+Surface: #1E1E1E to #2A2A2A gradient. Soft radial or directional lighting gradient for added dimensionality.
+
+Elevated Card: Transparent black w/ subtle inner glow (8px blur, rgba(255,255,255,0.03)) + drop shadow.
+
+Glass Layers:
+
+Blur: 20pt
+
+Tint: rgba(13, 13, 13, 0.8)
+
+Gold glow streak overlay (vertical fade: #EEB700 → transparent at 10% opacity)
+
+3.2 Texture Strategy
+Use consistent micro-grain texture on surfaces for organic feel (SVG/PNG, 2%–5% opacity).
+
+Texture variants may change by theme (e.g., day/night, seasonal skins, or ritual phases).
+
+4. Behavioral Motion Layer
+4.1 Transition Types (Standard Easing)
+
+Name	Use Case	Duration	Easing
+Surface Fade	Modal entrance, overlay fade	300ms	cubic-bezier(0.4, 0, 0.2, 1)
+Content Slide	Feed → Space or Modal → Full View	400ms	cubic-bezier(0.0, 0, 0.2, 1)
+Tap Feedback	Button/card tap	150ms	cubic-bezier(0.4, 0, 1, 1)
+Deep Press	Long-hold feedback	200ms	cubic-bezier(0.2, 0, 0.2, 1) + compress to 98% scale
+4.2 Component-Level Motion Rules
+Cards:
+
+On tap: fade + compress + glow ring (inset)
+
+On hover (web/desktop): slight elevation + soft parallax (Z: 2px)
+
+Modals: Z-zoom entrance with blur depth + background dim (50%)
+
+Tabs: Sliding underline follows finger with inertial bounce
+
+Feed Scroll: Elastic scroll boundaries, physics-style spring tension
+
+5. Tactility & Haptics
+5.1 Haptic Feedback Matrix
+
+Action	Pattern	Platform
+Tap	Light impact	iOS/Android
+Deep Hold	Medium impact	iOS/Android
+Success Submit	Success haptic	notificationSuccess
+Error / Blocked	Dual tap alert	notificationError
+5.2 Sensory Microinteractions
+Join a Space: Soft click + gold shimmer ripple + haptic tick
+
+Drop Created: Subtle pop + brief whoosh (optional sound)
+
+Event Live Now: Pulsing ambient border glow + soft haptic loop
+
+6. Responsive UI by Context
+6.1 Attention Gradients
+Events closer to "now" receive visual emphasis:
+
+Higher contrast edge
+
+Soft animation (pulse, shimmer)
+
+Subtle position bias in feed (rank + visibility)
+
+6.2 Live = Glowing
+Use ambient glow ring or gold shimmer bar under live content.
+
+Glow should animate in and out (not loop) — feels reactive, not decorative.
+
+6.3 Cold/Empty States
+Empty cards gently float in on load (fade/slide up 12px, 300ms).
+
+Use gold-accented illustrations (flat icon style) + clear CTA.
+
+Background animates subtly with 1% grain shift to suggest "waiting for energy."
+
+7. Updated Component Behavior Standards
+7.1 Buttons (All Chip-Sized)
+Height: 36pt, Radius: 24pt
+
+Active State:
+
+Scale to 98%
+
+Background darkens by 10%
+
+Glow ring appears briefly
+
+Focus: #EEB700 ring, 2px
+
+All buttons emit light haptic on press.
+
+7.2 Cards
+Surfaces: #1E1E1E → #2A2A2A gradient
+
+Border: none unless active, then 1px solid rgba(255, 255, 255, 0.06)
+
+Padding: 16pt
+
+Elevation: min 2, max 6
+
+Edge-to-edge image? Blur edges to integrate w/ background. Image overlays must be softened for contrast.
+
+7.3 Tabs
+Active: Accent bar #EEB700, full width
+
+Inactive: #757575, fade animation
+
+Drag to switch with inertia (tab bar swipes follow touch velocity)
+
+8. Enhanced Visual Identity Rules
+8.1 Parallax & Perspective
+Hero images in Spaces subtly parallax on scroll
+
+Backgrounds move slightly slower than foreground
+
+Elevation = speed = social relevance
+
+8.2 Iconography
+All icons are line-based, 1.5–2px stroke
+
+Active: colored accent or 20% scale pop
+
+Never use filled or solid icons (maintain visual lightness)
+
+8.3 Accent Usage
+#EEB700 = sacred. Use for:
+
+Focus rings
+
+Live status
+
+Key triggers (Join, Submit, Live Now)
+
+Never for: text, decorative elements, backgrounds
+
+9. Layered Depth System
+
+Layer	z-Index	Usage	Style
+Canvas	0	Base (#0D0D0D)	With micro-grain texture
+Cards	10–20	Events, Drops, Space previews	Shadow + gradient + rounded
+Modals	100	Full-screen takeovers	Blur + gold edge + back dimming
+Tooltips	300	On hover/press	No motion, appear on demand
+10. Future-Proof Visual Extensions
+Seasonal Themes: Slight shifts in color temp or texture pattern (e.g. fall = warmer shadows, winter = crisp blur)
+
+Ritual Visual Layers: Special cards or overlays that animate open w/ ceremonial motion (e.g. radial reveal, artifact glow)
+
+11. Rationale for System Expansion
+Tactile behavior enhances trust — Students are more likely to engage when the UI "rewards" their actions softly.
+
+Motion as system explanation — Instead of cluttering UI with text, transitions and gestures teach app structure.
+
+Texture = identity — Grain and blur anchor HIVE visually and emotionally, making it feel owned and distinct.
+
+Hierarchy through light and motion — Visual clarity increases without relying on color alone.
+
+Alive UI reflects alive culture — The interface should pulse when campus pulses.

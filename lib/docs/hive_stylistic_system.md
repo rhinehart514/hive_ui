@@ -16,7 +16,7 @@ HIVE follows a "Sophisticated Dark Infrastructure" philosophy, prioritizing clar
 ### 1.1 Color System
 
 #### Backgrounds
-- **Primary Surface**: #121212 (Dark Grey)
+- **Primary Surface**: #0d0d0d (Deep Dark Grey)
 - **Secondary Surface**: #1E1E1E
 - **Glass Surface**: rgba(18,18,18,0.75) with 20-40px blur
 
@@ -240,7 +240,7 @@ HIVE follows a "Sophisticated Dark Infrastructure" philosophy, prioritizing clar
 - **Inactive Tab**: Grey
 
 #### Headers
-- **Background**: #121212
+- **Background**: #0d0d0d
 - **Title**: Center or left aligned
 - **Actions**: Right aligned
 
@@ -290,7 +290,7 @@ HIVE follows a "Sophisticated Dark Infrastructure" philosophy, prioritizing clar
 ## 5. Surface & Layer Strategy
 
 ### 5.1 Surface Types
-- **Base Surface**: #121212
+- **Base Surface**: #0d0d0d
 - **Card Surface**: #1E1E1E
 - **Glass Surface**: Blur effect with rgba overlay
 

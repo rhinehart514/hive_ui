@@ -55,41 +55,33 @@ final searchSpacesUseCaseProvider = Provider<SearchSpacesUseCase>((ref) {
   return SearchSpacesUseCase(repository);
 });
 
-// State providers for UI
-final spacesLoadingProvider = StateProvider<bool>((ref) => false);
-final spacesErrorProvider = StateProvider<String?>((ref) => null);
+// State providers for UI - REMOVE UNUSED PROVIDERS
+// final spacesLoadingProvider = StateProvider<bool>((ref) => false);
+// final spacesErrorProvider = StateProvider<String?>((ref) => null);
 
 // All spaces provider
 final allSpacesProvider = FutureProvider<List<SpaceEntity>>((ref) async {
   final useCase = ref.watch(getAllSpacesUseCaseProvider);
-  ref.watch(spacesLoadingProvider.notifier).state = true;
-  ref.watch(spacesErrorProvider.notifier).state = null;
 
   try {
     final spaces = await useCase.execute();
-    ref.watch(spacesLoadingProvider.notifier).state = false;
     return spaces;
-  } catch (e) {
-    ref.watch(spacesLoadingProvider.notifier).state = false;
-    ref.watch(spacesErrorProvider.notifier).state = e.toString();
-    return [];
+  } catch (e, stackTrace) {
+    print("Error in allSpacesProvider: $e\n$stackTrace");
+    rethrow;
   }
 });
 
 // Joined spaces provider
 final joinedSpacesProvider = FutureProvider<List<SpaceEntity>>((ref) async {
   final useCase = ref.watch(getJoinedSpacesUseCaseProvider);
-  ref.watch(spacesLoadingProvider.notifier).state = true;
-  ref.watch(spacesErrorProvider.notifier).state = null;
 
   try {
     final spaces = await useCase.execute();
-    ref.watch(spacesLoadingProvider.notifier).state = false;
     return spaces;
-  } catch (e) {
-    ref.watch(spacesLoadingProvider.notifier).state = false;
-    ref.watch(spacesErrorProvider.notifier).state = e.toString();
-    return [];
+  } catch (e, stackTrace) {
+    print("Error in joinedSpacesProvider: $e\n$stackTrace");
+    rethrow;
   }
 });
 
@@ -105,17 +97,13 @@ final searchResultsProvider = FutureProvider<List<SpaceEntity>>((ref) async {
   }
 
   final useCase = ref.watch(searchSpacesUseCaseProvider);
-  ref.watch(spacesLoadingProvider.notifier).state = true;
-  ref.watch(spacesErrorProvider.notifier).state = null;
 
   try {
     final spaces = await useCase.execute(query);
-    ref.watch(spacesLoadingProvider.notifier).state = false;
     return spaces;
-  } catch (e) {
-    ref.watch(spacesLoadingProvider.notifier).state = false;
-    ref.watch(spacesErrorProvider.notifier).state = e.toString();
-    return [];
+  } catch (e, stackTrace) {
+    print("Error in searchResultsProvider: $e\n$stackTrace");
+    rethrow;
   }
 });
 

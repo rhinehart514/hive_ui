@@ -343,26 +343,27 @@ final routerProvider = Provider<GoRouter>((ref) {
                         type: TransitionType.cupertinoModal,
                     ),
                   ),
-                   // Route for Space Detail Screen
+                   // Route for Space Detail Screen - Using AppRoutes definition
                   GoRoute(
-                     path: ':spaceId/:spaceType',
+                     path: AppRoutes.spaceDetail, // Use definition from AppRoutes: ':type/spaces/:id'
                      name: 'space_detail',
                      pageBuilder: (context, state) {
-                         final spaceId = state.pathParameters['spaceId'];
-                         final spaceType = state.pathParameters['spaceType'];
-                         final space = state.extra as Space?;
+                         final spaceId = state.pathParameters['id']; // Use 'id' as defined in AppRoutes
+                         final spaceType = state.pathParameters['type']; // Use 'type' as defined in AppRoutes
+                         final space = state.extra as Space?; 
 
                          if (spaceId == null || spaceType == null) {
                             return _buildPageTransition(
-                               (context, state) => const ErrorDisplayPage(message: 'Missing space details'),
+                               (context, state) => const ErrorDisplayPage(message: 'Missing space ID or Type'),
                             )(context, state);
                          }
 
+                         // Pass both spaceId and spaceType to SpaceDetailScreen
                          return _buildPageTransition(
                            (context, state) => SpaceDetailScreen(
                              spaceId: spaceId,
-                             spaceType: spaceType,
-                             space: space,
+                             spaceType: spaceType, // Pass spaceType again
+                             space: space, 
                            ),
                            type: TransitionType.cupertinoPush,
                          )(context, state);
@@ -374,9 +375,19 @@ final routerProvider = Provider<GoRouter>((ref) {
                          name: 'create_event_for_space',
                          pageBuilder: _buildPageTransition(
                            (context, state) {
-                             final space = state.extra as Space?;
-                              if (space == null) {
-                               return const ErrorDisplayPage(message: 'Space information missing for event creation.');
+                             // Get params from the parent route's parameters
+                             final spaceId = state.pathParameters['id']; 
+                             final spaceType = state.pathParameters['type'];
+                             final space = state.extra as Space?; 
+
+                             if (spaceId == null || spaceType == null) {
+                                return const ErrorDisplayPage(message: 'Missing space ID/Type for event creation.');
+                             }
+                             
+                             // If space object isn't passed directly, you might need to fetch it based on spaceId/Type
+                             if (space == null) {
+                               // TODO: Potentially fetch space details here if needed by CreateEventPage
+                               return const ErrorDisplayPage(message: 'Space data missing for event creation.');
                              }
                               return CreateEventPage(selectedSpace: space);
                            },

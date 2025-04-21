@@ -34,111 +34,103 @@ class SpacesFirestoreDataSource implements SpacesDataSource {
   static final Map<String, SpaceModel> _spaceCache = {};
   static DateTime? _lastFirestoreSync;
 
-  /// Get all spaces from Firestore with optional caching
+  /// Get all spaces from Firestore using collectionGroup query
   @override
   Future<List<SpaceModel>> getAllSpaces({
     bool forceRefresh = false,
     bool includePrivate = false,
     bool includeJoined = true,
-    String? userId,
+    String? userId, // userId is needed for filtering but not for the initial query
   }) async {
+    // Caching logic remains the same - check if cache is valid
+    final now = DateTime.now();
+    if (!forceRefresh &&
+        _lastFirestoreSync != null &&
+        now.difference(_lastFirestoreSync!) < _cacheValidDuration &&
+        _spaceCache.isNotEmpty) {
+      debugPrint('🔄 Using cached spaces. Cache Count: ${_spaceCache.length}');
+      // Apply filters to cached spaces
+      final cachedSpaces = _spaceCache.values.toList();
+      // Pass userId to _filterSpaces
+      return _filterSpaces(cachedSpaces, includePrivate, includeJoined, userId);
+    }
+
+    debugPrint('🔄 Fetching all spaces using collectionGroup query...');
+    _spaceCache.clear(); // Clear cache before fetching
+
     try {
-      if (_spaceCache.isNotEmpty && !forceRefresh) {
-        final cachedSpaces = _spaceCache.values.toList();
-        
-        // Apply filters to cached spaces
-        return _filterSpaces(cachedSpaces, includePrivate, includeJoined);
-      }
+      // Use collectionGroup query to fetch all documents from any collection named 'spaces'
+      final snapshot =
+          await FirebaseFirestore.instance.collectionGroup('spaces').get();
 
-      _spaceCache.clear();
+      debugPrint('📊 Found ${snapshot.docs.length} documents in \'spaces\' collection group');
+
       final List<SpaceModel> allSpaces = [];
-      
-      // Get spaces from all collections including hive_exclusive
-      final collections = [
-        'spaces/student_organizations/spaces',
-        'spaces/university/spaces',
-        'spaces/campus_living/spaces',
-        'spaces/greek_life/spaces',
-        'spaces/other/spaces',
-        'spaces/hive_exclusive/spaces', // Explicitly include Hive Exclusive collection
-      ];
-
-      debugPrint('🔄 Fetching spaces from all collections...');
-      
-      // Fetch spaces from each collection
-      for (final collection in collections) {
-        debugPrint('📚 Querying collection: $collection');
-        final snapshot = await FirebaseFirestore.instance.collection(collection).get();
-        debugPrint('📊 Found ${snapshot.docs.length} documents in $collection');
-        
-        // Log all documents in the hive_exclusive collection to debug
-        if (collection == 'spaces/hive_exclusive/spaces') {
-          for (final doc in snapshot.docs) {
-            final data = doc.data();
-            debugPrint('📎 Hive Exclusive Document ID: ${doc.id}');
-            debugPrint('🔑 Document data: ${data.toString().substring(0, min(100, data.toString().length))}...');
-          }
-        }
-        
-        for (final doc in snapshot.docs) {
-          final space = SpaceModel.fromFirestore(doc);
-          _spaceCache[space.id] = space;
-          allSpaces.add(space);
-          
-          // Log details for all spaces with hiveExclusive flag
-          debugPrint('📂 Space: ${space.name}, collection: $collection, hiveExclusive: ${space.hiveExclusive}');
-          
-          // Log details for spaces in the hive_exclusive collection
-          if (collection == 'spaces/hive_exclusive/spaces') {
-            debugPrint('🌟 Found Hive Exclusive collection space: ${space.name} (ID: ${space.id})');
-          }
+      for (final doc in snapshot.docs) {
+        try {
+           final space = SpaceModel.fromFirestore(doc);
+           _spaceCache[space.id] = space; // Update cache
+           allSpaces.add(space);
+        } catch (e) {
+           debugPrint('❌ Error parsing space document ${doc.id}: $e. Skipping.');
+           // Optionally log this error more formally
         }
       }
 
-      debugPrint('✅ Loaded ${allSpaces.length} total spaces');
-      
-      // Apply filters to fetched spaces
-      return _filterSpaces(allSpaces, includePrivate, includeJoined);
+      _lastFirestoreSync = now; // Update last sync time
+      debugPrint('✅ Loaded ${allSpaces.length} total spaces from collection group');
+
+      // Apply filters (privacy, joined status) after fetching all spaces
+      return _filterSpaces(allSpaces, includePrivate, includeJoined, userId);
     } catch (e) {
-      debugPrint('❌ Error getting all spaces: $e');
-      throw Exception('Failed to get all spaces: $e');
+      debugPrint('❌ Error getting all spaces via collectionGroup: $e');
+      // Depending on requirements, might return empty list or rethrow
+      // Returning empty list for now to avoid crashing UI
+      return [];
+      // throw Exception('Failed to get all spaces via collectionGroup: $e');
     }
   }
 
   /// Helper method to filter spaces based on privacy and joined status
   Future<List<SpaceModel>> _filterSpaces(
-    List<SpaceModel> spaces, 
-    bool includePrivate, 
-    bool includeJoined
+    List<SpaceModel> spaces,
+    bool includePrivate,
+    bool includeJoined,
+    String? userId // Pass userId here
   ) async {
-    // Get current user
-    final currentUser = FirebaseAuth.instance.currentUser;
     List<String> joinedSpaceIds = [];
-    
-    // Get joined space IDs if needed
-    if (!includeJoined && currentUser != null) {
-      final userDoc = await _usersCollection.doc(currentUser.uid).get();
-      
-      if (userDoc.exists) {
-        final userData = userDoc.data() as Map<String, dynamic>?;
-        
-        if (userData != null && userData['followedSpaces'] is List) {
-          joinedSpaceIds = List<String>.from(userData['followedSpaces']);
-        }
+
+    // Get joined space IDs if needed for filtering
+    if (!includeJoined && userId != null) {
+      try {
+         final userDoc = await _usersCollection.doc(userId).get();
+         if (userDoc.exists) {
+           final userData = userDoc.data() as Map<String, dynamic>?;
+           if (userData != null && userData['followedSpaces'] is List) {
+             // Ensure correct type casting
+             joinedSpaceIds = (userData['followedSpaces'] as List).cast<String>();
+           }
+         }
+      } catch (e) {
+         debugPrint('⚠️ Error fetching user\'s joined spaces for filtering: $e');
+         // Proceed without joined space filtering if user data fetch fails
       }
     }
-    
+
     return spaces.where((space) {
-      // Filter private spaces
-      if (space.isPrivate && !includePrivate) {
+      // Filter private spaces if includePrivate is false
+      if (!includePrivate && space.isPrivate) {
+         // TODO: Implement proper membership check if private spaces should be visible to members
+         // For now, filters out all private if includePrivate is false
         return false;
       }
-      
-      // Filter joined spaces if needed
+
+      // Filter joined spaces if includeJoined is false
       if (!includeJoined && joinedSpaceIds.contains(space.id)) {
         return false;
       }
-      
+
+      // Include the space if it passes filters
       return true;
     }).toList();
   }

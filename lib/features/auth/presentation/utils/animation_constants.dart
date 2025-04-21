@@ -60,10 +60,10 @@ class AnimationConstants {
   static const double disabledOpacity = 0.6;
   
   /// HIVE brand colors for UI states
-  static final Color accentColor = AppColors.gold;
-  static final Color primarySurfaceColor = Color(0xFF121212); // HIVE dark grey
+  static final Color accentColor = Color(0xFFEEB700); // HIVE yellow
   static final Color deepSurfaceColor = Colors.black; // HIVE pure black (for overlays only)
   static final Color primaryTextColor = Color(0xFFE0E0E0); // HIVE off-white
+  static final Color secondarySurfaceColor = Color(0xFF1E1E1E);
 }
 
 /// A curve that simulates spring physics for natural motion

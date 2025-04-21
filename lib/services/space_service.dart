@@ -46,6 +46,9 @@ class SpaceService {
   static bool _isInitialized = false;
   static DateTime? _lastFirestoreSync;
 
+  /// Flag to track settings initialization
+  static bool _settingsInitialized = false;
+
   /// Initialize the service and load cache
   static Future<void> initialize() async {
     if (_isInitialized) return;
@@ -600,6 +603,12 @@ class SpaceService {
 
   /// Initialize application-wide settings related to spaces
   static Future<void> initSettings() async {
+    // If already initialized, return immediately
+    if (_settingsInitialized) {
+      debugPrint('Space settings already initialized, skipping');
+      return;
+    }
+    
     try {
       // Query for any existing settings document
       final settingsDoc = await FirebaseFirestore.instance
@@ -621,6 +630,9 @@ class SpaceService {
         });
         debugPrint('Created default space settings');
       }
+      
+      // Mark as initialized
+      _settingsInitialized = true;
     } catch (error) {
       debugPrint('Error initializing space settings: $error');
       // Non-critical error, don't throw

@@ -3,11 +3,16 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
+import 'dart:ui'; // Import for ImageFilter
+// import 'package:vector_math/vector_math_64.dart' as vector; // Not used currently
+// import 'dart:ui'; // Not used currently
+
 import '../../models/event.dart';
 import '../../models/user_profile.dart';
 import '../../models/repost_content_type.dart';
 import '../../theme/app_colors.dart';
-import '../../theme/huge_icons.dart';
+// import '../../theme/app_theme.dart'; // Removed theme dependency
+import '../../theme/huge_icons.dart'; // Keep for other icons if used elsewhere
 import '../../services/event_service.dart';
 import '../../providers/profile_provider.dart';
 import '../../providers/reposted_events_provider.dart';
@@ -21,6 +26,8 @@ import '../../services/feed/feed_analytics.dart';
 import '../../components/moderation/report_button.dart';
 import '../../features/moderation/domain/entities/content_report_entity.dart';
 import '../../features/events/presentation/routing/event_routes.dart';
+import '../../widgets/glassmorphism.dart'; // Corrected import path
+// Removed: import '../../widgets/buttons/hive_pill_button.dart'; // Removed non-existent import
 
 /// A premium event card component that follows HIVE's brand aesthetic:
 /// - Black/white core with layered visual depth
@@ -315,15 +322,15 @@ class _HiveEventCardState extends ConsumerState<HiveEventCard>
       _hasLoggedView = true;
       _logViewInteraction();
     }
-
-    // Create the card widget with all its content
-    Widget cardContent = _buildCardContent();
+    
+    // Create the card with our improved layout
+    Widget cardContent = _buildEnhancedCardContent(context);
     
     // Apply the lifecycle wrapper based on the event's creation date and state
     // Use lastModified as a proxy for creation date if available, otherwise fall back to startDate
     final DateTime creationTime = widget.event.lastModified ?? widget.event.startDate;
     final bool isActive = !widget.event.isCancelled && 
-                          widget.event.currentState != EventLifecycleState.archived;
+                         widget.event.currentState != EventLifecycleState.archived;
     
     // Use the appropriate lifecycle state based on the event's properties
     final CardLifecycleState lifecycleState = _determineCardLifecycleState();
@@ -378,19 +385,22 @@ class _HiveEventCardState extends ConsumerState<HiveEventCard>
     // Otherwise, old
     return CardLifecycleState.old;
   }
-  
-  // Extracted method to build the card content without lifecycle wrapper
-  Widget _buildCardContent() {
-    // Check if the card is reposted
-    final isReposted = widget.isRepost && widget.repostedBy != null;
-    final isQuote = isReposted && widget.repostType == RepostContentType.quote && widget.quoteText != null && widget.quoteText!.isNotEmpty;
 
+  // Our new integrated card design that works well for both web and mobile
+  Widget _buildEnhancedCardContent(BuildContext context) {
+    final now = DateTime.now();
+    final bool isLive = widget.event.startDate.isBefore(now) && widget.event.endDate.isAfter(now);
+    final bool isPast = widget.event.endDate.isBefore(now);
+    final isReposted = widget.isRepost && widget.repostedBy != null;
+    final isQuote = isReposted && widget.repostType == RepostContentType.quote && 
+                    widget.quoteText != null && widget.quoteText!.isNotEmpty;
+    
     // Apply different styling if this is a quoted card
     final margin = widget.isQuoted 
         ? const EdgeInsets.all(0)
         : const EdgeInsets.symmetric(horizontal: 16, vertical: 8);
-    final borderRadius = widget.isQuoted ? 12.0 : 24.0;
-
+    final borderRadius = widget.isQuoted ? 12.0 : 16.0;
+    
     // Wrap the card with Dismissible for swipe-to-dismiss functionality
     return Dismissible(
       key: ValueKey('dismissible_${widget.event.id}'),
@@ -449,6 +459,7 @@ class _HiveEventCardState extends ConsumerState<HiveEventCard>
         // Call the provider to hide this event from the feed
         ref.read(feedStateProvider.notifier).hideEvent(widget.event.id);
       },
+      
       child: AnimatedSize(
         duration: const Duration(milliseconds: 300),
         curve: Curves.easeInOut,
@@ -530,41 +541,244 @@ class _HiveEventCardState extends ConsumerState<HiveEventCard>
             // Only show the main card if this is not a quote repost
             // For quote reposts, the quoted event is shown in the header
             if (!isQuote)
-              AnimatedScale(
-                scale: _isPressed ? 0.98 : 1.0,
-                duration: const Duration(milliseconds: 150),
-                curve: Curves.easeOut,
-                child: GestureDetector(
-                  onTap: () {
-                    // Navigate to event details using the correct path
-                    if (context.mounted) {
-                      context.push(
-                        EventRoutes.getRealtimeEventDetailPath(widget.event.id, heroTag: 'event-card-${widget.event.id}'),
-                        extra: widget.event,
-                      );
-                    }
-                  },
-                  onTapDown: (_) => setState(() => _isPressed = true),
-                  onTapUp: (_) => setState(() => _isPressed = false),
-                  onTapCancel: () => setState(() => _isPressed = false),
-                  child: _EventCardBody(
-                    event: widget.event,
-                    isRsvped: _isRsvped,
-                    isRepostScaling: _isRepostScaling,
-                    onRsvp: _handleRsvp,
-                    onRepostScale: _triggerRepostScale,
-                    onRepost: _handleRepost,
-                    followsClub: widget.followsClub,
-                    todayBoosts: widget.todayBoosts,
-                    margin: margin,
-                    borderRadius: borderRadius,
-                  ),
-                ),
+              _buildModernCard(
+                borderRadius: borderRadius,
+                margin: margin,
+                isLive: isLive,
               ),
           ],
         ),
       ),
     );
+  }
+  
+  // Modern card design with text overlaid directly on image
+  Widget _buildModernCard({
+    required double borderRadius,
+    required EdgeInsets margin,
+    required bool isLive,
+  }) {
+    return AnimatedScale(
+      scale: _isPressed ? 0.98 : 1.0,
+      duration: const Duration(milliseconds: 150),
+      curve: Curves.easeOut,
+      child: GestureDetector(
+        onTap: _handleTap,
+        onTapDown: (_) => setState(() => _isPressed = true),
+        onTapUp: (_) => setState(() => _isPressed = false),
+        onTapCancel: () => setState(() => _isPressed = false),
+        child: Container(
+          margin: margin,
+          decoration: BoxDecoration(
+            color: AppColors.cardBackground, // Fallback color
+            borderRadius: BorderRadius.circular(borderRadius),
+            // Removed border for cleaner overlay look
+            // border: Border.all(
+            //   color: Colors.white.withOpacity(0.08),
+            //   width: 0.5,
+            // ),
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(borderRadius),
+            child: Stack(
+              children: [
+                // --- Background Image (Non-Positioned - Defines Stack Size) ---
+                _buildOverlayImageBackground(), // AspectRatio defines the size
+
+                // --- Gradient Overlay ---
+                Positioned.fill(
+                  child: Container(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.bottomCenter,
+                        end: Alignment.topCenter,
+                        colors: [
+                          Colors.black.withOpacity(0.85), // Stronger dark at bottom
+                          Colors.black.withOpacity(0.0)    // Fades to transparent
+                        ],
+                        stops: const [0.0, 0.7], // Gradient covers lower 70%
+                      ),
+                    ),
+                  ),
+                ),
+
+                // --- Content Overlay ---
+                Positioned.fill(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16.0), // Consistent padding
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Top: Date/Time
+                        _buildMetadataRow(
+                          Icons.calendar_today_outlined,
+                          _formatEventTime(),
+                          color: Colors.white.withOpacity(0.9),
+                        ),
+                        const SizedBox(height: 12), // sm spacing
+
+                        // Middle: Club Info & Title (pushes button down)
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisAlignment: MainAxisAlignment.end, // Align to bottom before button
+                            children: [
+                              _buildMetadataRow(
+                                Icons.sports_esports_outlined, // Placeholder pawn icon
+                                widget.event.organizerName,
+                                color: Colors.white.withOpacity(0.8),
+                              ),
+                              const SizedBox(height: 8), // xs spacing
+                              Text(
+                                widget.event.title,
+                                maxLines: 3,
+                                overflow: TextOverflow.ellipsis,
+                                style: GoogleFonts.inter(
+                                  fontSize: 28, // H2 size
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.textPrimary, // White
+                                  height: 1.4,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+
+                        // Bottom: RSVP Button
+                        const SizedBox(height: 16), // Add space above button
+                        _buildOverlayRsvpButton(),
+                      ],
+                    ),
+                  ),
+                ),
+
+                // "LIVE NOW" Pill (if applicable)
+                if (isLive)
+                  Positioned(
+                    top: 12,
+                    right: 12,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: AppColors.gold,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        'LIVE NOW',
+                        style: GoogleFonts.inter(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.black,
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // Builds just the background image for the overlay style
+  Widget _buildOverlayImageBackground() {
+    // Use AspectRatio for consistent card images
+    return AspectRatio(
+      aspectRatio: 16 / 9, // Standard content ratio for web/mobile
+      child: Container(
+        color: AppColors.grey900, // Background if image fails
+        child: OptimizedImage(
+          imageUrl: widget.event.imageUrl,
+          fit: BoxFit.cover,
+        ),
+      ),
+    );
+  }
+
+  // Builds the dark RSVP button for the overlay style
+  Widget _buildOverlayRsvpButton() {
+    final bool isRsvped = _isRsvped; // Use local state
+
+    // Style matches the image provided (Dark bg, White fg)
+    final ButtonStyle buttonStyle = ElevatedButton.styleFrom(
+      backgroundColor: Colors.black.withOpacity(0.5), // Dark semi-transparent
+      foregroundColor: Colors.white,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)), // Pill shape
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10), // Slightly more padding
+      minimumSize: const Size(0, 36), // HIVE standard height
+      side: BorderSide(color: Colors.white.withOpacity(0.3), width: 1), // Subtle border
+    );
+
+    final Widget buttonChild = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(
+          isRsvped ? Icons.check_rounded : Icons.add_rounded,
+          size: 16,
+          color: Colors.white,
+        ),
+        const SizedBox(width: 6),
+        Text(
+          isRsvped ? 'GOING' : 'RSVP',
+          style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.white),
+        ),
+      ],
+    );
+
+    // Use simple ElevatedButton for this specific style
+    return ElevatedButton(
+      onPressed: _handleRsvp,
+      style: buttonStyle,
+      child: buttonChild,
+    );
+  }
+
+  // Updated: _buildMetadataRow to accept color
+  Widget _buildMetadataRow(IconData icon, String text, {Color? color}) {
+    final textColor = color ?? AppColors.textSecondary;
+    return Row(
+      children: [
+        Icon(
+          icon,
+          size: 14,
+          color: textColor.withOpacity(0.8), // Slightly muted icon
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            text,
+            style: GoogleFonts.inter(
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+              color: textColor,
+            ),
+            maxLines: 1, // Ensure single line for metadata
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      ],
+    );
+  }
+
+  // Keep: _formatEventTime
+  String _formatEventTime() {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final tomorrow = today.add(const Duration(days: 1));
+    final eventDay = DateTime(widget.event.startDate.year, widget.event.startDate.month, widget.event.startDate.day);
+    
+    String dayString;
+    if (eventDay == today) {
+      dayString = 'Today';
+    } else if (eventDay == tomorrow) {
+      dayString = 'Tomorrow';
+    } else {
+      dayString = DateFormat('E, MMM d').format(widget.event.startDate);
+    }
+    
+    final timeString = DateFormat('h:mm a').format(widget.event.startDate);
+    return '$dayString at $timeString';
   }
 }
 
@@ -856,423 +1070,5 @@ class _QuoteRepostHeader extends StatelessWidget {
     } else {
       return 'just now';
     }
-  }
-}
-
-/// Main event card body component 
-class _EventCardBody extends StatelessWidget {
-  final Event event;
-  final bool isRsvped;
-  final bool isRepostScaling;
-  final VoidCallback onRsvp;
-  final Function(bool) onRepostScale;
-  final VoidCallback onRepost;
-  final bool followsClub;
-  final List<DateTime> todayBoosts;
-  final EdgeInsets margin;
-  final double borderRadius;
-
-  const _EventCardBody({
-    required this.event,
-    required this.isRsvped,
-    required this.isRepostScaling,
-    required this.onRsvp,
-    required this.onRepostScale,
-    required this.onRepost,
-    this.followsClub = false,
-    this.todayBoosts = const [],
-    this.margin = const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-    this.borderRadius = 24.0,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 300),
-      curve: Curves.easeInOut,
-      width: double.infinity,
-      margin: margin,
-      decoration: BoxDecoration(
-        color: Colors.black.withOpacity(0.75),
-        borderRadius: BorderRadius.circular(borderRadius),
-        border: Border.all(color: Colors.white.withOpacity(0.08)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.2),
-            blurRadius: 20,
-            offset: const Offset(0, 8),
-          )
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Event image if available
-          if (event.imageUrl.isNotEmpty)
-            ClipRRect(
-              borderRadius: BorderRadius.only(
-                topLeft: Radius.circular(borderRadius),
-                topRight: Radius.circular(borderRadius),
-              ),
-              child: OptimizedImage(
-                imageUrl: event.imageUrl,
-                width: double.infinity,
-                height: 160,
-                fit: BoxFit.cover,
-              ),
-            ),
-          
-          // Date and boost row
-          _DateAndBoostRow(event: event),
-          const SizedBox(height: 12),
-          
-          // Content section with padding
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Event title
-                _EventTitle(title: event.title),
-                const SizedBox(height: 12),
-                
-                // Time and location
-                _TimeAndLocationRow(
-                  time: event.formattedTimeRange,
-                  location: event.location,
-                ),
-                const SizedBox(height: 16),
-                
-                // CTA button row
-                _CTAButtonsRow(
-                  isRsvped: isRsvped,
-                  isRepostScaling: isRepostScaling,
-                  onRsvp: onRsvp,
-                  onRepostScale: onRepostScale,
-                  onRepost: onRepost,
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 16),
-        ],
-      ),
-    );
-  }
-}
-
-/// Date and boost row component
-class _DateAndBoostRow extends StatelessWidget {
-  final Event event;
-
-  const _DateAndBoostRow({required this.event});
-
-  @override
-  Widget build(BuildContext context) {
-    final formattedDate = DateFormat('E, MMM d • h:mm a').format(event.startDate);
-    
-    return Padding(
-      padding: const EdgeInsets.all(16),
-      child: Row(
-        children: [
-          // Date
-          Expanded(
-            child: Row(
-              children: [
-                const Icon(
-                  HugeIcons.calendar,
-                  size: 14,
-                  color: AppColors.textSecondary,
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  formattedDate,
-                  style: GoogleFonts.inter(
-                    fontSize: 13,
-                    color: AppColors.textSecondary,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          
-          // Report button
-          ReportButton(
-            contentId: event.id,
-            contentType: ReportedContentType.event,
-            contentPreview: event.title,
-            ownerId: event.createdBy,
-            size: 16,
-            color: Colors.white54,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// Event title component
-class _EventTitle extends StatelessWidget {
-  final String title;
-
-  const _EventTitle({required this.title});
-
-  @override
-  Widget build(BuildContext context) {
-    return Text(
-      title,
-      style: GoogleFonts.inter(
-        fontSize: 20,
-        fontWeight: FontWeight.w700,
-        color: AppColors.white,
-        letterSpacing: -0.5,
-        height: 1.2,
-      ),
-      maxLines: 2,
-      overflow: TextOverflow.ellipsis,
-    );
-  }
-}
-
-/// Time and location row component
-class _TimeAndLocationRow extends StatelessWidget {
-  final String time;
-  final String location;
-
-  const _TimeAndLocationRow({
-    required this.time,
-    required this.location,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // Time row
-        Row(
-          children: [
-            const Icon(
-              HugeIcons.calendar,
-              size: 16,
-              color: AppColors.textSecondary,
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                time,
-                style: GoogleFonts.inter(
-                  fontSize: 14,
-                  color: AppColors.textSecondary,
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 6),
-        
-        // Location row
-        Row(
-          children: [
-            const Icon(
-              HugeIcons.strokeRoundedHouse03,
-              size: 16,
-              color: AppColors.textSecondary,
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                location,
-                style: GoogleFonts.inter(
-                  fontSize: 14,
-                  color: AppColors.textSecondary,
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-          ],
-        ),
-      ],
-    );
-  }
-}
-
-/// CTA buttons row component
-class _CTAButtonsRow extends StatelessWidget {
-  final bool isRsvped;
-  final bool isRepostScaling;
-  final VoidCallback onRsvp;
-  final Function(bool) onRepostScale;
-  final VoidCallback onRepost;
-
-  const _CTAButtonsRow({
-    required this.isRsvped,
-    required this.isRepostScaling,
-    required this.onRsvp,
-    required this.onRepostScale,
-    required this.onRepost,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        // RSVP button with animation
-        _AnimatedRsvpButton(
-          isRsvped: isRsvped,
-          onRsvp: onRsvp,
-        ),
-
-        // Repost with scale interaction
-        GestureDetector(
-          onTapDown: (_) => onRepostScale(true),
-          onTapUp: (_) => onRepost(),
-          onTapCancel: () => onRepostScale(false),
-          child: AnimatedScale(
-            duration: const Duration(milliseconds: 120),
-            scale: isRepostScaling ? 0.95 : 1.0,
-            child: Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.08),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Icon(
-                HugeIcons.strokeRoundedHexagon01,
-                color: AppColors.yellow.withOpacity(0.8),
-                size: 20,
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-/// Animated RSVP button with tap animation and gold color when active
-class _AnimatedRsvpButton extends StatefulWidget {
-  final bool isRsvped;
-  final VoidCallback onRsvp;
-
-  const _AnimatedRsvpButton({
-    required this.isRsvped,
-    required this.onRsvp,
-  });
-
-  @override
-  State<_AnimatedRsvpButton> createState() => _AnimatedRsvpButtonState();
-}
-
-class _AnimatedRsvpButtonState extends State<_AnimatedRsvpButton> 
-    with SingleTickerProviderStateMixin {
-  late AnimationController _animationController;
-  late Animation<double> _scaleAnimation;
-  bool _isPressed = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _animationController = AnimationController(
-      duration: const Duration(milliseconds: 300),
-      vsync: this,
-    );
-    
-    _scaleAnimation = Tween<double>(
-      begin: 1.0,
-      end: 0.92,
-    ).animate(
-      CurvedAnimation(
-        parent: _animationController,
-        curve: Curves.easeOutCubic,
-        reverseCurve: Curves.easeInCubic,
-      ),
-    );
-  }
-
-  @override
-  void dispose() {
-    _animationController.dispose();
-    super.dispose();
-  }
-
-  void _handleTapDown(TapDownDetails details) {
-    setState(() => _isPressed = true);
-    _animationController.forward();
-  }
-
-  void _handleTapUp(TapUpDetails details) {
-    setState(() => _isPressed = false);
-    _animationController.reverse();
-    widget.onRsvp();
-    HapticFeedback.mediumImpact();
-  }
-
-  void _handleTapCancel() {
-    setState(() => _isPressed = false);
-    _animationController.reverse();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final bool isRsvped = widget.isRsvped;
-    
-    return GestureDetector(
-      onTapDown: _handleTapDown,
-      onTapUp: _handleTapUp,
-      onTapCancel: _handleTapCancel,
-      child: AnimatedBuilder(
-        animation: _scaleAnimation,
-        builder: (context, child) {
-          return Transform.scale(
-            scale: _scaleAnimation.value,
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              width: 120,
-              height: 42,
-              decoration: BoxDecoration(
-                color: isRsvped ? AppColors.gold.withOpacity(0.2) : Colors.white,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: isRsvped ? AppColors.gold : Colors.transparent,
-                  width: 1,
-                ),
-                boxShadow: isRsvped ? [
-                  BoxShadow(
-                    color: AppColors.gold.withOpacity(0.3),
-                    blurRadius: 8,
-                    spreadRadius: 0,
-                  )
-                ] : null,
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(
-                    isRsvped ? HugeIcons.strokeRoundedTick01 : HugeIcons.calendar,
-                    size: 18,
-                    color: isRsvped ? AppColors.gold : Colors.black,
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    isRsvped ? "GOING" : "RSVP",
-                    style: GoogleFonts.inter(
-                      fontWeight: FontWeight.w600,
-                      fontSize: 14,
-                      color: isRsvped ? AppColors.gold : Colors.black,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          );
-        },
-      ),
-    );
   }
 }

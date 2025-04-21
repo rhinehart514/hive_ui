@@ -81,8 +81,8 @@ class AppColors {
 
   /// Main app colors
   static const Color primaryDark = Color(0xFF1E1E1E);
-  static const Color primaryBackground = Color(0xFF121212);
-  static const Color secondaryBackground = Color(0xFF252525);
+  static const Color primaryBackground = Color(0xFF0D0D0D);
+  static const Color secondaryBackground = Color(0xFF1E1E1E);
   
   /// Accent colors
   static const Color accentGold = gold;
