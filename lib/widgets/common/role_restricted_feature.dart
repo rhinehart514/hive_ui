@@ -36,7 +36,7 @@ class RoleRestrictedFeature extends StatelessWidget {
   
   /// Constructor
   const RoleRestrictedFeature({
-    Key? key,
+    super.key,
     required this.currentStatus,
     required this.requiredStatus,
     required this.featureName,
@@ -45,7 +45,7 @@ class RoleRestrictedFeature extends StatelessWidget {
     this.isInDialog = false,
     this.showVerificationOnTap = true,
     this.onVerifyTapped,
-  }) : super(key: key);
+  });
   
   @override
   Widget build(BuildContext context) {

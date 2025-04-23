@@ -60,6 +60,8 @@ class AuthUtils {
         ref.read(profileProvider.notifier).loadProfile().then((_) {
           // Check profile state again after loading
           final updatedProfile = ref.read(profileProvider).profile;
+          // Check if the context is still valid before showing the SnackBar
+          if (!context.mounted) return;
           if (updatedProfile == null) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(

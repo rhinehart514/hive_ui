@@ -13,7 +13,7 @@ class GlassmorphicContainer extends StatelessWidget {
   final Color? backgroundColor;
 
   const GlassmorphicContainer({
-    Key? key,
+    super.key,
     required this.child,
     this.blur = 10,
     this.opacity = 0.2,
@@ -21,7 +21,7 @@ class GlassmorphicContainer extends StatelessWidget {
     this.border = 1,
     this.borderColor,
     this.backgroundColor,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {

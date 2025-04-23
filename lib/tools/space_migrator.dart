@@ -86,9 +86,9 @@ class SpaceMigrator {
                 'activeMembers': space.metrics.activeMembers,
                 'weeklyEvents': space.metrics.weeklyEvents,
                 'monthlyEngagements': space.metrics.monthlyEngagements,
-                'lastActivity': space.metrics.lastActivity != null
-                    ? Timestamp.fromDate(space.metrics.lastActivity)
-                    : null,
+                'lastActivity': space.metrics.lastActivity == null
+                    ? null
+                    : Timestamp.fromDate(space.metrics.lastActivity!),
                 'hasNewContent': space.metrics.hasNewContent,
                 'isTrending': space.metrics.isTrending,
                 'engagementScore': space.metrics.engagementScore,

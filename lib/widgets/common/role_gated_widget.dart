@@ -27,14 +27,14 @@ class RoleGatedWidget extends StatelessWidget {
   
   /// Constructor
   const RoleGatedWidget({
-    Key? key,
+    super.key,
     required this.currentStatus,
     required this.requiredStatus,
     required this.child,
     this.unauthorizedWidget,
     this.onUnauthorizedTap,
     this.showPlaceholder = true,
-  }) : super(key: key);
+  });
   
   @override
   Widget build(BuildContext context) {

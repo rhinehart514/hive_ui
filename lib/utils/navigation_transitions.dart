@@ -109,7 +109,6 @@ enum NavigationFeedbackType {
 /// Page route that uses the custom transition animations
 class ApplePageRoute<T> extends PageRouteBuilder<T> {
   final Widget page;
-  @override
   final bool fullscreenDialog;
 
   ApplePageRoute({

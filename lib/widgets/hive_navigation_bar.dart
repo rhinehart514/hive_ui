@@ -28,7 +28,6 @@ class _HiveNavigationBarState extends State<HiveNavigationBar>
   // Initialize controllers and animations in initState instead of using late
   AnimationController? _controller;
   AnimationController? _entranceController;
-  Animation<double>? _fadeAnimation;
   Animation<Offset>? _slideAnimation;
   int _previousIndex = 0;
   bool _animationsInitialized = false;
@@ -67,12 +66,6 @@ class _HiveNavigationBarState extends State<HiveNavigationBar>
       _controller = AnimationController(
         duration: const Duration(milliseconds: 300),
         vsync: this,
-      );
-      _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
-        CurvedAnimation(
-          parent: _controller!,
-          curve: Curves.easeOutCubic,
-        ),
       );
       _controller!.value = 1.0;
 

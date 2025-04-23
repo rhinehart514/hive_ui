@@ -5,7 +5,7 @@ import '../models/event.dart';
 import '../models/repost_content_type.dart';
 import '../models/user_profile.dart'; // Needed for repostedBy
 // Import the HiveEventCard component
-import '../../components/event_card/event_card.dart' as HiveComponents;
+import 'package:hive_ui/components/event_card/event_card.dart' as hive_components;
 
 /// A wrapper widget in the feed that uses the HiveEventCard component.
 class FeedEventCard extends ConsumerWidget { // Changed to ConsumerWidget for potential provider reads
@@ -43,7 +43,7 @@ class FeedEventCard extends ConsumerWidget { // Changed to ConsumerWidget for po
   // Removed isFeatured as it's not directly passed, logic internal/TBD
 
   const FeedEventCard({
-    Key? key,
+    super.key,
     required this.event,
     this.isRepost = false,
     this.repostedBy, // Updated
@@ -54,7 +54,7 @@ class FeedEventCard extends ConsumerWidget { // Changed to ConsumerWidget for po
     this.onRsvp,
     this.onRepost,
     this.onReport,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -66,7 +66,7 @@ class FeedEventCard extends ConsumerWidget { // Changed to ConsumerWidget for po
     // Directly return the HiveEventCard, passing all relevant props.
     // The HiveEventCard itself handles the different display logic 
     // for standard events, reposts, and quote reposts internally.
-    return HiveComponents.HiveEventCard(
+    return hive_components.HiveEventCard(
       event: event,
       isRepost: isRepost,
       repostedBy: repostedBy,

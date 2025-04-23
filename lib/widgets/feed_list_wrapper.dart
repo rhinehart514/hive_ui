@@ -31,7 +31,7 @@ class FeedListWrapper extends StatelessWidget {
   
   /// Constructor
   const FeedListWrapper({
-    Key? key,
+    super.key,
     required this.feedItems,
     required this.isLoadingMore,
     required this.hasMoreEvents,
@@ -40,7 +40,7 @@ class FeedListWrapper extends StatelessWidget {
     required this.onNavigateToEventDetails,
     required this.onRsvpToEvent,
     required this.onRepost,
-  }) : super(key: key);
+  });
   
   @override
   Widget build(BuildContext context) {

@@ -1,10 +1,10 @@
 /// This file previously provided platform-specific Firebase implementations.
-/// It's now simplified as we use real Firebase on all platforms
+/// It's now simplified as we use real Firebase on all platforms.
 ///
-/// Keeping minimal stubs for backward compatibility
+/// Keeping minimal stubs for backward compatibility.
 
-/// These were previously used to fix JS dependencies for Windows testing
-/// Now they are just stubs for backward compatibility
+/// These were previously used to fix JS dependencies for Windows testing.
+/// Now they are just stubs for backward compatibility.
 
 /// Converts a Dart object to JavaScript.
 dynamic jsify(Object? dartObject) {

@@ -12,7 +12,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 /// 3. Ensure all events are properly connected with their spaces
 ///
 /// This tool is designed to be run directly with Flutter:
-/// flutter run -d <device> lib/tools/reorganize_spaces_by_type.dart
+/// flutter run -d \<device\> lib/tools/reorganize_spaces_by_type.dart
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();

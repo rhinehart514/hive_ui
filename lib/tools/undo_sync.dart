@@ -13,7 +13,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// 3. Clear any lost_events collection entries created during sync
 ///
 /// This tool is designed to be run directly with Flutter:
-/// flutter run -d <device> lib/tools/undo_sync.dart
+/// flutter run -d \<device\> lib/tools/undo_sync.dart
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();

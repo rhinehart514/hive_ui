@@ -13,9 +13,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 /// spaces -> type of spaces -> space ID -> events -> event ID
 ///
 /// This tool is designed to be run directly with Flutter:
-/// flutter run -d <device> lib/tools/migrate_events_to_spaces.dart [--interactive]
+/// flutter run -d \<device\> lib/tools/migrate_events_to_spaces.dart [--interactive]
 ///
-/// Where <device> can be:
+/// Where \<device\> can be:
 ///   - windows (for Windows)
 ///   - macos (for macOS)
 ///   - linux (for Linux)

@@ -91,12 +91,16 @@ class OnboardingChecker extends ConsumerWidget {
         Future.microtask(() {
           try {
             // Check if we should add a skip parameter
+            // Check context validity before accessing GoRouterState
+            if (!currentContext.mounted) return;
             final shouldSkipPreferences = _shouldAddSkipParameter(currentContext);
             final redirectPath = shouldSkipPreferences 
                 ? '/onboarding?skip=true' 
                 : '/onboarding';
                 
             // Use the captured context for navigation
+            // Check context validity again before navigation
+            if (!currentContext.mounted) return;
             currentContext.go(redirectPath);
           } catch (e) {
             debugPrint('Navigation error during onboarding check: $e');
@@ -122,6 +126,8 @@ class OnboardingChecker extends ConsumerWidget {
   bool _shouldAddSkipParameter(BuildContext context) {
     // Check if the user is coming from a specific flow that should skip preferences
     // For now, we'll implement a simple check based on the current route
+    // Check context validity before accessing GoRouterState
+    if (!context.mounted) return false; 
     final currentLocation = GoRouterState.of(context).matchedLocation;
     
     // Skip preferences if the user is coming from a deep link, app invitation, 

@@ -4,7 +4,7 @@ import 'package:hive_ui/theme/app_colors.dart';
 
 /// A widget that displays Firebase usage statistics
 class FirebaseStatsWidget extends StatefulWidget {
-  const FirebaseStatsWidget({Key? key}) : super(key: key);
+  const FirebaseStatsWidget({super.key});
 
   @override
   State<FirebaseStatsWidget> createState() => _FirebaseStatsWidgetState();
@@ -160,7 +160,6 @@ class _FirebaseStatsWidgetState extends State<FirebaseStatsWidget> {
     final sessionDuration = _stats['sessionDuration'] ?? '0 minutes';
     final intercepted = _stats['requestsIntercepted'] ?? 0;
     final total = _stats['totalRequests'] ?? 0;
-    final saved = _stats['savedRequests'] ?? 0;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,

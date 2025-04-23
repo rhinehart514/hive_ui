@@ -8,10 +8,10 @@ class ActivityCard extends StatelessWidget {
   final VoidCallback? onTap;
 
   const ActivityCard({
-    Key? key,
+    super.key,
     required this.activity,
     this.onTap,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {

@@ -9,9 +9,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// A command-line tool to sync all RSS events to Firestore in a single batch operation
 ///
 /// This tool is designed to be run directly with Flutter:
-/// flutter run -d <device> lib/tools/sync_all_events.dart
+/// flutter run -d \<device\> lib/tools/sync_all_events.dart
 ///
-/// Where <device> can be:
+/// Where \<device\> can be:
 ///   - windows (for Windows)
 ///   - macos (for macOS)
 ///   - linux (for Linux)

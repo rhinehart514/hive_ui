@@ -29,9 +29,11 @@ class SpaceExtractionUtility {
           await SpaceEventService.processAllExistingEvents();
 
       // Close the dialog
+      if (!context.mounted) return 0;
       Navigator.of(context, rootNavigator: true).pop();
 
       // Show success dialog
+      if (!context.mounted) return processedSpaces;
       showDialog(
         context: context,
         builder: (context) => AlertDialog(
@@ -50,9 +52,11 @@ class SpaceExtractionUtility {
       return processedSpaces;
     } catch (e) {
       // Close loading dialog if open
+      if (!context.mounted) return 0;
       Navigator.of(context, rootNavigator: true).pop();
 
       // Show error dialog
+      if (!context.mounted) return 0;
       showDialog(
         context: context,
         builder: (context) => AlertDialog(

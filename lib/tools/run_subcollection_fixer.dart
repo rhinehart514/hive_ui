@@ -18,7 +18,7 @@ void main() async {
 }
 
 class SubcollectionFixerApp extends StatefulWidget {
-  const SubcollectionFixerApp({Key? key}) : super(key: key);
+  const SubcollectionFixerApp({super.key});
 
   @override
   State<SubcollectionFixerApp> createState() => _SubcollectionFixerAppState();

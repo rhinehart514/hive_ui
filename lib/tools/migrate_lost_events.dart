@@ -9,9 +9,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 /// This tool will create spaces for events if they don't exist
 ///
 /// This tool is designed to be run directly with Flutter:
-/// flutter run -d <device> lib/tools/migrate_lost_events.dart
+/// flutter run -d \<device\> lib/tools/migrate_lost_events.dart
 ///
-/// Where <device> can be:
+/// Where \<device\> can be:
 ///   - windows (for Windows)
 ///   - macos (for macOS)
 ///   - linux (for Linux)

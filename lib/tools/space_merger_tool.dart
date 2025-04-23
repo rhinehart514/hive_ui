@@ -28,10 +28,10 @@ void main() async {
 
 /// Simple UI to execute the space merger tool
 class SpaceMergerTool extends StatefulWidget {
-  const SpaceMergerTool({Key? key}) : super(key: key);
+  const SpaceMergerTool({super.key});
 
   @override
-  _SpaceMergerToolState createState() => _SpaceMergerToolState();
+  State<SpaceMergerTool> createState() => _SpaceMergerToolState();
 }
 
 class _SpaceMergerToolState extends State<SpaceMergerTool> {

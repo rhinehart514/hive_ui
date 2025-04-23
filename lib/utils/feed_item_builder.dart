@@ -71,20 +71,6 @@ class FeedItemBuilder {
       case FeedItemType.hiveLab:
         final hiveLabItem = item as HiveLabItem;
         return HiveLabCard(item: hiveLabItem);
-        
-      default:
-        return Container(
-          margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: const Color(0xFF1E1E1E),
-            borderRadius: BorderRadius.circular(16),
-          ),
-          child: const Text(
-            'Unsupported feed item type',
-            style: TextStyle(color: Colors.white),
-          ),
-        );
     }
   }
   

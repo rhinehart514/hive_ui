@@ -7,7 +7,7 @@ import 'package:hive_ui/widgets/hive_app_bar.dart';
 
 /// Example showing how to use the HiveAppBar in different scenarios
 class HiveAppBarExamples extends ConsumerStatefulWidget {
-  const HiveAppBarExamples({Key? key}) : super(key: key);
+  const HiveAppBarExamples({super.key});
 
   @override
   ConsumerState<HiveAppBarExamples> createState() => _HiveAppBarExamplesState();

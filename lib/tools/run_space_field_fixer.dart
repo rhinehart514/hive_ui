@@ -18,7 +18,7 @@ void main() async {
 }
 
 class SpaceFieldFixerApp extends StatefulWidget {
-  const SpaceFieldFixerApp({Key? key}) : super(key: key);
+  const SpaceFieldFixerApp({super.key});
 
   @override
   State<SpaceFieldFixerApp> createState() => _SpaceFieldFixerAppState();
@@ -31,7 +31,6 @@ class _SpaceFieldFixerAppState extends State<SpaceFieldFixerApp> {
   int _spacesFound = 0;
   int _spacesFixed = 0;
   int _spacesMoved = 0;
-  int _currentTypeIndex = 0;
 
   final List<String> _typeCollections = [
     'student_organizations',
@@ -175,7 +174,6 @@ class _SpaceFieldFixerAppState extends State<SpaceFieldFixerApp> {
       _spacesFound = 0;
       _spacesFixed = 0;
       _spacesMoved = 0;
-      _currentTypeIndex = 0;
     });
 
     try {
@@ -185,7 +183,6 @@ class _SpaceFieldFixerAppState extends State<SpaceFieldFixerApp> {
       for (final type in _typeCollections) {
         setState(() {
           _status = 'Processing spaces in $type...';
-          _currentTypeIndex++;
         });
 
         debugPrint('\n=== FIXING SPACES IN $type ===\n');
@@ -262,7 +259,6 @@ class _SpaceFieldFixerAppState extends State<SpaceFieldFixerApp> {
       if (data == null || data.isEmpty) return;
 
       final String spaceId = doc.id;
-      bool needsUpdate = false;
 
       // Check for auto-created spaces or spaces missing critical fields
       bool isAutoCreated = data['autoCreatedFromMigration'] == true ||

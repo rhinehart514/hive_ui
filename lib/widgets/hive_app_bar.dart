@@ -83,7 +83,7 @@ class HiveAppBar extends ConsumerStatefulWidget implements PreferredSizeWidget {
   final VoidCallback? onSearchClosed;
   
   const HiveAppBar({
-    Key? key,
+    super.key,
     required this.title,
     this.subtitle,
     this.style = HiveAppBarStyle.standard,
@@ -106,7 +106,7 @@ class HiveAppBar extends ConsumerStatefulWidget implements PreferredSizeWidget {
     this.searchFocusNode,
     this.onSearchChanged,
     this.onSearchClosed,
-  }) : super(key: key);
+  });
 
   @override
   ConsumerState<HiveAppBar> createState() => _HiveAppBarState();
@@ -136,7 +136,6 @@ class _HiveAppBarState extends ConsumerState<HiveAppBar> with SingleTickerProvid
   bool _isScrolled = false;
   bool _isSearchExpanded = false;
   late AnimationController _animationController;
-  late Animation<double> _opacityAnimation;
   late Animation<double> _elevationAnimation;
 
   @override
@@ -151,14 +150,6 @@ class _HiveAppBarState extends ConsumerState<HiveAppBar> with SingleTickerProvid
       duration: const Duration(milliseconds: 200),
       vsync: this,
     );
-    
-    _opacityAnimation = Tween<double>(
-      begin: 0.0,
-      end: 1.0,
-    ).animate(CurvedAnimation(
-      parent: _animationController,
-      curve: Curves.easeOut,
-    ));
     
     _elevationAnimation = Tween<double>(
       begin: 0.0,
