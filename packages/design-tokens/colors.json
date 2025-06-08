@@ -1,0 +1,26 @@
+﻿{
+  "hive": {
+    "bg": {
+      "primary": { "value": "#0D0D0D", "type": "color", "description": "Global background, fills & full-bleed panels — HIVE matte black foundation" },
+      "surface-1": { "value": "#1E1E1E", "type": "color", "description": "Card / sheet backgrounds, default Buttons" },
+      "surface-2": { "value": "#2A2A2A", "type": "color", "description": "Hover / active states, modal backs" }
+    },
+    "border": { "value": "#262626", "type": "color", "description": "1px hair-lines, separators" },
+    "text": {
+      "primary": { "value": "#FFFFFF", "type": "color", "description": "Headlines, body text (≥ AA contrast on #0A0A0A)" },
+      "secondary": { "value": "#B3B3B3", "type": "color", "description": "Metadata, captions" },
+      "disabled": { "value": "#525252", "type": "color", "description": "Disabled label, placeholder text" }
+    },
+    "accent": {
+      "default": { "value": "#FFD700", "type": "color", "description": "Sparing highlights: active icon, Surge glow, key CTAs" },
+      "hover": { "value": "#F6D14A", "type": "color", "description": "Accent hover / focus ring (slightly cooler for contrast)" }
+    },
+    "semantic": {
+      "error": { "value": "#FF4D4F", "type": "color", "description": "Destructive actions, validation errors" },
+      "success": { "value": "#0ABF53", "type": "color", "description": "Positive toasts, success banners" }
+    }
+  },
+  "glass": {
+    "blur": { "value": "20px", "type": "blur" }
+  }
+}

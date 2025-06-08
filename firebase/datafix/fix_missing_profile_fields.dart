@@ -85,7 +85,7 @@ Future<void> fixMissingProfileFields() async {
       final String userId = userDoc.id;
       final Map<String, dynamic> userData = userDoc.data() as Map<String, dynamic>;
       
-      print('🔍 Processing profile ${profileIndex}/${totalProfiles}: User $userId');
+      print('🔍 Processing profile $profileIndex/$totalProfiles: User $userId');
       
       // Check for missing fields
       Map<String, dynamic> updates = {};
@@ -156,7 +156,7 @@ Future<void> fixMissingProfileFields() async {
         // Update all but the first user with the duplicate username
         for (int i = 1; i < userIds.length; i++) {
           final String userId = userIds[i];
-          final String newUsername = '${username}_${i}';
+          final String newUsername = '${username}_$i';
           
           try {
             await firestore.collection('users').doc(userId).update({

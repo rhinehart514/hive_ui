@@ -1,0 +1,328 @@
+---
+description:
+globs:
+alwaysApply: false
+---
+# HIVE vBETA Strategic Architecture Cursor Rules
+
+_Last Updated: January 2025_  
+_Purpose: Strategic architecture and development patterns for HIVE vBETA full-stack platform_
+
+---
+
+## 🎯 STRATEGIC FOUNDATION
+
+### **Platform Philosophy**
+**"Build robust, advanced-features-prepared platform with strategic flexibility"**
+
+- **Web-First Strategy:** React/Next.js primary platform, Flutter mobile post-success
+- **Advanced Features Prepared:** Complete vBETA scope, not minimal MVP
+- **Strategic Flexibility:** Product decisions made iteratively during development
+- **Weekly Evolution:** Post-launch rapid iteration building momentum for fall rollout
+
+### **Locked Foundation Decisions**
+1. **Platform:** Web-first React/Next.js → Flutter mobile later
+2. **Scope:** Complete feature set prepared for June 2025 launch
+3. **Backend:** Firebase with real-time coordination capability
+4. **Feed System:** Deferred to last phase (build behavioral foundation first)
+5. **Target:** 1000+ UB students with weekly evolution post-launch
+
+---
+
+## 🏗️ FULL-STACK ARCHITECTURE PATTERNS
+
+### **Technical Stack Requirements**
+```
+FRONTEND (WEB-PRIMARY)
+├── React/Next.js with App Router
+├── TypeScript + Tailwind CSS + HIVE Design System
+├── React Query (server state) + Zustand (client state)
+├── Component Library with corrected radius specs
+└── Cross-browser optimization + mobile web responsive
+
+BACKEND (FIREBASE FULL-STACK)
+├── Firebase Auth with .edu domain validation
+├── Firestore with optimized schema design
+├── Cloud Functions (Node.js/TypeScript)
+├── Real-time subscriptions for live coordination
+└── RSS integration pipeline for campus events
+
+INTEGRATION LAYER
+├── Design tokens shared across platforms
+├── Real-time analytics and monitoring
+├── Push notifications and email services
+└── Performance optimization and caching
+```
+
+### **Clean Architecture Implementation**
+```typescript
+// Feature-based organization
+features/
+  ├── auth/                     # Authentication & onboarding
+  ├── profile/                  # Personal productivity hub
+  ├── spaces/                   # Community coordination
+  ├── events/                   # Campus integration
+  ├── hivelab/                  # Tool creation system
+  └── feed/                     # Social aftermath layer
+
+// Each feature follows clean architecture
+feature_name/
+  ├── data/                     # Firebase integration, DTOs
+  ├── domain/                   # Business logic, entities
+  └── presentation/             # React components, hooks
+```
+
+---
+
+## 🔄 PHASE-BASED DEVELOPMENT STRATEGY
+
+### **Phase 1: Web Foundation (Weeks 1-2)**
+**Target:** Students can sign up and navigate
+```typescript
+// Critical implementations
+- Firebase project with security rules
+- Next.js with App Router configuration
+- HIVE Design System integration (corrected radius)
+- Authentication flow (.edu validation)
+- Core navigation with error boundaries
+```
+
+### **Phase 2: Profile System (Weeks 3-4)**
+**Target:** Daily-use personal value that hooks students
+```typescript
+// Profile architecture
+interface ProfileSystem {
+  nowPanel: RealTimeDashboard;          // Today's campus context
+  motionLog: BehavioralTracking;        // Privacy-first analytics
+  stackTools: ProductivityTools[];      // 3 confirmed tools (TBD)
+  calendarIntegration: ConflictDetection;
+}
+
+// Strategic decision: Which 3 Stack Tools provide maximum value?
+```
+
+### **Phase 3: Spaces System (Weeks 5-6)**
+**Target:** Community coordination platform
+```typescript
+// Spaces architecture
+interface SpacesSystem {
+  discovery: RecommendationEngine;      // Profile-based suggestions
+  builderManagement: ApprovalWorkflow;  // 4-Builder limit per Space
+  realTimeCoordination: ActivityFeeds;  // Member coordination
+  spaceCustomization: ToolPlacement;    // Builder-only features
+}
+
+// Strategic decision: Space activation criteria and Builder thresholds
+```
+
+### **Phase 4: Events System (Weeks 7-8)**
+**Target:** Campus integration with RSS feeds
+```typescript
+// Events architecture  
+interface EventsSystem {
+  rssIntegration: CampusFeedPipeline;   // UB events auto-import
+  smartRsvp: ConflictDetection;         // Calendar integration
+  socialFeatures: PrivacyControls;      // Limited social proof
+  builderEvents: ToolPlacedEvents;      // EventCard Tools
+}
+
+// Strategic decision: RSS processing complexity and social proof level
+```
+
+### **Phase 5: HiveLAB System (Weeks 9-10)**
+**Target:** Tool creation platform (web-only)
+```typescript
+// HiveLAB architecture
+interface HiveLabSystem {
+  toolComposer: DragDropInterface;      // Web-only creation
+  elementSystem: ValidationFramework;   // 5-Element composition
+  builderRecognition: EmergenceTracking;
+  templateLibrary: PreMadeTools;        // 20 pre-made templates
+}
+
+// Strategic decision: Element composition complexity level
+```
+
+### **Phase 6: System Integration (Weeks 11-12)**
+**Target:** Seamless cross-system coordination
+```typescript
+// Integration patterns
+interface SystemIntegration {
+  crossSystemData: RealTimeSync;
+  performanceOptimization: IntelligentCaching;
+  analytics: UserJourneyTracking;
+  contentSeeding: CampusDataPrep;
+}
+```
+
+### **Phase 7: Feed System (Weeks 13-14)**
+**Target:** Social aftermath layer
+```typescript
+// Feed architecture
+interface FeedSystem {
+  behavioralAlgorithm: MotionLogAnalysis;
+  toolSurgeDetection: CommunityMomentum;
+  builderAttribution: CrossSpaceRecognition;
+  campusMotion: ActivityAggregation;
+}
+
+// Strategic decision: Feed complexity for vBETA vs post-launch
+```
+
+---
+
+## 🎯 STRATEGIC DECISION FRAMEWORK
+
+### **Product Decisions Made During Development**
+Critical choices to be determined collaboratively:
+
+1. **Profile Stack Tools:** Which 3 tools provide maximum student value?
+2. **HiveLAB Complexity:** Simple composition vs advanced Element capabilities?
+3. **Space Social Features:** Level of social proof vs privacy protection?
+4. **Builder Recognition:** Emergence thresholds and attribution systems?
+5. **Feed Integration:** Timing and complexity for vBETA launch?
+6. **Event Social Layer:** How much "who's going" visibility vs privacy?
+
+### **Collaborative Decision Process**
+Before implementing any strategic feature:
+```typescript
+// Decision workflow
+async function implementStrategicFeature(feature: FeatureSpec) {
+  await discussRequirements(feature);     // Talk through with user
+  await determineApproach(feature);       // Collaborate on patterns
+  await validateAlignment(feature);       // Confirm strategic fit
+  await buildIteratively(feature);        // Implement with feedback
+}
+```
+
+---
+
+## 🔒 CAMPUS-NATIVE REQUIREMENTS
+
+### **Independence from Institutional Systems**
+- **Public Data Only:** No university back-end access required
+- **RSS Integration:** Public .edu event feeds (UB + expansion ready)
+- **Student-Driven:** Independent activation without institutional partnerships
+- **.edu Validation:** Domain checking without storing credentials
+
+### **Privacy-First Architecture**
+```typescript
+interface PrivacyFramework {
+  motionLog: {
+    collection: MinimalDataCollection;
+    usage: PersonalizationOnly;
+    control: UserOwnership;
+  };
+  socialFeatures: {
+    visibility: ExplicitOptIn;
+    dataSharing: GranularControl;
+    anonymousOptions: AlwaysAvailable;
+  };
+  builderAttribution: {
+    recognition: OptInBasis;
+    crossSpace: PermissionBased;
+    analytics: AggregatedOnly;
+  };
+}
+```
+
+---
+
+## 🚀 QUALITY STANDARDS & PERFORMANCE
+
+### **Technical Excellence Requirements**
+```typescript
+interface QualityStandards {
+  performance: {
+    loadTime: "<2 seconds";
+    animations: "60fps minimum";
+    bundleSize: "<500KB gzipped";
+    lighthouse: "90+ performance score";
+  };
+  reliability: {
+    uptime: "99.9%";
+    errorRate: "<0.1%";
+    offlineCapability: "graceful degradation";
+  };
+  accessibility: {
+    wcag: "2.1 AA compliance";
+    screenReader: "full support";
+    keyboardNav: "complete coverage";
+  };
+}
+```
+
+### **Cross-Platform Preparation**
+```typescript
+interface CrossPlatformStrategy {
+  designTokens: {
+    sharedSystem: "web + future mobile";
+    consistency: "brand aesthetic maintained";
+    scalability: "infinite design systems";
+  };
+  componentArchitecture: {
+    reusablePatterns: "React → Flutter translation";
+    stateManagement: "backend-agnostic schemas";
+    apiContracts: "RESTful + real-time patterns";
+  };
+}
+```
+
+---
+
+## 📊 SUCCESS METRICS & VALIDATION
+
+### **Launch Success Criteria**
+```typescript
+interface LaunchMetrics {
+  week1: "1000+ UB student signups";
+  week2: "70% daily active Profile usage";
+  week4: "50% join 3+ relevant Spaces";
+  week6: "40% RSVP to campus events";
+  week8: "30% cross-system engagement";
+  week12: "50+ active Builders creating tools";
+}
+```
+
+### **Strategic Positioning Validation**
+- vBETA scope boundaries maintained while preparing advanced features
+- Product decisions documented and validated through development
+- Web-first strategy executed successfully with mobile preparation
+- Weekly evolution pathway clear for post-launch iterations
+- Foundation set for fall semester large-scale rollout
+
+---
+
+## 🧭 IMPLEMENTATION PRIORITIES
+
+### **Critical Path Dependencies**
+1. **Design System Correction:** Fix radius specs before component development
+2. **Firebase Architecture:** Security rules and schema before feature implementation
+3. **Authentication Foundation:** .edu validation before any user features
+4. **Profile System:** Personal value before community features
+5. **Builder Pathway:** Tool creation before Feed attribution system
+
+### **Risk Mitigation Strategies**
+```typescript
+interface RiskMitigation {
+  technicalRisks: {
+    performanceBottlenecks: "early profiling + optimization";
+    scalabilityLimits: "horizontal scaling architecture";
+    crossBrowserIssues: "progressive enhancement";
+  };
+  productRisks: {
+    userAdoption: "daily value in Profile system";
+    communityFormation: "pre-seeded Spaces + Builder pathway";
+    contentGeneration: "RSS feeds + template tools";
+  };
+  strategicRisks: {
+    competitorLaunch: "unique campus-native positioning";
+    institutionalResistance: "student-driven independence";
+    seasonalTiming: "summer testing for fall readiness";
+  };
+}
+```
+
+---
+
+**REMEMBER:** This is not a minimal MVP - it's a complete, advanced-features-prepared platform with strategic flexibility. Every implementation decision should be made collaboratively, considering the full context of HIVE's campus-native positioning and sophisticated technical foundation.

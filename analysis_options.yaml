@@ -55,3 +55,9 @@ exclude:
   - lib/generated/**
   - "**/*.g.dart"
   - "**/*.freezed.dart"
+  - backup/**
+  - lib/tools/**
+  - tool/**
+  - scripts/**
+  - test/**
+  - upload_clubs.dart
