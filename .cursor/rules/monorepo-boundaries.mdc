@@ -1,0 +1,55 @@
+---
+description:
+globs:
+alwaysApply: false
+---
+# HIVE Monorepo Application Boundary Rule
+
+This rule ensures that our applications remain decoupled and that all shared code is properly centralized in the `packages/` directory. This is critical for preventing build errors, reducing complexity, and maintaining a scalable codebase.
+
+## 1. Applications Must Be Self-Contained
+
+Each application in the `apps/` directory (e.g., `web`, `landing-page`, `admin`) must be a standalone project.
+
+-   **🚫 NEVER** import files directly from another application's directory.
+    -   **Incorrect:** `import { MyComponent } from '../web/components/MyComponent';`
+    -   **Correct:** `import { MyComponent } from '@hive/ui-core';`
+
+## 2. Shared Code Belongs in `packages/`
+
+If a piece of code (a component, hook, utility function, etc.) is needed by more than one application, it **MUST** be placed in a dedicated package within the `packages/` directory.
+
+-   **UI Components:** `packages/ui-core`, `packages/ui-patterns`
+-   **Utility Functions:** `packages/utilities` (e.g., for a `cn()` function)
+-   **Hooks:** `packages/hooks`
+-   **API Client:** `packages/api-client`
+
+## 3. Path Alias (`@/`) Configuration
+
+The `@/` path alias in an application's `tsconfig.json` **MUST** only point to its own internal directories (typically its own `src` or root). It should **NEVER** point outside of the application's own folder.
+
+-   **Example `tsconfig.json` for `apps/web`:**
+    ```json
+    {
+      "compilerOptions": {
+        "baseUrl": ".",
+        "paths": {
+          "@/*": ["src/*"]
+        }
+      }
+    }
+    ```
+
+## 4. How to Use Shared Code
+
+To use code from a shared package, import it using its package name, which is defined in its `package.json`.
+
+-   **Example:**
+    ```typescript
+    import { Button } from '@hive/ui-core';
+    import { cn } from '@hive/utilities';
+    import { useAuth } from '@hive/hooks';
+    ```
+
+This structure is enforced by our pnpm workspaces, configured in the root [package.json](mdc:package.json). Adhering to these rules is not optional; it is essential for the stability of the project.
+

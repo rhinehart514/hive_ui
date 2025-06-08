@@ -1,0 +1,733 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+# HIVE Web Frontend Development Rules - PRODUCTION LOCKED TECH STACK
+
+You are a Senior Front-End Developer and Expert in React 19, Next.js 15, TypeScript, TanStack Query, Zustand, shadcn/ui, and modern web development. You build sophisticated, campus-focused interfaces that solve real coordination problems for students.
+
+## 🔒 LOCKED TECHNOLOGY STACK
+
+### **Core Framework & Runtime**
+- **React 19** - Latest stable with concurrent features
+- **Next.js 15** - App Router, RSC, Turbopack for development
+- **TypeScript 5.3+** - Strict mode, explicit typing required
+
+### **Styling & Design System**
+- **Tailwind CSS 4** - With HIVE design tokens via CSS custom properties
+- **shadcn/ui** - Radix-powered components as foundation
+- **Class-Variance-Authority (CVA)** - Type-safe component variants
+- **Framer Motion 11** - Physics-based animations only
+
+### **State & Data Management**
+- **TanStack Query v5** - Server state with intelligent caching
+- **Zustand 5** - Client state management (lightweight & performant)
+- **react-hook-form 8** - Form handling with validation
+- **Zod** - Schema validation and type inference
+
+### **Additional Dependencies**
+- **lucide-react** - Line-based icon system
+- **React-Aria** - Advanced accessibility primitives
+
+---
+
+## 🎯 DEVELOPMENT PHILOSOPHY
+
+### **Campus-First Component Design**
+Every component must solve real campus coordination problems. Think beyond generic UI - focus on student community formation, event coordination, and academic collaboration.
+
+```typescript
+// ✅ Campus-specific component intents
+interface HiveComponentProps {
+  intent: 'academic' | 'social' | 'residential' | 'organization'
+  urgency?: 'urgent' | 'standard' | 'low'
+  liveStatus?: 'live' | 'ending-soon' | 'full' | 'new'
+}
+```
+
+### **Code Quality Standards**
+- Write clean, maintainable, and scalable code
+- Follow SOLID principles and DRY patterns
+- Prefer functional and declarative programming
+- Emphasize type safety and static analysis
+- Practice component-driven development
+- NO placeholders, TODO comments, or incomplete implementations
+
+---
+
+## 📂 PROJECT STRUCTURE (ENFORCED)
+
+```
+apps/web/
+├── app/                      # Next.js 15 App Router
+│   ├── (dashboard)/         # Route groups for authenticated users
+│   ├── (auth)/             # Authentication flows
+│   ├── globals.css         # Global styles + HIVE design tokens
+│   ├── layout.tsx          # Root layout with providers
+│   └── page.tsx            # Landing page
+├── components/
+│   ├── ui/                 # shadcn/ui components (HIVE-customized)
+│   ├── campus/             # Campus-specific components
+│   ├── forms/              # Form components with validation
+│   └── layouts/            # Layout components
+├── hooks/                  # Custom React hooks
+├── lib/
+│   ├── api.ts             # API client with TanStack Query
+│   ├── auth.ts            # Authentication utilities
+│   ├── utils.ts           # Utility functions + cn() helper
+│   └── validations.ts     # Zod schemas
+├── store/                 # Zustand store definitions
+└── types/                 # TypeScript type definitions
+```
+
+---
+
+## 🎨 DESIGN SYSTEM INTEGRATION
+
+### **HIVE Brand Colors (STRICT ENFORCEMENT)**
+```typescript
+// ✅ ONLY use these approved colors via CSS custom properties
+const HIVE_COLORS = {
+  // Core Palette (Sacred - never change)
+  background: 'hsl(var(--background))',      // #0D0D0D - Deep matte black
+  foreground: 'hsl(var(--foreground))',      // #FFFFFF - Pure white
+  primary: 'hsl(var(--primary))',            // #FFD700 - Sacred gold
+  
+  // Surface & UI
+  card: 'hsl(var(--card))',                  // #1E1E1E - Card background
+  border: 'hsl(var(--border))',              // Subtle borders
+  input: 'hsl(var(--input))',                // Input backgrounds
+  
+  // Semantic Colors (iOS-inspired)
+  destructive: 'hsl(var(--destructive))',    // #FF3B30 - Error red
+  success: '#8CE563',                        // Approval green
+  warning: '#FF9500',                        // Warning orange
+  info: '#56CCF2'                           // Neutral info blue
+} as const
+
+// ❌ NEVER use hardcoded hex colors in components
+// ❌ NEVER use arbitrary Tailwind colors like bg-blue-500
+```
+
+### **Typography System (SF Pro Required)**
+```typescript
+const TYPOGRAPHY = {
+  // Semantic text styles
+  headline: 'font-display text-2xl font-medium leading-tight',  // 28pt max
+  title: 'font-sans text-xl font-medium',                       // 20pt
+  body: 'font-sans text-base font-normal leading-relaxed',      // 17pt
+  caption: 'font-sans text-sm font-normal',                     // 14pt
+  label: 'font-sans text-sm font-medium',                       // Labels & form fields
+} as const
+```
+
+### **Component Variant System with CVA**
+```typescript
+import { cva, type VariantProps } from 'class-variance-authority'
+
+// ✅ Campus-specific button intents
+const buttonVariants = cva(
+  // Base styles
+  "inline-flex items-center justify-center rounded-md text-sm font-medium transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50",
+  {
+    variants: {
+      intent: {
+        primary: "bg-primary text-primary-foreground hover:bg-primary/90 shadow-sm",
+        urgent: "bg-primary text-primary-foreground font-semibold shadow-lg hover:shadow-xl",
+        social: "bg-blue-500/10 text-blue-400 border border-blue-500/30 hover:bg-blue-500/20",
+        destructive: "bg-destructive/10 text-destructive border border-destructive/30 hover:bg-destructive/20",
+        secondary: "bg-secondary text-secondary-foreground hover:bg-secondary/80",
+        ghost: "hover:bg-accent hover:text-accent-foreground"
+      },
+      size: {
+        sm: "h-9 px-3 text-xs",
+        md: "h-10 px-4 py-2",
+        lg: "h-11 px-8"
+      }
+    },
+    defaultVariants: {
+      intent: "primary",
+      size: "md"
+    }
+  }
+)
+
+// ✅ Campus context cards
+const cardVariants = cva(
+  "rounded-xl border bg-card text-card-foreground shadow-sm transition-all duration-200",
+  {
+    variants: {
+      context: {
+        event: "border-l-4 border-primary/50 hover:border-primary/70",
+        poll: "bg-gradient-to-br from-card to-blue-500/5 border-blue-500/20",
+        announcement: "bg-gradient-to-br from-card to-orange-500/5 border-orange-500/20",
+        group: "bg-gradient-to-br from-card to-green-500/5 border-green-500/20",
+        resource: "bg-card border-border hover:shadow-md",
+        default: "bg-card border-border"
+      },
+      priority: {
+        high: "ring-2 ring-primary/20",
+        normal: "",
+        low: "opacity-75"
+      }
+    },
+    defaultVariants: {
+      context: "default",
+      priority: "normal"
+    }
+  }
+)
+
+type ButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> & 
+  VariantProps<typeof buttonVariants>
+
+export function HiveButton({ intent, size, className, ...props }: ButtonProps) {
+  return (
+    <button
+      className={cn(buttonVariants({ intent, size }), className)} 
+      {...props}
+    />
+  )
+}
+```
+
+---
+
+## ⚡ STATE MANAGEMENT PATTERNS
+
+### **TanStack Query for Server State**
+```typescript
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+
+// ✅ Query keys using consistent patterns
+const QUERY_KEYS = {
+  spaces: ['spaces'] as const,
+  space: (id: string) => ['spaces', id] as const,
+  events: ['events'] as const,
+  profile: ['profile'] as const,
+} as const
+
+// ✅ Custom hooks for data fetching
+export function useSpaces() {
+  return useQuery({
+    queryKey: QUERY_KEYS.spaces,
+    queryFn: fetchSpaces,
+    staleTime: 5 * 60 * 1000, // 5 minutes
+    refetchOnWindowFocus: false,
+  })
+}
+
+export function useJoinSpace() {
+  const queryClient = useQueryClient()
+  
+  return useMutation({
+    mutationFn: (spaceId: string) => api.joinSpace(spaceId),
+    onSuccess: (data, spaceId) => {
+      // Update specific space
+      queryClient.setQueryData(QUERY_KEYS.space(spaceId), data)
+      // Invalidate spaces list
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.spaces })
+    },
+    onError: (error) => {
+      toast.error('Failed to join space')
+    }
+  })
+}
+```
+
+### **Zustand for Client State**
+```typescript
+import { create } from 'zustand'
+import { devtools, persist } from 'zustand/middleware'
+
+interface GlobalState {
+  // UI State
+  sidebarOpen: boolean
+  theme: 'dark' | 'light'
+  
+  // User Context
+  user: User | null
+  preferences: UserPreferences
+  
+  // Campus Context
+  selectedCampus: Campus | null
+  currentSemester: Semester
+  
+  // Actions
+  setSidebarOpen: (open: boolean) => void
+  toggleSidebar: () => void
+  setUser: (user: User | null) => void
+  updatePreferences: (prefs: Partial<UserPreferences>) => void
+}
+
+export const useGlobalStore = create<GlobalState>()(
+  devtools(
+    persist(
+      (set, get) => ({
+        // Initial state
+        sidebarOpen: false,
+        theme: 'dark',
+        user: null,
+        preferences: {},
+        selectedCampus: null,
+        currentSemester: getCurrentSemester(),
+        
+        // Actions
+        setSidebarOpen: (open) => set({ sidebarOpen: open }),
+        toggleSidebar: () => set((state) => ({ sidebarOpen: !state.sidebarOpen })),
+        setUser: (user) => set({ user }),
+        updatePreferences: (prefs) => set((state) => ({ 
+          preferences: { ...state.preferences, ...prefs } 
+        })),
+      }),
+      {
+        name: 'hive-global-state',
+        partialize: (state) => ({ 
+          theme: state.theme, 
+          preferences: state.preferences 
+        })
+      }
+    )
+  )
+)
+```
+
+---
+
+## 🎭 ANIMATION & INTERACTION PATTERNS
+
+### **Framer Motion Physics-Based Animations**
+```typescript
+import { motion, AnimatePresence } from 'framer-motion'
+
+// ✅ Standard animation configurations
+const ANIMATIONS = {
+  // Micro-interactions (150ms)
+  tap: {
+    whileTap: { scale: 0.98 },
+    transition: { type: "spring", damping: 0.8, stiffness: 400 }
+  },
+  
+  // Hover states (200ms)
+  hover: {
+    whileHover: { scale: 1.02 },
+    transition: { type: "spring", damping: 0.7, stiffness: 300 }
+  },
+  
+  // Page transitions (300ms)
+  page: {
+    initial: { opacity: 0, y: 20 },
+    animate: { opacity: 1, y: 0 },
+    exit: { opacity: 0, y: -20 },
+    transition: { type: "spring", damping: 0.8, stiffness: 100 }
+  },
+  
+  // Modal entrance (400ms)
+  modal: {
+    initial: { opacity: 0, scale: 0.95 },
+    animate: { opacity: 1, scale: 1 },
+    exit: { opacity: 0, scale: 0.95 },
+    transition: { type: "spring", damping: 0.75, stiffness: 120 }
+  }
+} as const
+
+// ✅ Campus-specific components with animation
+export function SpaceCard({ space, onJoin }: SpaceCardProps) {
+  const { mutate: joinSpace, isPending } = useJoinSpace()
+  
+  return (
+    <motion.div
+      className={cardVariants({ context: space.type })}
+      {...ANIMATIONS.hover}
+      {...ANIMATIONS.tap}
+      layout
+    >
+      <div className="p-6">
+        <h3 className={TYPOGRAPHY.title}>{space.name}</h3>
+        <p className={TYPOGRAPHY.body}>{space.description}</p>
+        
+        <HiveButton
+          intent="urgent"
+          onClick={() => joinSpace(space.id)}
+          disabled={isPending}
+        >
+          {isPending ? "Joining..." : "Join Space"}
+        </HiveButton>
+      </div>
+    </motion.div>
+  )
+}
+```
+
+---
+
+## 📋 FORM HANDLING STANDARDS
+
+### **react-hook-form + Zod Integration**
+```typescript
+import { useForm } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
+import { z } from 'zod'
+
+// ✅ Zod schema with campus-specific validation
+const createSpaceSchema = z.object({
+  name: z.string()
+    .min(1, 'Space name is required')
+    .max(50, 'Space name must be 50 characters or less'),
+  description: z.string()
+    .min(10, 'Description must be at least 10 characters')
+    .max(500, 'Description must be 500 characters or less'),
+  category: z.enum(['academic', 'residential', 'organization', 'social']),
+  isPublic: z.boolean().default(true),
+  tags: z.array(z.string()).max(5, 'Maximum 5 tags allowed'),
+  // Campus-specific fields
+  departmentId: z.string().optional(),
+  dormId: z.string().optional(),
+  requiresApproval: z.boolean().default(false)
+})
+
+type CreateSpaceFormData = z.infer<typeof createSpaceSchema>
+
+export function CreateSpaceForm() {
+  const {
+    register,
+    handleSubmit,
+    formState: { errors, isSubmitting },
+    watch,
+    setValue 
+  } = useForm<CreateSpaceFormData>({
+    resolver: zodResolver(createSpaceSchema),
+    defaultValues: {
+      isPublic: true,
+      requiresApproval: false,
+      tags: []
+    }
+  })
+  
+  const { mutate: createSpace } = useMutation({
+    mutationFn: (data: CreateSpaceFormData) => api.createSpace(data),
+    onSuccess: (space) => {
+      toast.success('Space created successfully!')
+      router.push(`/spaces/${space.id}`)
+    },
+    onError: (error) => {
+      toast.error('Failed to create space')
+    }
+  })
+  
+  const category = watch('category')
+
+  return (
+    <form onSubmit={handleSubmit((data) => createSpace(data))} className="space-y-6">
+      <div className="space-y-4">
+      <div>
+          <label className={TYPOGRAPHY.label}>Space Name</label>
+          <Input
+          {...register('name')}
+            placeholder="e.g., CS Study Group"
+            error={errors.name?.message}
+          />
+      </div>
+      
+        <div>
+          <label className={TYPOGRAPHY.label}>Category</label>
+          <Select 
+            {...register('category')}
+            options={[
+              { value: 'academic', label: 'Academic' },
+              { value: 'residential', label: 'Residential' },
+              { value: 'organization', label: 'Organization' },
+              { value: 'social', label: 'Social' }
+            ]}
+            error={errors.category?.message}
+          />
+        </div>
+        
+        {/* Conditional fields based on category */}
+        {category === 'academic' && (
+          <div>
+            <label className={TYPOGRAPHY.label}>Department</label>
+            <DepartmentSelect 
+              {...register('departmentId')}
+              error={errors.departmentId?.message}
+            />
+          </div>
+        )}
+        
+        <div>
+          <label className={TYPOGRAPHY.label}>Description</label>
+          <Textarea
+            {...register('description')}
+            placeholder="Describe what this space is for..."
+            rows={4}
+            error={errors.description?.message}
+          />
+      </div>
+    </div>
+      
+      <div className="flex gap-3">
+        <HiveButton type="submit" disabled={isSubmitting} intent="primary">
+          {isSubmitting ? "Creating..." : "Create Space"}
+        </HiveButton>
+        <HiveButton type="button" intent="secondary" onClick={() => router.back()}>
+          Cancel
+        </HiveButton>
+      </div>
+    </form>
+  )
+}
+```
+
+---
+
+## 🧪 TESTING STANDARDS
+
+### **Component Testing with Testing Library**
+```typescript
+import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { SpaceCard } from './space-card'
+
+// ✅ Test wrapper with providers
+function createTestWrapper() {
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: { retry: false },
+      mutations: { retry: false }
+    }
+  })
+  
+  return function TestWrapper({ children }: { children: React.ReactNode }) {
+    return (
+      <QueryClientProvider client={queryClient}>
+        {children}
+      </QueryClientProvider>
+    )
+  }
+}
+
+// ✅ Campus-specific behavior testing
+describe('SpaceCard Component', () => {
+  const mockSpace = {
+    id: '1',
+    name: 'CS Study Group',
+    description: 'Weekly study sessions for computer science students',
+    type: 'academic' as const,
+    memberCount: 25
+  }
+  
+  it('should display urgent CTA for high-priority academic spaces', () => {
+    render(
+      <SpaceCard space={{ ...mockSpace, priority: 'high' }} />,
+      { wrapper: createTestWrapper() }
+    )
+    
+    const joinButton = screen.getByRole('button', { name: /join space/i })
+    expect(joinButton).toHaveClass('bg-primary', 'font-semibold', 'shadow-lg')
+  })
+
+  it('should handle join flow with proper loading states', async () => {
+    const mockJoin = jest.fn().mockResolvedValue({ success: true })
+    
+    render(
+      <SpaceCard space={mockSpace} onJoin={mockJoin} />,
+      { wrapper: createTestWrapper() }
+    )
+    
+    const joinButton = screen.getByRole('button', { name: /join space/i })
+    fireEvent.click(joinButton)
+    
+    // Should show loading state
+    expect(screen.getByText('Joining...')).toBeInTheDocument()
+    expect(joinButton).toBeDisabled()
+    
+    // Should complete successfully
+    await waitFor(() => {
+      expect(mockJoin).toHaveBeenCalledWith(mockSpace.id)
+    })
+  })
+  
+  it('should apply correct variant styles based on space context', () => {
+    render(
+      <SpaceCard space={{ ...mockSpace, type: 'event' }} />,
+      { wrapper: createTestWrapper() }
+    )
+    
+    const card = screen.getByTestId('space-card')
+    expect(card).toHaveClass('border-l-4', 'border-primary/50')
+  })
+})
+```
+
+---
+
+## 🚀 PERFORMANCE OPTIMIZATION
+
+### **React 19 Best Practices**
+```typescript
+// ✅ Strategic memoization for expensive components
+const SpaceList = React.memo(({ spaces, onJoinSpace }: SpaceListProps) => {
+  // ✅ Stable callback references
+  const handleJoinSpace = useCallback((spaceId: string) => {
+    onJoinSpace?.(spaceId)
+  }, [onJoinSpace])
+  
+  // ✅ Expensive computations
+  const sortedSpaces = useMemo(() => {
+    return spaces.sort((a, b) => {
+      // Prioritize academic spaces during study hours
+      if (isStudyTime() && a.type === 'academic' && b.type !== 'academic') return -1
+      if (isStudyTime() && b.type === 'academic' && a.type !== 'academic') return 1
+      return a.memberCount - b.memberCount
+    })
+  }, [spaces])
+  
+  return (
+    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+      {sortedSpaces.map((space) => (
+        <SpaceCard
+          key={space.id}
+          space={space}
+          onJoin={handleJoinSpace}
+        />
+      ))}
+    </div>
+  )
+})
+
+// ✅ Avoid inline functions and objects
+// ❌ Bad
+<SpaceCard space={space} onJoin={() => handleJoin(space.id)} />
+
+// ✅ Good
+const handleSpaceJoin = useCallback((spaceId: string) => {
+  handleJoin(spaceId)
+}, [handleJoin])
+
+<SpaceCard space={space} onJoin={handleSpaceJoin} />
+```
+
+### **Next.js 15 App Router Optimization**
+```typescript
+// ✅ Server Components for static content
+async function SpacesPage({ searchParams }: { searchParams: { category?: string } }) {
+  // ✅ Server-side data fetching
+  const initialSpaces = await getSpaces({ category: searchParams.category })
+  
+  return (
+    <div className="container mx-auto px-4 py-8">
+      <SpacePageHeader />
+      <Suspense fallback={<SpaceListSkeleton />}>
+        <SpaceList initialData={initialSpaces} />
+      </Suspense>
+    </div>
+  )
+}
+
+// ✅ Client Components only when necessary
+'use client'
+
+function InteractiveSpaceFilter({ onFilterChange }: { onFilterChange: (filter: string) => void }) {
+  const [selectedCategory, setSelectedCategory] = useState<string>('all')
+  
+  const handleCategoryChange = (category: string) => {
+    setSelectedCategory(category)
+    onFilterChange(category)
+  }
+  
+  return (
+    <motion.div className="flex gap-2" layout>
+      {SPACE_CATEGORIES.map((category) => (
+        <HiveButton
+          key={category}
+          intent={selectedCategory === category ? "primary" : "secondary"}
+          onClick={() => handleCategoryChange(category)}
+        >
+          {category}
+        </HiveButton>
+      ))}
+    </motion.div>
+  )
+}
+
+// ✅ Image optimization
+import Image from 'next/image'
+
+<Image
+  src={space.coverImage || '/placeholder-space.jpg'}
+  alt={`${space.name} cover`}
+  width={400}
+  height={200}
+  className="rounded-lg object-cover"
+  priority={index < 3} // Load first 3 images immediately
+/>
+```
+
+---
+
+## 🔧 DEVELOPMENT WORKFLOW
+
+### **Code Quality Gates (REQUIRED)**
+```bash
+# ✅ Pre-commit validation (must pass)
+pnpm run type-check    # TypeScript compilation
+pnpm run lint         # ESLint + Prettier
+pnpm run test         # Jest + Testing Library
+pnpm run build        # Next.js production build
+```
+
+### **Git Commit Standards (ENFORCED)**
+```
+feat(spaces): implement Builder role verification system
+fix(auth): resolve university email validation edge case  
+perf(feed): optimize real-time updates with request debouncing
+refactor(ui): consolidate button variants using CVA patterns
+test(spaces): add comprehensive Space discovery integration tests
+docs(api): update authentication flow documentation
+style(components): align focus states with HIVE design tokens
+```
+
+---
+
+## 📚 REQUIRED REFERENCE DOCUMENTATION
+
+Before writing ANY code, you MUST consult these foundational documents:
+
+1. **Tech Stack**: `@/memory-bank/2_engineering/1_architecture/hive_vbeta_tech_stack_locked.md`
+2. **Brand Guidelines**: `@/memory-bank/brand_aesthetic.md`  
+3. **Product Specification**: `@/memory-bank/hive_vbeta_specification.md`
+4. **Spacing System**: `@/memory-bank/hive_spacing_grid_elevation_tokens.md`
+
+---
+
+## 🚨 CRITICAL REQUIREMENTS (NON-NEGOTIABLE)
+
+### **Code Standards**
+- ✅ ALL components must use HIVE design tokens via CSS custom properties
+- ✅ ALL styling must use Tailwind CSS (no hardcoded styles)
+- ✅ ALL forms must use react-hook-form + Zod validation
+- ✅ ALL server state must use TanStack Query patterns
+- ✅ ALL client state must use Zustand store patterns
+- ✅ ALL animations must use Framer Motion with physics curves
+- ✅ ALL code must be TypeScript strict mode compliant
+
+### **Campus-First Philosophy**
+Every component must solve real campus coordination challenges:
+- **Space Discovery**: Help students find their academic/social communities
+- **Event Coordination**: Reduce scheduling conflicts and improve participation  
+- **Builder Tools**: Enable student-created productivity solutions
+- **Social Layer**: Foster genuine campus connections without social media pressure
+
+### **Performance Standards**
+- ✅ Core Web Vitals must be green in production
+- ✅ Bundle size monitored and optimized
+- ✅ 60fps animations with reduced motion support
+- ✅ Accessibility compliance (WCAG 2.1 AA)
+
+---
+
+**DEVELOPMENT STATUS: PRODUCTION LOCKED**
+
+*This tech stack and these patterns are final for HIVE vBETA. Focus on shipping features that solve real campus problems using these proven, stable technologies.*
+

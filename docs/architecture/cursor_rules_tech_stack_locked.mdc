@@ -1,0 +1,681 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+# HIVE vBETA Development Standards - LOCKED TECH STACK
+
+## 🔒 OFFICIAL TECH STACK (Production Locked)
+
+### **Frontend · Web Platform**
+- **Framework**: React 19 + Next.js 15 (App Router, RSC, Turbopack)
+- **Language**: TypeScript 5.3+ (strict mode)
+- **Styling**: Tailwind CSS 4 + Style Dictionary tokens + CSS custom properties
+- **Components**: shadcn/ui (Radix-powered) + Class-Variance-Authority (CVA) + React-Aria
+- **State**: TanStack Query v5 (server) + Zustand 5 (client)
+- **Forms**: react-hook-form 8 + Zod validation
+- **Motion**: Framer Motion 11 (purposeful, 200ms ease-out)
+- **Icons**: lucide-react (1.5px stroke, line-based only)
+
+### **Mobile · Flutter Platform** (Future)
+- **Framework**: Flutter 3.22 + Dart 3
+- **Token Bridge**: Style Dictionary → flutter_gen → Dart classes
+- **State**: Riverpod 3 (compile-time safety)
+- **Navigation**: go_router 9 (URL-aware)
+- **Backend**: Firebase (Auth, Firestore, Functions, Storage)
+
+### **Development Toolchain**
+- **Monorepo**: pnpm workspaces + Melos (Dart packages)
+- **CI/CD**: GitHub Actions → Vercel (web) + TestFlight/Firebase (mobile)
+- **Monitoring**: Sentry + LogRocket (web), Sentry (Flutter)
+- **Documentation**: Storybook 8 (web) + Widgetbook (Flutter)
+
+---
+
+## 🎯 BRAND AESTHETIC - LAB INTERFACE FOUNDATION
+
+### **Zero-to-One Definition**
+"A dark-glass lab interface that comes to life with rare sparks of gold—equal parts precision tool and student-run experiment."
+
+### **Typography System (LOCKED)**
+```typescript
+// Typography hierarchy - STRICT COMPLIANCE REQUIRED
+const typography = {
+  // General Sans Variable - Headlines & Actions
+  headlines: 'General Sans Variable, system-ui, sans-serif',
+  title: '34px/40px, General Sans Variable, Weight 600',
+  headline: '28px/34px, General Sans Variable, Weight 500',
+  subhead: '22px/28px, General Sans Variable, Weight 500',
+  
+  // Inter Variable - Body & Interface  
+  body: 'Inter Variable, system-ui, sans-serif',
+  bodyText: '17px/24px, Inter Variable, Weight 400',
+  caption: '14px/20px, Inter Variable, Weight 400',
+  micro: '12px/16px, Inter Variable, Weight 400',
+  
+  // JetBrains Mono - Code & Data
+  code: 'JetBrains Mono, SF Mono, monospace',
+  codeText: '14px/20px, JetBrains Mono, Weight 400',
+  dataText: '16px/22px, JetBrains Mono, Weight 500'
+}
+```
+
+### **Color System (LOCKED)**
+```typescript
+// Lab interface color foundation
+const colors = {
+  // Canvas Foundation
+  canvas: '#0A0A0A',           // Pure black background
+  surface: '#131313',          // Elevated elements (nothing lighter touches background)
+  surfaceHover: '#1A1A1A',     // Interactive states
+  
+  // Sacred Gold (ONLY for decisive moments)
+  gold: '#FFD700',             // Commit actions, live rituals, surge badges
+  goldHover: '#FFDF2B',        // +8% lightness
+  goldPressed: '#CCAD00',      // -15% lightness
+  goldDisabled: '#FFD70080',   // 50% opacity
+  
+  // Text Hierarchy
+  textPrimary: '#FFFFFF',      // Primary text
+  textSecondary: '#CCCCCC',    // Secondary text
+  textTertiary: '#999999',     // Tertiary text
+  
+  // Semantic (minimal usage)
+  success: '#8CE563',
+  error: '#FF3B30',
+  warning: '#FF9500',
+  info: '#56CCF2'
+}
+```
+
+### **Motion System (LOCKED)**
+```typescript
+// Purposeful motion - no bounce, no playful animations
+const motion = {
+  // Standard timing - 200ms ease-out
+  standard: '200ms ease-out',
+  fast: '150ms ease-out',
+  slow: '300ms ease-out',
+  
+  // Interaction behaviors
+  buttonPress: 'scale(0.98) + gold activation',
+  cardHover: '2px elevation + subtle shadow',
+  focusRing: '2px gold ring around interactive elements',
+  pageTransition: '300ms ease-out navigation'
+}
+```
+
+---
+
+## 🎯 ARCHITECTURAL PRINCIPLES
+
+### **1. Component Philosophy**
+```typescript
+// ✅ Campus-First Component Design
+interface HiveCardProps {
+  intent: 'event' | 'poll' | 'announcement' | 'group' | 'resource' | 'default'
+  urgency?: 'urgent' | 'social' | 'standard'
+  liveStatus?: 'live' | 'ending-soon' | 'full' | 'new'
+  children: React.ReactNode
+  className?: string
+}
+
+// ✅ Use CVA for campus-specific variants
+const hiveCardVariants = cva(
+  "rounded-xl border bg-card text-card-foreground shadow-sm",
+  {
+    variants: {
+      intent: {
+        event: "border-l-4 border-primary/50",
+        poll: "bg-gradient-to-br from-card to-blue-500/5 border-blue-500/20",
+        announcement: "bg-gradient-to-br from-card to-orange-500/5",
+        group: "bg-gradient-to-br from-card to-green-500/5",
+        resource: "bg-card",
+        default: "bg-card"
+      }
+    }
+  }
+)
+```
+
+### **2. State Management Architecture**
+```typescript
+// ✅ TanStack Query for Server State
+const useSpaces = () => {
+  return useQuery({
+    queryKey: ['spaces'],
+    queryFn: fetchSpaces,
+    staleTime: 5 * 60 * 1000, // 5 minutes
+    refetchOnWindowFocus: false,
+  })
+}
+
+// ✅ Zustand for Client State
+interface GlobalState {
+  user: User | null
+  theme: 'dark' | 'light'
+  sidebarOpen: boolean
+  setUser: (user: User | null) => void
+  toggleSidebar: () => void
+}
+
+const useGlobalStore = create<GlobalState>((set) => ({
+  user: null,
+  theme: 'dark',
+  sidebarOpen: false,
+  setUser: (user) => set({ user }),
+  toggleSidebar: () => set((state) => ({ sidebarOpen: !state.sidebarOpen })),
+}))
+```
+
+### **3. Design Token Integration**
+```typescript
+// ✅ Use CSS custom properties from Style Dictionary
+const HiveButton = ({ intent = 'primary', ...props }: ButtonProps) => {
+  return (
+    <button
+      className={cn(
+        // Base styles using CSS variables
+        "inline-flex items-center justify-center rounded-md text-sm font-medium",
+        "bg-primary text-primary-foreground hover:bg-primary/90",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+        "transition-colors duration-200",
+        className
+      )}
+      {...props}
+    />
+  )
+}
+
+// ✅ Animation with Framer Motion physics
+<motion.div
+  initial={{ opacity: 0, y: 20 }}
+  animate={{ opacity: 1, y: 0 }}
+  transition={{
+    type: "spring",
+    damping: 0.8,
+    stiffness: 100,
+    duration: 0.3
+  }}
+>
+```
+
+---
+
+## 📝 CODING STANDARDS
+
+### **File Organization**
+```
+apps/web/
+├── app/                    # Next.js App Router
+│   ├── (dashboard)/       # Route groups
+│   ├── globals.css        # Global styles + HIVE tokens
+│   └── layout.tsx         # Root layout
+├── components/
+│   ├── ui/                # shadcn/ui components (HIVE-themed)
+│   ├── campus/            # Campus-specific components
+│   └── layouts/           # Layout components
+├── lib/
+│   ├── utils.ts           # Utility functions + cn() helper
+│   ├── validations.ts     # Zod schemas
+│   └── api.ts             # API client setup
+└── hooks/                 # Custom React hooks
+```
+
+### **Naming Conventions**
+- **Components**: PascalCase (`SpaceCard`, `EventList`, `HiveButton`)
+- **Files**: kebab-case (`space-card.tsx`, `event-list.tsx`)
+- **Hooks**: camelCase with `use` prefix (`useSpaces`, `useAuth`)
+- **Variables**: camelCase (`isLoading`, `currentUser`, `spaceData`)
+- **Constants**: SCREAMING_SNAKE_CASE (`API_BASE_URL`, `MAX_FILE_SIZE`)
+- **CSS Classes**: kebab-case (`hive-button`, `space-card`)
+
+### **TypeScript Requirements**
+```typescript
+// ✅ Explicit interfaces for all props
+interface SpaceCardProps {
+  space: Space
+  onJoin?: (spaceId: string) => void
+  className?: string
+  priority?: boolean
+}
+
+// ✅ Strict typing for campus data
+type SpaceType = 'academic' | 'residential' | 'organization' | 'social'
+type EventStatus = 'upcoming' | 'live' | 'ended' | 'cancelled'
+type BuilderRole = 'probationary' | 'standard' | 'senior' | 'admin'
+
+// ✅ Generic types for API responses
+interface ApiResponse<T> {
+  data: T
+  status: 'success' | 'error'
+  message?: string
+}
+```
+
+---
+
+## 🎨 DESIGN SYSTEM INTEGRATION
+
+### **HIVE Brand Enforcement**
+```typescript
+// ✅ ONLY use approved HIVE colors
+const colors = {
+  // Core Palette
+  background: 'hsl(var(--background))',      // #0D0D0D - Deep matte black
+  foreground: 'hsl(var(--foreground))',      // #FFFFFF - Pure white
+  primary: 'hsl(var(--primary))',            // #FFD700 - Sacred gold
+  
+  // Semantic Colors
+  destructive: 'hsl(var(--destructive))',    // #FF3B30 - iOS red
+  success: '#8CE563',                        // Approval green
+  warning: '#FF9500',                        // iOS orange
+  info: '#56CCF2',                          // Neutral blue
+}
+
+// ✅ Typography system (SF Pro required)
+const typography = {
+  headline: 'font-display text-2xl font-medium',    // 28pt max
+  body: 'font-sans text-base font-normal',          // 17pt
+  caption: 'font-sans text-sm font-normal',         // 14pt
+}
+
+// ✅ Animation timing (physics-based)
+const animations = {
+  fast: '150ms cubic-bezier(0.4, 0, 1, 1)',        // Micro-interactions
+  standard: '300ms cubic-bezier(0.4, 0, 0.2, 1)',  // Page transitions
+  slow: '400ms cubic-bezier(0.0, 0, 0.2, 1)',      // Modal entrance
+}
+```
+
+### **Component Variant System**
+```typescript
+// ✅ Campus-specific intents using CVA
+const buttonVariants = cva(
+  "inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors",
+  {
+    variants: {
+      intent: {
+        primary: "bg-primary text-primary-foreground hover:bg-primary/90",
+        urgent: "bg-primary text-primary-foreground font-semibold shadow-lg",
+        social: "bg-blue-500/10 text-blue-400 border border-blue-500/30",
+        destructive: "bg-destructive/10 text-destructive border border-destructive/30",
+        secondary: "bg-secondary text-secondary-foreground hover:bg-secondary/80"
+      },
+      size: {
+        sm: "h-9 px-3",
+        md: "h-10 px-4 py-2", 
+        lg: "h-11 px-8"
+      }
+    },
+    defaultVariants: {
+      intent: "primary",
+      size: "md"
+    }
+  }
+)
+
+// ✅ Campus context-specific cards
+const cardVariants = cva(
+  "rounded-xl border bg-card text-card-foreground shadow-sm",
+  {
+    variants: {
+      context: {
+        event: "border-l-4 border-primary/50",
+        poll: "bg-gradient-to-br from-card to-blue-500/5 border-blue-500/20",
+        announcement: "bg-gradient-to-br from-card to-orange-500/5 border-orange-500/20",
+        group: "bg-gradient-to-br from-card to-green-500/5 border-green-500/20",
+        resource: "bg-card border-border",
+        default: "bg-card border-border"
+      }
+    }
+  }
+)
+```
+
+---
+
+## 🚀 PERFORMANCE STANDARDS
+
+### **React 19 Optimizations**
+```typescript
+// ✅ Use React.memo strategically
+const SpaceCard = React.memo(({ space, onJoin }: SpaceCardProps) => {
+  const { mutate: joinSpace, isPending } = useMutation({
+    mutationFn: (spaceId: string) => api.joinSpace(spaceId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['spaces'] })
+    }
+  })
+  
+  // ✅ Stable callback references
+  const handleJoin = useCallback(() => {
+    onJoin?.(space.id)
+    joinSpace(space.id)
+  }, [space.id, onJoin, joinSpace])
+  
+  return (
+    <motion.div
+      whileHover={{ scale: 1.02 }}
+      whileTap={{ scale: 0.98 }}
+      className={cardVariants({ context: space.type })}
+    >
+      <HiveButton 
+        intent="urgent"
+        onClick={handleJoin}
+        disabled={isPending}
+      >
+        Join Space
+      </HiveButton>
+    </motion.div>
+  )
+})
+```
+
+### **Next.js 15 Best Practices**
+```typescript
+// ✅ Server Components by default
+async function SpacePage({ params }: { params: { id: string } }) {
+  const space = await getSpace(params.id) // Server-side data fetching
+  
+  return (
+    <div className="space-page">
+      <SpaceHeader space={space} />
+      <Suspense fallback={<SpaceContentSkeleton />}>
+        <SpaceContent spaceId={space.id} />
+      </Suspense>
+    </div>
+  )
+}
+
+// ✅ Client Components only when needed
+'use client'
+
+function InteractiveSpaceTools({ spaceId }: { spaceId: string }) {
+  const [selectedTool, setSelectedTool] = useState<string | null>(null)
+  
+  return (
+    <motion.div layout>
+      {/* Interactive tool selection */}
+    </motion.div>
+  )
+}
+
+// ✅ Optimized Image components
+import Image from 'next/image'
+
+<Image
+  src="/campus-photo.jpg"
+  alt="Campus quad"
+  width={400}
+  height={300}
+  className="rounded-lg"
+  priority
+/>
+```
+
+### **Form Handling Standards**
+```typescript
+// ✅ react-hook-form + Zod validation
+const spaceSchema = z.object({
+  name: z.string().min(1, 'Space name is required'),
+  description: z.string().min(10, 'Description must be at least 10 characters'),
+  category: z.enum(['academic', 'residential', 'organization', 'social']),
+  isPublic: z.boolean().default(true)
+})
+
+type SpaceFormData = z.infer<typeof spaceSchema>
+
+function CreateSpaceForm() {
+  const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm<SpaceFormData>({
+    resolver: zodResolver(spaceSchema)
+  })
+  
+  const { mutate: createSpace } = useMutation({
+    mutationFn: (data: SpaceFormData) => api.createSpace(data),
+    onSuccess: () => {
+      toast.success('Space created successfully!')
+      router.push('/spaces')
+    }
+  })
+  
+  const onSubmit = (data: SpaceFormData) => {
+    createSpace(data)
+  }
+  
+  return (
+    <form onSubmit={handleSubmit(onSubmit)}>
+      <div className="space-y-4">
+        <Input
+          {...register('name')}
+          placeholder="Space name"
+          error={errors.name?.message}
+        />
+        <Textarea
+          {...register('description')}
+          placeholder="Describe your space..."
+          error={errors.description?.message}
+        />
+        <HiveButton type="submit" disabled={isSubmitting}>
+          Create Space
+        </HiveButton>
+      </div>
+    </form>
+  )
+}
+```
+
+---
+
+## 🧪 TESTING STANDARDS
+
+### **Component Testing**
+```typescript
+import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { SpaceCard } from './space-card'
+
+// ✅ Test campus-specific behavior
+describe('SpaceCard', () => {
+  let queryClient: QueryClient
+  
+  beforeEach(() => {
+    queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } }
+    })
+  })
+  
+  const renderWithProviders = (component: React.ReactElement) => {
+    return render(
+      <QueryClientProvider client={queryClient}>
+        {component}
+      </QueryClientProvider>
+    )
+  }
+  
+  it('should display urgent CTA for high-priority events', () => {
+    renderWithProviders(
+      <SpaceCard 
+        space={{ ...mockSpace, priority: 'high' }}
+        onJoin={mockJoinHandler}
+      />
+    )
+    
+    expect(screen.getByRole('button')).toHaveClass('bg-primary')
+    expect(screen.getByRole('button')).toHaveClass('font-semibold')
+  })
+  
+  it('should handle join flow with loading states', async () => {
+    const mockJoin = jest.fn()
+    renderWithProviders(<SpaceCard space={mockSpace} onJoin={mockJoin} />)
+    
+    fireEvent.click(screen.getByText('Join Space'))
+    
+    expect(mockJoin).toHaveBeenCalledWith(mockSpace.id)
+    expect(screen.getByRole('button')).toBeDisabled()
+  })
+  
+  it('should display correct variant based on space type', () => {
+    renderWithProviders(
+      <SpaceCard space={{ ...mockSpace, type: 'event' }} />
+    )
+    
+    const card = screen.getByTestId('space-card')
+    expect(card).toHaveClass('border-l-4', 'border-primary/50')
+  })
+})
+```
+
+### **Integration Testing**
+```typescript
+// ✅ Test user flows end-to-end
+describe('Space Discovery Flow', () => {
+  it('should allow students to discover and join spaces', async () => {
+    render(<SpaceDiscoveryPage />)
+    
+    // Wait for spaces to load
+    await waitFor(() => {
+      expect(screen.getByText('Engineering Club')).toBeInTheDocument()
+    })
+    
+    // Filter by category
+    fireEvent.click(screen.getByText('Academic'))
+    expect(screen.getByText('CS Study Group')).toBeInTheDocument()
+    
+    // Join a space
+    fireEvent.click(screen.getByRole('button', { name: /join space/i }))
+    
+    await waitFor(() => {
+      expect(screen.getByText('Successfully joined!')).toBeInTheDocument()
+    })
+  })
+})
+```
+
+---
+
+## 🔧 DEVELOPMENT WORKFLOW
+
+### **Code Quality Gates**
+```bash
+# ✅ Pre-commit checks (run these before commits)
+npm run type-check     # TypeScript compilation
+npm run lint          # ESLint + Prettier
+npm run test          # Jest + Testing Library
+npm run test:e2e      # Playwright end-to-end tests
+npm run build         # Next.js production build
+```
+
+### **Package Management**
+```bash
+# ✅ Use pnpm for consistent dependencies
+pnpm install          # Install dependencies
+pnpm add package      # Add production dependency
+pnpm add -D package   # Add dev dependency
+pnpm run dev          # Start development server
+```
+
+### **Git Commit Standards**
+```
+feat(spaces): add Builder role verification to Space management
+fix(auth): resolve .edu email validation edge case
+docs(readme): update development setup instructions  
+refactor(components): extract common button variants to CVA
+test(spaces): add comprehensive Space discovery flow tests
+perf(feed): optimize real-time updates with debounced queries
+style(ui): update button focus states to match HIVE design
+```
+
+---
+
+## 📚 REFERENCE DOCUMENTATION
+
+### **Required Reading Before Coding**
+1. **Tech Stack**: `@/memory-bank/2_engineering/1_architecture/hive_vbeta_tech_stack_locked.md`
+2. **Design System**: `@/memory-bank/brand_aesthetic.md`
+3. **Spacing System**: `@/memory-bank/hive_spacing_grid_elevation_tokens.md`
+4. **Product Vision**: `@/memory-bank/hive_vbeta_specification.md`
+
+### **Campus-Specific Implementation Guidelines**
+- **Spaces System**: Auto-join logic based on major/dorm/interests
+- **Builder Tools**: HiveLAB composer with 5-Element constraints
+- **Event Coordination**: RSS integration with RSVP tracking and conflict detection
+- **Social Layer**: Feed algorithm prioritizing campus activity over social metrics
+- **Profile System**: Personal productivity integrated with campus context
+
+### **Component Library Integration**
+- **shadcn/ui**: Use as base components, wrap with CVA for HIVE variants
+- **Radix Primitives**: Leverage for accessibility and interaction patterns
+- **React-Aria**: Use for advanced accessibility requirements
+- **Framer Motion**: Physics-based animations only, 60fps target
+
+---
+
+## 🚨 CRITICAL REQUIREMENTS
+
+### **Non-Negotiable Standards**
+- ✅ ALL components must use HIVE design tokens via CSS custom properties
+- ✅ ALL interactions must include appropriate micro-animations (150-400ms)
+- ✅ ALL forms must use react-hook-form + Zod validation schema
+- ✅ ALL server state must use TanStack Query patterns with proper caching
+- ✅ ALL styling must use Tailwind CSS + CSS custom properties (no hardcoded values)
+- ✅ ALL components must be accessible (WCAG 2.1 AA compliance)
+- ✅ ALL code must be TypeScript strict mode compliant with explicit types
+- ✅ ALL animations must support reduced motion preferences
+
+### **Campus-First Development Philosophy**
+Every feature must solve real campus coordination problems:
+
+**Spaces System:**
+- Community formation based on shared academic/residential context
+- Builder-driven customization for community needs
+- Activity tracking that reflects real campus engagement
+
+**Events System:**
+- RSS integration for comprehensive campus event coverage
+- Conflict detection with personal schedules and commitments
+- Social coordination without traditional social media pressure
+
+**Builder Tools (HiveLAB):**
+- Student-created productivity solutions using Element composition
+- Community-driven tool evolution and sharing
+- Recognition system for student innovation and contribution
+
+**Profile System:**
+- Personal productivity integrated with campus rhythms
+- Campus context awareness (dining hours, shuttle schedules, etc.)
+- Privacy-first Motion Log for personalized recommendations
+
+---
+
+## 🔄 MAINTENANCE & EVOLUTION
+
+### **Dependency Management**
+- **Major Updates**: Quarterly review of major dependency versions
+- **Security Updates**: Automated via Dependabot with weekly review
+- **Breaking Changes**: Document migration strategies and update patterns
+
+### **Performance Monitoring**
+- **Web Vitals**: Core Web Vitals green score required for production
+- **Bundle Size**: Monitor and optimize bundle size with next-bundle-analyzer
+- **Runtime Performance**: Sentry performance monitoring with alerts
+- **Accessibility**: Automated axe-core testing in CI/CD pipeline
+
+### **Future Evolution Path**
+- **React 19 Features**: Gradual adoption of concurrent features post-vBETA
+- **GraphQL Integration**: Consider for complex queries as scale increases
+- **WebRTC Features**: Real-time collaboration for advanced Builder tools
+- **Mobile Optimization**: Flutter app development using proven web patterns
+
+---
+
+**TECH STACK STATUS: LOCKED FOR PRODUCTION**
+
+*This represents the final, approved technical foundation for HIVE vBETA development with the refined lab interface aesthetic. Any deviations require architectural review and approval.*
+
+**Last Updated**: January 2025  
+**Authority**: HIVE Technical Architecture Team  
+**Review Cycle**: Quarterly (or as needed for critical updates)
+
+
+

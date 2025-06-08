@@ -1,0 +1,65 @@
+/**
+ * Do not edit directly
+ * Generated on Sat, 07 Jun 2025 19:55:50 GMT
+ */
+
+:root {
+  --hive-lineHeight-data: 22px;
+  --hive-lineHeight-code: 20px;
+  --hive-lineHeight-micro: 16px;
+  --hive-lineHeight-caption: 20px;
+  --hive-lineHeight-body: 24px;
+  --hive-lineHeight-subhead: 28px;
+  --hive-lineHeight-headline: 34px;
+  --hive-lineHeight-title: 40px;
+  --hive-fontWeight-semibold: 600;
+  --hive-fontWeight-medium: 500;
+  --hive-fontWeight-regular: 400;
+  --hive-fontSize-data: 16px;
+  --hive-fontSize-code: 14px;
+  --hive-fontSize-micro: 12px;
+  --hive-fontSize-caption: 14px;
+  --hive-fontSize-body: 17px;
+  --hive-fontSize-subhead: 22px;
+  --hive-fontSize-headline: 28px;
+  --hive-fontSize-title: 34px;
+  --hive-fontFamily-code: JetBrains Mono,SF Mono,Consolas,monospace;
+  --hive-fontFamily-body: Inter Variable,Inter,system-ui,sans-serif;
+  --hive-fontFamily-headlines: General Sans Variable,General Sans,system-ui,sans-serif;
+  --hive-borderRadius-full: 9999px;
+  --hive-borderRadius-lg: 12px;
+  --hive-borderRadius-md: 8px;
+  --hive-borderRadius-sm: 4px;
+  --hive-spacing-xxl: 32px;
+  --hive-spacing-xl: 24px;
+  --hive-spacing-lg: 16px;
+  --hive-spacing-md: 12px;
+  --hive-spacing-sm: 8px;
+  --hive-spacing-xs: 4px;
+  --hive-easing-emphasis: cubic-bezier(0.4, 0, 0.2, 1);
+  --hive-easing-standard: ease-out;
+  --hive-durations-slow: 300ms;
+  --hive-durations-standard: 200ms;
+  --hive-durations-fast: 150ms;
+  --hive-shadow-modal: 0 4px 8px rgba(0, 0, 0, 0.4);
+  --hive-shadow-hover: 0 2px 4px rgba(0, 0, 0, 0.3);
+  --hive-shadow-card: 0 1px 2px rgba(0, 0, 0, 0.2);
+  --hive-grain-opacity: 0.04;
+  --hive-hive-border-focus: #FFD700;
+  --hive-hive-border-default: #333333;
+  --hive-hive-semantic-info: #56CCF2;
+  --hive-hive-semantic-warning: #FF9500;
+  --hive-hive-semantic-error: #FF3B30;
+  --hive-hive-semantic-success: #8CE563;
+  --hive-hive-gold-disabled: #FFD70080;
+  --hive-hive-gold-pressed: #CCAD00;
+  --hive-hive-gold-hover: #FFDF2B;
+  --hive-hive-gold-default: #FFD700;
+  --hive-hive-text-tertiary: #999999;
+  --hive-hive-text-secondary: #CCCCCC;
+  --hive-hive-text-primary: #FFFFFF;
+  --hive-hive-surface-elevated: #1F1F1F;
+  --hive-hive-surface-hover: #1A1A1A;
+  --hive-hive-surface-default: #131313;
+  --hive-hive-canvas-primary: #0A0A0A;
+}

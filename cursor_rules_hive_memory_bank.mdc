@@ -1,0 +1,390 @@
+---
+description:
+globs:
+alwaysApply: false
+---
+# HIVE Memory-Bank Implementation Cursor Rules
+
+_Last Updated: January 2025_  
+_Purpose: Development rules for implementing HIVE vBETA systems based on memory-bank documentation_  
+_Priority: Web-first React/Next.js with sophisticated design system_
+
+---
+
+## 🎯 CORE DEVELOPMENT PHILOSOPHY
+
+### Web-First Architecture
+- **Primary Platform:** React/Next.js web application with premium desktop/mobile web experience
+- **Design System:** Sophisticated dark infrastructure with gold accent (#FFD700) sparingly used
+- **Component Library:** Reusable React components following brand aesthetic guidelines
+- **Performance Target:** <2s load times, 60fps animations, Apple-grade interactions
+
+### HIVE Brand Aesthetic Enforcement
+- **Zero Visual Noise:** Every UI element must justify its existence
+- **Dark Infrastructure:** #0D0D0D background, #1E1E1E to #2A2A2A gradients for surfaces
+- **Living Interface:** Subtle animations responding to user interactions
+- **System-Level Elegance:** iOS-inspired interaction patterns with physics-based animations
+
+---
+
+## 🏗️ ARCHITECTURAL PATTERNS
+
+### Clean Architecture Implementation
+```
+├── apps/web/                    # Next.js web application
+│   ├── components/              # React UI components
+│   ├── pages/                   # Next.js pages/routes
+│   ├── styles/                  # CSS/styling files
+│   └── lib/                     # Web-specific utilities
+├── packages/tokens/             # Design tokens shared across platforms
+├── packages/core/               # Shared business logic
+└── packages/firebase/           # Backend integration
+```
+
+### Component Development Standards
+- **File Structure:** One primary component per file, max 300 lines
+- **Naming:** PascalCase for components, camelCase for functions/variables
+- **TypeScript:** Strict typing for all props, state, and functions
+- **Documentation:** JSDoc comments for all public interfaces
+
+---
+
+## 🎨 DESIGN SYSTEM IMPLEMENTATION
+
+### Core Color System
+```typescript
+// Design tokens - packages/tokens/src/colors.ts
+export const colors = {
+  background: '#0D0D0D',        // Deep Matte Black
+  surface: '#1E1E1E',           // Secondary surface start
+  surfaceEnd: '#2A2A2A',        // Secondary surface end
+  text: '#FFFFFF',              // Pure white text
+  accent: '#FFD700',            // Gold accent - use sparingly
+  success: '#8CE563',
+  error: '#FF3B30',
+  warning: '#FF9500',
+  info: '#56CCF2',
+} as const;
+```
+
+### Component Specifications
+```typescript
+// Button component example
+interface ButtonProps {
+  variant: 'primary' | 'secondary';
+  size: 'small' | 'medium' | 'large';
+  children: React.ReactNode;
+  onClick?: () => void;
+  disabled?: boolean;
+}
+
+// Standard button dimensions: Height 36pt, Radius 24pt
+// Primary: Surface gradient background, white text, gold focus ring
+// Secondary: Transparent background, white text, subtle border on interaction
+```
+
+### Animation Standards
+```typescript
+// Animation timing constants
+export const animations = {
+  // Durations
+  fast: '150ms',           // Micro-interactions
+  medium: '300ms',         // Page transitions
+  slow: '400ms',           // Modals
+  
+  // Curves
+  easeInOut: 'cubic-bezier(0.4, 0, 0.2, 1)',
+  easeOut: 'cubic-bezier(0.0, 0, 0.2, 1)',
+  spring: 'cubic-bezier(0.25, 0.8, 0.30, 1)',
+} as const;
+```
+
+---
+
+## 🏛️ SYSTEM IMPLEMENTATION PATTERNS
+
+### Authentication & Onboarding
+```typescript
+// Follow auth_onboarding_dev_guide.md patterns
+interface AuthState {
+  user: User | null;
+  isLoading: boolean;
+  error: string | null;
+  emailVerificationPending: boolean;
+}
+
+// Email validation for .edu domains
+const validateEduEmail = (email: string): boolean => {
+  const validDomains = ['buffalo.edu', 'student.buffalo.edu'];
+  const domain = email.split('@')[1]?.toLowerCase();
+  return validDomains.includes(domain);
+};
+```
+
+### Profile System
+```typescript
+// Follow profile_system_dev_guide.md patterns
+interface ProfileData {
+  // Required onboarding fields
+  fullName: string;
+  username: string;
+  major: string;
+  academicYear: 'First-year' | 'Sophomore' | 'Junior' | 'Senior' | 'Graduate';
+  residentialStatus: 'On-campus' | 'Off-campus' | 'Commuter';
+  
+  // NOW Panel integration
+  todayEvents: Event[];
+  upcomingDeadlines: Deadline[];
+  classSchedule: ClassBlock[];
+}
+```
+
+### Spaces System
+```typescript
+// Follow spaces_system_dev_guide.md patterns
+interface Space {
+  id: string;
+  name: string;
+  type: 'system' | 'academic' | 'residential' | 'organization';
+  memberCount: number;
+  builders: string[]; // Max 4 in vBETA
+  availableTools: string[];
+  isJoined: boolean;
+}
+```
+
+### Events System
+```typescript
+// Follow event_system_dev_guide.md patterns
+interface Event {
+  id: string;
+  title: string;
+  startTime: Date;
+  endTime: Date;
+  location?: string;
+  sourceType: 'toolPlaced' | 'rss' | 'personal';
+  spaceId: string;
+  rsvpCount: number;
+  hasCapacityLimit: boolean;
+  overlapClassBlock: boolean;
+}
+```
+
+### Builder & HiveLAB System
+```typescript
+// Follow builder_hivelab_dev_guide.md patterns
+interface BuilderProfile {
+  userId: string;
+  role: 'spaceBuilder' | 'crossSpaceBuilder';
+  managedSpaces: string[];
+  toolsCreated: number;
+  emergenceLevel: 'emerging' | 'recognized' | 'influential' | 'systemicImpact';
+}
+
+interface Tool {
+  id: string;
+  name: string;
+  builderId: string;
+  spaceId: string;
+  elements: ElementInstance[];
+  status: 'draft' | 'active' | 'archived';
+}
+```
+
+### Feed System
+```typescript
+// Follow feed_system_dev_guide.md patterns
+interface SocialTrace {
+  id: string;
+  type: 'groupParticipation' | 'builderAttribution' | 'ritualSynchronization';
+  primaryMessage: string;
+  contextualDetail?: string;
+  participantCount: number;
+  communityContext: string;
+  timestamp: Date;
+  expiresAt?: Date;
+}
+```
+
+---
+
+## 🔧 DEVELOPMENT WORKFLOW
+
+### Component Development Process
+1. **Design Token Usage:** Always use design tokens from packages/tokens
+2. **Component Testing:** Create component in isolation with Storybook
+3. **Accessibility:** Ensure 4.5:1 contrast ratios, proper ARIA labels
+4. **Performance:** Optimize for 60fps animations, lazy loading where appropriate
+5. **Documentation:** Update component library documentation
+
+### State Management (React Context + Custom Hooks)
+```typescript
+// Global state pattern for web
+interface AppState {
+  auth: AuthState;
+  profile: ProfileData;
+  spaces: Space[];
+  feed: SocialTrace[];
+}
+
+// Custom hooks for each system
+const useAuth = () => { /* auth logic */ };
+const useProfile = () => { /* profile logic */ };
+const useSpaces = () => { /* spaces logic */ };
+```
+
+### API Integration Patterns
+```typescript
+// Firebase integration following clean architecture
+interface ApiResponse<T> {
+  data?: T;
+  error?: string;
+  loading: boolean;
+}
+
+// Service layer for each system
+class AuthService {
+  static async signUpWithEmailPassword(email: string, password: string): Promise<UserCredential>;
+  static async sendEmailVerification(user: User): Promise<void>;
+}
+```
+
+---
+
+## 🎪 UI/UX IMPLEMENTATION STANDARDS
+
+### Interaction Design
+- **Button Press:** Scale to 98%, background darkens 10%, glow ring appears
+- **Card Interaction:** Fade + compress + glow ring on tap
+- **Modal Entrance:** Z-zoom with blur depth + background dim (50%)
+- **Page Transitions:** 320ms slide with iOS-style curves
+
+### Form Design
+```typescript
+// Standard form field styling
+interface FormFieldProps {
+  label: string;
+  error?: string;
+  required?: boolean;
+  disabled?: boolean;
+}
+
+// Form validation patterns
+const validateRequired = (value: string) => value.trim() !== '';
+const validateEmail = (email: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+```
+
+### Layout Standards
+- **Mobile-first:** Design for mobile web, enhance for desktop
+- **Safe Areas:** 16pt minimum side padding, 24pt maximum
+- **Touch Targets:** 44×44pt minimum for all interactive elements
+- **Grid System:** 8pt base grid for consistent spacing
+
+---
+
+## 🚀 PERFORMANCE & OPTIMIZATION
+
+### Bundle Optimization
+- **Code Splitting:** Split by route and feature
+- **Tree Shaking:** Ensure all imports are tree-shakeable
+- **Dynamic Imports:** Lazy load non-critical components
+- **Asset Optimization:** Optimize images, fonts, and animations
+
+### Accessibility Requirements
+- **Keyboard Navigation:** All interactive elements accessible via keyboard
+- **Screen Readers:** Proper ARIA labels and semantic HTML
+- **Color Contrast:** Minimum 4.5:1 for text, 3:1 for large text
+- **Reduced Motion:** Respect prefers-reduced-motion settings
+
+---
+
+## 🔒 SECURITY & PRIVACY
+
+### Data Protection
+- **Client-Side Validation:** Always validate on frontend and backend
+- **Sensitive Data:** Never log sensitive information
+- **HTTPS Only:** All API calls must use HTTPS
+- **Input Sanitization:** Sanitize all user inputs
+
+### Firebase Security
+- **Firestore Rules:** Implement proper security rules for all collections
+- **Authentication:** Use Firebase Auth with email verification
+- **Environment Variables:** Store all sensitive config in environment variables
+
+---
+
+## 📊 TESTING STRATEGY
+
+### Component Testing
+```typescript
+// Example component test
+import { render, screen, fireEvent } from '@testing-library/react';
+import { Button } from './Button';
+
+test('renders button with correct text', () => {
+  render(<Button>Click me</Button>);
+  expect(screen.getByText('Click me')).toBeInTheDocument();
+});
+
+test('calls onClick when clicked', () => {
+  const handleClick = jest.fn();
+  render(<Button onClick={handleClick}>Click me</Button>);
+  fireEvent.click(screen.getByText('Click me'));
+  expect(handleClick).toHaveBeenCalledTimes(1);
+});
+```
+
+### Integration Testing
+- **User Flows:** Test complete user journeys end-to-end
+- **API Integration:** Mock Firebase services for testing
+- **Accessibility:** Automated a11y testing with axe-core
+- **Performance:** Lighthouse CI for performance regression testing
+
+---
+
+## 🎯 LAUNCH READINESS CHECKLIST
+
+### Core Systems Implementation
+- [ ] **Design System:** Complete React component library with brand aesthetic
+- [ ] **Authentication:** Email/password signup with .edu verification
+- [ ] **Profile System:** NOW Panel, calendar integration, identity management
+- [ ] **Spaces System:** Discovery, joining, Builder management
+- [ ] **Events System:** Unified event stream, RSVP, calendar integration
+- [ ] **Builder System:** HiveLAB tool creation, Space management
+- [ ] **Feed System:** Social aftermath layer with behavioral traces
+
+### Quality Assurance
+- [ ] **Cross-Browser:** Chrome, Safari, Firefox, Edge compatibility
+- [ ] **Responsive:** Mobile, tablet, desktop optimization
+- [ ] **Accessibility:** WCAG 2.1 AA compliance
+- [ ] **Performance:** <2s load times, 60fps animations
+- [ ] **Security:** Firebase rules, input validation, HTTPS
+
+### User Experience Validation
+- [ ] **Onboarding:** Clear, engaging signup and profile setup
+- [ ] **Navigation:** Intuitive routing and information architecture
+- [ ] **Interactions:** Smooth, satisfying micro-interactions
+- [ ] **Content:** Clear messaging and helpful error states
+- [ ] **Mobile Web:** Touch-optimized interface and gestures
+
+---
+
+## 🔄 CONTINUOUS IMPROVEMENT
+
+### Development Practices
+- **Code Reviews:** All changes reviewed for architecture and brand compliance
+- **Performance Monitoring:** Track Core Web Vitals and user experience metrics
+- **A/B Testing:** Test design variations and interaction patterns
+- **User Feedback:** Integrate user feedback loops for continuous improvement
+
+### Brand Consistency
+- **Design Reviews:** Regular reviews to ensure brand aesthetic compliance
+- **Component Audits:** Periodic audits of component library consistency
+- **Animation Polish:** Continuous refinement of micro-interactions
+- **Accessibility Improvements:** Regular accessibility audits and improvements
+
+---
+
+**Implementation Priority:** Focus on building beautiful, performant React components that embody HIVE's sophisticated dark infrastructure aesthetic while delivering the complex functionality outlined in the memory-bank documentation.
+
+**Success Metrics:** Premium feel that rivals best-in-class consumer apps, seamless user flows that reduce friction, and architectural foundation that supports rapid feature development post-launch.

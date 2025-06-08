@@ -1,0 +1,18 @@
+{
+  "durations": {
+    "micro": "150ms",
+    "standard": "300ms",
+    "emphasized": "400ms"
+  },
+  "easing": {
+    "micro": "ease-out",
+    "standard": "ease-in-out",
+    "emphasized": "cubic-bezier(0.2, 0, 0.2, 1)"
+  },
+  "zIndex": {
+    "card": 10,
+    "modal": 100,
+    "toast": 110,
+    "overlay": 90
+  }
+} 

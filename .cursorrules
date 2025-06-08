@@ -1,131 +1,122 @@
-# HIVE UI Coding Standards and Practices
+---
+name: HIVE Monorepo Architecture Rules
+description: Enforces the granular, package-based monorepo structure for HIVE.
+globs: ["**/*"]
+---
 
-## 1. Architecture and Structure
+# HIVE vBETA - Monorepo Architectural Principles
 
-### 1.1 Project Organization
-- Follow clean architecture principles with clear separation of concerns
-- Organize feature code into self-contained modules under 'features/' directory
-- Use the following directory structure for features:
-  ```
-  features/
-    ├── feature_name/
-    │    ├── data/           # Data sources, repositories, and DTOs
-    │    ├── domain/         # Entities and use cases
-    │    └── presentation/   # UI components, controllers, and screens
-  ```
+This document codifies the official project structure for HIVE. All code must adhere to these rules to ensure scalability, maintainability, and a clean separation of concerns.
 
-### 1.2 File Size and Structure
-- Limit files to a maximum of 300 lines of code
-- Extract large widgets into separate component files
-- One primary export per file
-- Name files according to their primary content (e.g., profile_page.dart for ProfilePage)
+---
 
-## 2. Code Style and Syntax
+## 📂 **1. Root Directory Structure**
 
-### 2.1 Naming Conventions
-- Use PascalCase for classes, enums, and extensions
-- Use camelCase for variables, functions, and methods
-- Use snake_case for file and directory names
-- Use SCREAMING_SNAKE_CASE for constants and enums
+The root is organized by domain, not by technology.
 
-### 2.2 Type Safety
-- Always declare explicit types for variables, parameters, and return values
-- Avoid using 'dynamic' or 'var' unless absolutely necessary
-- Create proper type definitions for complex data structures
-- Use nullable types (e.g., String?) only when nullability is intended
+```
+/
+├── .config/                  # Shared build configurations (ESLint, Prettier, TS Paths)
+├── .github/                  # CI/CD Workflows (GitHub Actions)
+├── apps/                     # Runnable applications (Web, Mobile, Admin)
+├── packages/                 # Shared code (UI, logic, utils)
+├── backend/                  # Server-side logic (Firebase Functions, rules)
+├── infra/                    # Infrastructure as Code (Terraform/Pulumi)
+├── tests/                    # Centralized E2E and integration tests
+├── storybook/                # Isolated UI component development environment
+├── docs/                     # Project documentation and ADRs
+└── package.json              # Root Turborepo/pnpm workspace config
+```
 
-### 2.3 Documentation
-- Add dartdoc comments for all public classes, methods, and properties
-- Include parameter and return documentation for functions
-- Document complex logic with inline comments
-- Use `///` for documentation comments and `//` for implementation comments
+---
 
-## 3. UI Development
+## 📦 **2. The `packages/` Directory: Shared Code**
 
-### 3.1 Widget Design
-- Break down complex widgets into smaller, reusable components
-- Keep widget hierarchies flat to improve performance
-- Use const constructors wherever possible
-- Use key parameters for stateful widgets that may rebuild
+This is the heart of the monorepo. All shared code lives here. **Never duplicate code between apps.** If logic is needed in more than one place, create a package.
 
-### 3.2 Theme Consistency
-- Only use colors defined in AppColors
-- Follow the app's design guidelines for spacing, typography, and borders
-- Use the glassmorphism extensions for consistent UI treatments
-- Maintain the dark theme with gold accent aesthetic
+### **`packages/design-tokens`**
+- **Source of Truth:** This is the *only* source for all visual primitives.
+- **Format:** Store tokens in framework-agnostic formats like JSON or plain TS objects.
+- **Exports:**
+    - A Tailwind CSS preset for the web apps (`tailwind.preset.ts`).
+    - A theme file for Flutter/mobile (`tokens.dart`, via code-gen).
+    - Plain JS/TS objects for use in other packages (`index.ts`).
+- **🚫 DON'T:** Hardcode colors, font sizes, spacing, or animation values anywhere else in the codebase.
 
-### 3.3 Animation and Interaction
-- Use consistent duration values for animations (300-400ms is standard)
-- Include haptic feedback for interactive elements
-- Implement smooth transitions between states and screens
-- Use AnimationController and Tween for custom animations
+### **`packages/ui-core`**
+- **Purpose:** Atomic, brand-agnostic UI primitives. These are the fundamental building blocks.
+- **Examples:** `Button.tsx`, `Card.tsx`, `Pill.tsx`, `Input.tsx`.
+- **Rules:**
+    - Components must be stateless and highly reusable.
+    - They consume variables from `design-tokens`.
+    - They should have minimal styling, focused on structure and function.
+    - They must not contain any business logic or reference other packages besides `design-tokens`.
 
-## 4. State Management
+### **`packages/ui-patterns`**
+- **Purpose:** Compound, brand-opinionated components that represent specific HIVE features.
+- **Examples:** `SpaceHeader.tsx`, `RitualCountdown.tsx`, `PostCard.tsx`.
+- **Rules:**
+    - Composed from `ui-core` components.
+    - May contain some client-side state and interactions.
+    - Are still generic enough to be used across multiple apps (e.g., `web` and `admin`).
+    - **🚫 DON'T:** Include complex data-fetching logic here. That belongs in `apps`.
 
-### 4.1 Riverpod Usage
-- Use StateProvider for simple state
-- Use StateNotifierProvider for complex state with operations
-- Use FutureProvider for async operations
-- Define providers at the top of the file or in a dedicated providers file
-- Properly type all providers
+### **`packages/api-client`**
+- **Purpose:** A typed SDK for all backend communication.
+- **Rules:**
+    - Wraps all Firebase and Cloud Function calls.
+    - Provides typed methods for all data operations (e.g., `fetchSpace(id)`, `createPost(data)`).
+    - **🚫 DON'T:** Make direct calls to `firebase/firestore` or `fetch` from within `apps`. All network requests must go through this package.
 
-### 4.2 State Organization
-- Create dedicated state classes for complex features
-- Use immutable state objects with copyWith methods
-- Separate UI state from domain state
-- Handle loading, error, and success states explicitly
+### **`packages/hooks`**
+- **Purpose:** Shared React hooks used across multiple frontends.
+- **Examples:** `useAuth()`, `useSpaces()`, `useEventListener()`.
+- **Rules:** If a hook is used in both `apps/web` and `apps/admin`, it belongs here.
 
-## 5. Performance Optimization
+### **`packages/auth-logic`**
+- **Purpose:** Shared, non-UI authentication flows.
+- **Examples:** `.edu` email validation, UB-specific logic, role handling.
+- **Rules:** This package should export pure functions that can be used by any app or even the backend.
 
-### 5.1 Rendering Optimization
-- Avoid expensive operations in build methods
-- Use caching for complex calculations
-- Minimize rebuilds by using const widgets and selective state updates
-- Profile and optimize performance-critical paths
+### **`packages/validation`**
+- **Purpose:** Data validation schemas.
+- **Technology:** Zod is preferred.
+- **Rules:** Define all form schemas and API data structures here. This ensures frontend and backend data shapes are always in sync.
 
-### 5.2 Resource Management
-- Properly dispose controllers and subscriptions
-- Use lazy loading for heavy resources
-- Implement pagination for long lists
-- Optimize image loading and caching
+### **`packages/utilities`**
+- **Purpose:** Pure, framework-agnostic helper functions.
+- **Examples:** `formatDate()`, `cn()` (class name utility), feature flag checkers.
+- **Rules:** No dependencies on React, Firebase, or any other large framework.
 
-## 6. Testing
+---
 
-### 6.1 Test Coverage
-- Write unit tests for all business logic
-- Create widget tests for UI components
-- Include integration tests for critical user flows
-- Mock external dependencies for testing
+## 📱 **3. The `apps/` Directory: Runnable Applications**
 
-### 6.2 Test Structure
-- Follow the Arrange-Act-Assert pattern for unit tests
-- Use Given-When-Then for integration tests
-- Test edge cases and error handling
+Apps are the "consumers" of packages. They are responsible for routing, data fetching, and composing patterns into full user experiences.
 
-## 7. Error Handling
+### **`apps/web` (Main Next.js App)**
+- **`src/components/`:** This is for **feature-level components only**. These components wire together patterns from `ui-patterns` and are often specific to a certain page or user flow. They contain the primary data-fetching logic for a feature.
+- **`src/lib/`:** Helpers and hooks that are **specific to the web app** and not shared.
+- **`src/app/`:** All routing and page layouts for the App Router.
+- **`tailwind.config.ts`:** Must import and use the preset from `packages/design-tokens`.
 
-### 7.1 Exception Management
-- Use typed exceptions for different error scenarios
-- Implement graceful error recovery
-- Display user-friendly error messages
-- Log errors for debugging purposes
+---
 
-### 7.2 Null Safety
-- Handle nullable values safely
-- Use the ?? operator or null-aware operators when appropriate
-- Check for null before accessing potentially null values
-- Provide default values for nullable parameters
+## ☁️ **4. The `backend/` Directory**
 
-## 8. Refactoring Priorities
+This is the single source of truth for all server-side infrastructure and logic.
 
-### 8.1 Current Technical Debt
-- Break down large files (like profile_page.dart) into smaller component files
-- Standardize navigation approach across the app
-- Improve error handling and reporting
-- Enhance state management with more focused providers
+- **`functions/`:** All TypeScript Cloud Functions.
+- **`firestore.rules` / `firestore.indexes.json`:** All database rules and index definitions.
+- **`scripts/`:** Data migration, seeding, or maintenance scripts.
+- **🚫 DON'T:** Place any server-side code outside of this directory.
 
-### 8.2 Code Improvement Opportunities
-- Extract common UI patterns into reusable widgets
-- Implement comprehensive logging
-- Add accessibility features
-- Optimize performance for low-end devices 
+---
+
+## ✅ **5. General Principles**
+
+- **Component Naming:** `PascalCase` (e.g., `SpaceHeader.tsx`).
+- **File Naming:** `kebab-case` (e.g., `space-header.tsx`).
+- **Data Flow:** Data flows one way: `api-client` -> `apps/web` (or hooks) -> Feature Components -> `ui-patterns`.
+- **Type Safety:** The entire codebase must be strictly typed.
+- **Dependency Rule:** Packages should not have circular dependencies. Apps can depend on packages, but packages should rarely depend on other packages (utility packages are an exception).
